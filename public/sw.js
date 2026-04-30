@@ -46,10 +46,16 @@ self.addEventListener("fetch", (event) => {
       }
 
       return fetch(request).then((response) => {
+        if (!response.ok) {
+          return response;
+        }
+
         const responseForCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseForCache);
-        });
+        event.waitUntil(
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(request, responseForCache)),
+        );
         return response;
       });
     }),
