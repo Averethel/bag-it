@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bag It icon">
+  <rect width="512" height="512" rx="96" fill="#1d4ed8"/>
+  <path fill="#ffffff" d="M136 188h240v220H136z"/>
+  <path fill="#dbeafe" d="M176 148c0-44 36-80 80-80s80 36 80 80v40h-40v-40c0-22-18-40-40-40s-40 18-40 40v40h-40z"/>
+  <circle cx="210" cy="278" r="26" fill="#facc15"/>
+  <circle cx="302" cy="278" r="26" fill="#22c55e"/>
+  <circle cx="210" cy="352" r="26" fill="#ef4444"/>
+  <circle cx="302" cy="352" r="26" fill="#38bdf8"/>
+</svg>
