@@ -17,6 +17,8 @@ Keep this file small. Load only the guidance needed for the task:
   [docs/agent-guidance/testing.md](docs/agent-guidance/testing.md)
 - Repository conventions:
   [docs/agent-guidance/repo-conventions.md](docs/agent-guidance/repo-conventions.md)
+- Agent skill augmentation:
+  [docs/agent-guidance/skill-augmentation.md](docs/agent-guidance/skill-augmentation.md)
 
 Non-negotiables:
 
