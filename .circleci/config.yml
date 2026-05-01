@@ -43,6 +43,17 @@ commands:
 
             exit "${missing}"
 
+  require_vercel_automation_bypass:
+    steps:
+      - run:
+          name: Check Vercel automation bypass secret
+          command: |
+            if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+              echo "Missing required environment variable: VERCEL_AUTOMATION_BYPASS_SECRET"
+              echo "Create a Vercel Protection Bypass for Automation secret and add it to CircleCI for deployed E2E tests."
+              exit 1
+            fi
+
   deploy_to_vercel:
     parameters:
       environment:
@@ -56,19 +67,18 @@ commands:
     steps:
       - require_vercel_environment
       - run:
-          name: Pull Vercel environment
+          name: Configure Vercel CLI version
           environment:
             VERCEL_CLI_VERSION: 53.0.1
+          command: printf "export VERCEL_CLI_VERSION=%q\n" "${VERCEL_CLI_VERSION}" >> "$BASH_ENV"
+      - run:
+          name: Pull Vercel environment
           command: npx --yes "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=<< parameters.environment >> --token="$VERCEL_TOKEN"
       - run:
           name: Build Vercel output
-          environment:
-            VERCEL_CLI_VERSION: 53.0.1
           command: npx --yes "vercel@${VERCEL_CLI_VERSION}" build << parameters.production_flag >> --token="$VERCEL_TOKEN"
       - run:
           name: Deploy Vercel output
-          environment:
-            VERCEL_CLI_VERSION: 53.0.1
           command: |
             mkdir -p workspace
             deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
@@ -145,6 +155,7 @@ jobs:
     executor: playwright
     steps:
       - checkout
+      - require_vercel_automation_bypass
       - install_dependencies
       - attach_workspace:
           at: workspace

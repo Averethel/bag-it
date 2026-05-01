@@ -39,7 +39,11 @@ Set these environment variables in the CircleCI project or context:
 VERCEL_TOKEN
 VERCEL_ORG_ID
 VERCEL_PROJECT_ID
+VERCEL_AUTOMATION_BYPASS_SECRET
 ```
+
+`VERCEL_AUTOMATION_BYPASS_SECRET` should match a Vercel Protection Bypass for
+Automation secret so Playwright can test protected deployments.
 
 The Vercel project config disables Git-triggered deployments so CircleCI owns
 deployment ordering.
