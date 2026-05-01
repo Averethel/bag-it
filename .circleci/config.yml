@@ -37,7 +37,9 @@ commands:
       - run:
           name: Check Vercel automation bypass secret
           command: |
-            if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            trimmed_secret="$(printf "%s" "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" | tr -d '[:space:]')"
+
+            if [ -z "${trimmed_secret}" ]; then
               echo "Missing required environment variable: VERCEL_AUTOMATION_BYPASS_SECRET"
               echo "Create a Vercel Protection Bypass for Automation secret and add it to CircleCI for deployed E2E tests."
               exit 1

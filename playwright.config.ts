@@ -109,7 +109,7 @@ export default defineConfig({
     : "html",
   use: {
     baseURL,
-    trace: "on-first-retry",
+    trace: vercelAutomationBypassHeaders ? "off" : "on-first-retry",
     ...(vercelAutomationBypassHeaders
       ? { extraHTTPHeaders: vercelAutomationBypassHeaders }
       : {}),
