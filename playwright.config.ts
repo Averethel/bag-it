@@ -1,8 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const isCi = Boolean(process.env.CI);
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
-const shouldStartLocalServer = !process.env.PLAYWRIGHT_BASE_URL;
+const defaultBaseURL = "http://127.0.0.1:3000";
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || defaultBaseURL;
+const shouldStartLocalServer = baseURL === defaultBaseURL;
 
 export default defineConfig({
   testDir: "./tests/e2e",
