@@ -72,7 +72,15 @@ commands:
           name: Deploy Vercel output
           command: |
             mkdir -p workspace
-            deployment_url="$(vercel deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deploy_output="$(vercel deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1)"
+
+            if [ -z "${deployment_url}" ]; then
+              echo "Failed to parse deployment URL from 'vercel deploy' output" >&2
+              printf "%s\n" "${deploy_output}" >&2
+              exit 1
+            fi
+
             printf "%s\n" "${deployment_url}" > workspace/vercel-deployment-url
             echo "Deployed to ${deployment_url}"
       - persist_to_workspace:
@@ -145,7 +153,7 @@ jobs:
           name: Read deployment URL
           command: |
             deployment_url="$(cat workspace/vercel-deployment-url)"
-            echo "export PLAYWRIGHT_BASE_URL=${deployment_url}" >> "$BASH_ENV"
+            printf "export PLAYWRIGHT_BASE_URL=%q\n" "${deployment_url}" >> "$BASH_ENV"
             echo "Testing ${deployment_url}"
       - run:
           name: End-to-end tests
