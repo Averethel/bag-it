@@ -43,14 +43,6 @@ commands:
 
             exit "${missing}"
 
-  install_vercel_cli:
-    steps:
-      - run:
-          name: Install Vercel CLI
-          environment:
-            VERCEL_CLI_VERSION: 53.0.1
-          command: npm install --global "vercel@${VERCEL_CLI_VERSION}"
-
   deploy_to_vercel:
     parameters:
       environment:
@@ -63,18 +55,23 @@ commands:
         default: ""
     steps:
       - require_vercel_environment
-      - install_vercel_cli
       - run:
           name: Pull Vercel environment
-          command: vercel pull --yes --environment=<< parameters.environment >> --token="$VERCEL_TOKEN"
+          environment:
+            VERCEL_CLI_VERSION: 53.0.1
+          command: npx --yes "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=<< parameters.environment >> --token="$VERCEL_TOKEN"
       - run:
           name: Build Vercel output
-          command: vercel build << parameters.production_flag >> --token="$VERCEL_TOKEN"
+          environment:
+            VERCEL_CLI_VERSION: 53.0.1
+          command: npx --yes "vercel@${VERCEL_CLI_VERSION}" build << parameters.production_flag >> --token="$VERCEL_TOKEN"
       - run:
           name: Deploy Vercel output
+          environment:
+            VERCEL_CLI_VERSION: 53.0.1
           command: |
             mkdir -p workspace
-            deploy_output="$(vercel deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
             deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1 || true)"
 
             if [ -z "${deployment_url}" ]; then
