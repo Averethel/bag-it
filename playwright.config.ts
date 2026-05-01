@@ -26,7 +26,7 @@ function isEquivalentLocalServerUrl(candidate: string, expected: string) {
 }
 
 function isLoopbackHost(hostname: string) {
-  const normalizedHostname = normalizeHostname(hostname);
+  const normalizedHostname = stripIpv6Brackets(hostname);
 
   return (
     normalizedHostname === "127.0.0.1" ||
@@ -37,13 +37,13 @@ function isLoopbackHost(hostname: string) {
 
 function getLocalServerHostname(candidate: string) {
   try {
-    return normalizeHostname(new URL(candidate).hostname);
+    return stripIpv6Brackets(new URL(candidate).hostname);
   } catch {
-    return normalizeHostname(new URL(defaultBaseURL).hostname);
+    return stripIpv6Brackets(new URL(defaultBaseURL).hostname);
   }
 }
 
-function normalizeHostname(hostname: string) {
+function stripIpv6Brackets(hostname: string) {
   return hostname.replace(/^\[(.*)]$/, "$1");
 }
 
