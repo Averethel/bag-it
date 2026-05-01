@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.circleci\\/config\\.yml$/"],
+      "matchStrings": ["VERCEL_CLI_VERSION: (?<currentValue>[^\\s]+)"],
+      "depNameTemplate": "vercel",
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "labels": ["dependencies"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Group the framework runtime together.",
+      "groupName": "next and react",
+      "matchPackageNames": ["next", "eslint-config-next", "react", "react-dom"]
+    },
+    {
+      "description": "Group Chakra UI runtime packages together.",
+      "groupName": "chakra ui",
+      "matchPackageNames": ["@chakra-ui/react", "@emotion/react", "next-themes"]
+    },
+    {
+      "description": "Group unit and browser test tooling together.",
+      "groupName": "test tooling",
+      "matchPackageNames": [
+        "mcr.microsoft.com/playwright",
+        "@playwright/test",
+        "@testing-library/**",
+        "@vitejs/plugin-react",
+        "jsdom",
+        "vitest"
+      ]
+    },
+    {
+      "description": "Group CI runtime images together.",
+      "groupName": "ci runtime images",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["cimg/node"]
+    }
+  ]
+}
