@@ -15,6 +15,9 @@ Examples:
 Prefer common types such as `feat`, `fix`, `docs`, `test`, `refactor`,
 `chore`, and `ci`.
 
+Use semantic PR titles too. This repository squash merges pull requests, so the
+PR title should be ready to become the final merge commit message.
+
 ## Implementation Review Loop
 
 After finishing an implementation, run a review subagent against the local diff
