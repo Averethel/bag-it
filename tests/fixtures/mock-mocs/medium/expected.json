@@ -1,0 +1,5459 @@
+{
+  "fixtureId": "medium",
+  "title": "Medium Mock MOC",
+  "synthetic": true,
+  "pdfKind": "raster-image-only",
+  "partNumberSource": "common-rebrickable-parts",
+  "pageCount": 33,
+  "instructionPageRange": [
+    2,
+    28
+  ],
+  "partsListPageRange": [
+    29,
+    33
+  ],
+  "inventory": [
+    {
+      "part": "2420",
+      "name": "Plate 2 x 2 Corner",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2431",
+      "name": "Tile 1 x 4",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2450",
+      "name": "Wedge Plate 3 x 3",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2456",
+      "name": "Brick 2 x 6",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2780",
+      "name": "Technic Pin",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3001",
+      "name": "Brick 2 x 4",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3002",
+      "name": "Brick 2 x 3",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3003",
+      "name": "Brick 2 x 2",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3004",
+      "name": "Brick 1 x 2",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3005",
+      "name": "Brick 1 x 1",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3008",
+      "name": "Brick 1 x 8",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3009",
+      "name": "Brick 1 x 6",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3010",
+      "name": "Brick 1 x 4",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3020",
+      "name": "Plate 2 x 4",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3021",
+      "name": "Plate 2 x 3",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3022",
+      "name": "Plate 2 x 2",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3023",
+      "name": "Plate 1 x 2",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-api"
+    },
+    {
+      "part": "3024",
+      "name": "Plate 1 x 1",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3031",
+      "name": "Plate 4 x 4",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3032",
+      "name": "Plate 4 x 6",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3033",
+      "name": "Plate 6 x 10",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3034",
+      "name": "Plate 2 x 8",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3035",
+      "name": "Plate 4 x 8",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3036",
+      "name": "Plate 6 x 8",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3037",
+      "name": "Slope 45 2 x 4",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "3039",
+      "name": "Slope 45 2 x 2",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3040b",
+      "name": "Slope 45 2 x 1",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3062b",
+      "name": "Round Brick 1 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3068b",
+      "name": "Tile 2 x 2",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3070b",
+      "name": "Tile 1 x 1",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32000",
+      "name": "Technic Brick 1 x 2",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32013",
+      "name": "Technic Axle 3",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32016",
+      "name": "Technic Axle 5",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32028",
+      "name": "Plate 1 x 2 with Handle",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32039",
+      "name": "Technic Axle Connector",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32054",
+      "name": "Technic Pin Long",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32062",
+      "name": "Technic Axle 2",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "32064a",
+      "name": "Technic Brick 1 x 2 with Axle Hole",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32123b",
+      "name": "Technic Bush",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32523",
+      "name": "Technic Beam 1 x 3",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3622",
+      "name": "Brick 1 x 3",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3623",
+      "name": "Plate 1 x 3",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3626c",
+      "name": "Minifig Head",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3660",
+      "name": "Slope Inverted 45 2 x 2",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3665",
+      "name": "Slope Inverted 45 2 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3666",
+      "name": "Plate 1 x 6",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3710",
+      "name": "Plate 1 x 4",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3795",
+      "name": "Plate 2 x 6",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3832",
+      "name": "Plate 2 x 10",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3937",
+      "name": "Hinge Brick 1 x 2 Base",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3938",
+      "name": "Hinge Brick 1 x 2 Top",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "4070",
+      "name": "Brick 1 x 1 with Headlight",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4081b",
+      "name": "Plate 1 x 1 with Clip",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4150",
+      "name": "Tile Round 2 x 2",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4162",
+      "name": "Tile 1 x 8",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "41769",
+      "name": "Wedge Plate 4 x 2 Left",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4274",
+      "name": "Technic Pin 1/2",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4286",
+      "name": "Slope 33 3 x 1",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "43093",
+      "name": "Technic Axle Pin",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "44728",
+      "name": "Bracket 1 x 2",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4488",
+      "name": "Plate 1 x 2 with Clip",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4599b",
+      "name": "Tap 1 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4624",
+      "name": "Wheel 8mm",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "48336",
+      "name": "Plate 1 x 2 Jumper",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "54200",
+      "name": "Slope 30 1 x 1 x 2/3",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "60470b",
+      "name": "Plate 1 x 2 with Handle",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "60478",
+      "name": "Plate 1 x 2 with Clip",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "60479",
+      "name": "Tile 1 x 2 with Groove",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "60592",
+      "name": "Window Frame 1 x 2 x 2",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "6091",
+      "name": "Brick Arch 1 x 1 x 1",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "6141",
+      "name": "Plate Round 1 x 1",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "6231",
+      "name": "Panel 1 x 1 x 1 Corner",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "63868",
+      "name": "Plate 1 x 2 with Bar",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "63965",
+      "name": "Bar 6L",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "85984",
+      "name": "Slope 30 1 x 2 x 2/3",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "87087",
+      "name": "Brick 1 x 1 with Stud on Side",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "87544",
+      "name": "Panel 1 x 2 x 2",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "87580",
+      "name": "Plate 2 x 2 with One Stud",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "98138",
+      "name": "Tile Round 1 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "98283",
+      "name": "Brick 1 x 2 Masonry Profile",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "99207",
+      "name": "Bracket 1 x 2 Inverted",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "11211",
+      "name": "Brick 1 x 2 Curved Slope",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "15068",
+      "name": "Slope Curved 2 x 2",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "15573",
+      "name": "Plate 1 x 2 with 1 Stud",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "15712",
+      "name": "Tile 1 x 1 Quarter Round",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "18654",
+      "name": "Brick 1 x 2 with Grille",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2420",
+      "name": "Plate 2 x 2 Corner",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2431",
+      "name": "Tile 1 x 4",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2450",
+      "name": "Wedge Plate 3 x 3",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2456",
+      "name": "Brick 2 x 6",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2780",
+      "name": "Technic Pin",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3001",
+      "name": "Brick 2 x 4",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3002",
+      "name": "Brick 2 x 3",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3003",
+      "name": "Brick 2 x 2",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3004",
+      "name": "Brick 1 x 2",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3005",
+      "name": "Brick 1 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3008",
+      "name": "Brick 1 x 8",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3009",
+      "name": "Brick 1 x 6",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3010",
+      "name": "Brick 1 x 4",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3020",
+      "name": "Plate 2 x 4",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3021",
+      "name": "Plate 2 x 3",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3022",
+      "name": "Plate 2 x 2",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3023",
+      "name": "Plate 1 x 2",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-api"
+    },
+    {
+      "part": "3024",
+      "name": "Plate 1 x 1",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3031",
+      "name": "Plate 4 x 4",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3032",
+      "name": "Plate 4 x 6",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3033",
+      "name": "Plate 6 x 10",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3034",
+      "name": "Plate 2 x 8",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3035",
+      "name": "Plate 4 x 8",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3036",
+      "name": "Plate 6 x 8",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3037",
+      "name": "Slope 45 2 x 4",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3039",
+      "name": "Slope 45 2 x 2",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3040b",
+      "name": "Slope 45 2 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3062b",
+      "name": "Round Brick 1 x 1",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3068b",
+      "name": "Tile 2 x 2",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3070b",
+      "name": "Tile 1 x 1",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32000",
+      "name": "Technic Brick 1 x 2",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32013",
+      "name": "Technic Axle 3",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32016",
+      "name": "Technic Axle 5",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32028",
+      "name": "Plate 1 x 2 with Handle",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32039",
+      "name": "Technic Axle Connector",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32054",
+      "name": "Technic Pin Long",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "32062",
+      "name": "Technic Axle 2",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32064a",
+      "name": "Technic Brick 1 x 2 with Axle Hole",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32123b",
+      "name": "Technic Bush",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "32523",
+      "name": "Technic Beam 1 x 3",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3622",
+      "name": "Brick 1 x 3",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3623",
+      "name": "Plate 1 x 3",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3626c",
+      "name": "Minifig Head",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3660",
+      "name": "Slope Inverted 45 2 x 2",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3665",
+      "name": "Slope Inverted 45 2 x 1",
+      "color": "34",
+      "colorName": "Lime",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3666",
+      "name": "Plate 1 x 6",
+      "color": "308",
+      "colorName": "Dark Brown",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3710",
+      "name": "Plate 1 x 4",
+      "color": "15",
+      "colorName": "White",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3795",
+      "name": "Plate 2 x 6",
+      "color": "72",
+      "colorName": "Dark Bluish Gray",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3832",
+      "name": "Plate 2 x 10",
+      "color": "4",
+      "colorName": "Red",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3937",
+      "name": "Hinge Brick 1 x 2 Base",
+      "color": "46",
+      "colorName": "Trans-Yellow",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3938",
+      "name": "Hinge Brick 1 x 2 Top",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4070",
+      "name": "Brick 1 x 1 with Headlight",
+      "color": "19",
+      "colorName": "Tan",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4081b",
+      "name": "Plate 1 x 1 with Clip",
+      "color": "84",
+      "colorName": "Medium Nougat",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw-fallback-color"
+    },
+    {
+      "part": "4150",
+      "name": "Tile Round 2 x 2",
+      "color": "7",
+      "colorName": "Light Gray",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4162",
+      "name": "Tile 1 x 8",
+      "color": "70",
+      "colorName": "Reddish Brown",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "41769",
+      "name": "Wedge Plate 4 x 2 Left",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4274",
+      "name": "Technic Pin 1/2",
+      "color": "28",
+      "colorName": "Dark Tan",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "4286",
+      "name": "Slope 33 3 x 1",
+      "color": "179",
+      "colorName": "Flat Silver",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "43093",
+      "name": "Technic Axle Pin",
+      "color": "14",
+      "colorName": "Yellow",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "44728",
+      "name": "Bracket 1 x 2",
+      "color": "71",
+      "colorName": "Light Bluish Gray",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    }
+  ],
+  "steps": [
+    {
+      "stepNumber": 1,
+      "pageNumber": 2,
+      "callouts": [
+        {
+          "part": "11211",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "2420",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "2780",
+          "color": "1",
+          "quantity": 3
+        },
+        {
+          "part": "3005",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 4
+        },
+        {
+          "part": "3031",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "3035",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "32013",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "32062",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3622",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "3666",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3937",
+          "color": "46",
+          "quantity": 4
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "4162",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "43093",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "48336",
+          "color": "308",
+          "quantity": 4
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "63868",
+          "color": "70",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 45
+    },
+    {
+      "stepNumber": 2,
+      "pageNumber": 3,
+      "callouts": [
+        {
+          "part": "3002",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "32028",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3710",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "4488",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "98138",
+          "color": "2",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 3,
+      "pageNumber": 4,
+      "callouts": [
+        {
+          "part": "2456",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3004",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3040b",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "32000",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "32523",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3832",
+          "color": "4",
+          "quantity": 4
+        },
+        {
+          "part": "4150",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "4624",
+          "color": "34",
+          "quantity": 4
+        },
+        {
+          "part": "6231",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "99207",
+          "color": "308",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 27
+    },
+    {
+      "stepNumber": 4,
+      "pageNumber": 5,
+      "callouts": [
+        {
+          "part": "15068",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "2431",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 4
+        },
+        {
+          "part": "3008",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3021",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 4
+        },
+        {
+          "part": "3036",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3068b",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "32016",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "32064a",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3623",
+          "color": "14",
+          "quantity": 4
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3710",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "3938",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "41769",
+          "color": "70",
+          "quantity": 4
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "44728",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "54200",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "63965",
+          "color": "1",
+          "quantity": 2
+        }
+      ],
+      "pieceCount": 45
+    },
+    {
+      "stepNumber": 5,
+      "pageNumber": 6,
+      "callouts": [
+        {
+          "part": "3009",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3039",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "32123b",
+          "color": "1",
+          "quantity": 3
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "4081b",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "6141",
+          "color": "84",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 15
+    },
+    {
+      "stepNumber": 6,
+      "pageNumber": 7,
+      "callouts": [
+        {
+          "part": "11211",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "2420",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "2780",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3005",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "3031",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "3035",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "32013",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "32062",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3622",
+          "color": "179",
+          "quantity": 4
+        },
+        {
+          "part": "3666",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3937",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "4162",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "48336",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "63868",
+          "color": "70",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 7,
+      "pageNumber": 8,
+      "callouts": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 4
+        },
+        {
+          "part": "2450",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "3002",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 4
+        },
+        {
+          "part": "3022",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "3033",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3037",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "3070b",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "32028",
+          "color": "0",
+          "quantity": 4
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "32123b",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3626c",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3795",
+          "color": "15",
+          "quantity": 4
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "4070",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "4274",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "60470b",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "85984",
+          "color": "28",
+          "quantity": 3
+        }
+      ],
+      "pieceCount": 44
+    },
+    {
+      "stepNumber": 8,
+      "pageNumber": 9,
+      "callouts": [
+        {
+          "part": "2456",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3024",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "32000",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "3665",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3832",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "4624",
+          "color": "34",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 9,
+      "pageNumber": 10,
+      "callouts": [
+        {
+          "part": "15068",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "2431",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3008",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3021",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3036",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3068b",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "32016",
+          "color": "46",
+          "quantity": 4
+        },
+        {
+          "part": "32064a",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3623",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3710",
+          "color": "308",
+          "quantity": 4
+        },
+        {
+          "part": "3938",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "41769",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "54200",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "63965",
+          "color": "1",
+          "quantity": 3
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 10,
+      "pageNumber": 11,
+      "callouts": [
+        {
+          "part": "15712",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "3003",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "3010",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "3023",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "3034",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3039",
+          "color": "71",
+          "quantity": 4
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "32000",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "32039",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "32523",
+          "color": "1",
+          "quantity": 4
+        },
+        {
+          "part": "3660",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3832",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "4286",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "60478",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 4
+        }
+      ],
+      "pieceCount": 44
+    },
+    {
+      "stepNumber": 11,
+      "pageNumber": 12,
+      "callouts": [
+        {
+          "part": "11211",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "3005",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "3035",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "32062",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "3622",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "4162",
+          "color": "7",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 12,
+      "pageNumber": 13,
+      "callouts": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "2450",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3002",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3037",
+          "color": "14",
+          "quantity": 4
+        },
+        {
+          "part": "3070b",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "32028",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "32123b",
+          "color": "70",
+          "quantity": 4
+        },
+        {
+          "part": "3626c",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3795",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "4070",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "4274",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "60470b",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "85984",
+          "color": "28",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 13,
+      "pageNumber": 14,
+      "callouts": [
+        {
+          "part": "18654",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "2780",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3004",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "3020",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "3024",
+          "color": "19",
+          "quantity": 4
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3035",
+          "color": "1",
+          "quantity": 3
+        },
+        {
+          "part": "3040b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "32013",
+          "color": "72",
+          "quantity": 4
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "32054",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3622",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "3937",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "43093",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 4
+        },
+        {
+          "part": "87544",
+          "color": "14",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 44
+    },
+    {
+      "stepNumber": 14,
+      "pageNumber": 15,
+      "callouts": [
+        {
+          "part": "2431",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3021",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3068b",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "32016",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3710",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "63965",
+          "color": "1",
+          "quantity": 2
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 15,
+      "pageNumber": 16,
+      "callouts": [
+        {
+          "part": "15712",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3003",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3023",
+          "color": "0",
+          "quantity": 4
+        },
+        {
+          "part": "3034",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3039",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "32000",
+          "color": "15",
+          "quantity": 4
+        },
+        {
+          "part": "32039",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "32523",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3660",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3832",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "4286",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "60478",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 16,
+      "pageNumber": 17,
+      "callouts": [
+        {
+          "part": "2420",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "3001",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3005",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "3021",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "3031",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3036",
+          "color": "28",
+          "quantity": 4
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3062b",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "32016",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "32062",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "3623",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 4
+        },
+        {
+          "part": "3938",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "4162",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 4
+        },
+        {
+          "part": "60592",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "87580",
+          "color": "71",
+          "quantity": 2
+        }
+      ],
+      "pieceCount": 44
+    },
+    {
+      "stepNumber": 17,
+      "pageNumber": 18,
+      "callouts": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "3002",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3033",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "3037",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "32123b",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "4070",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "60470b",
+          "color": "72",
+          "quantity": 2
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 18,
+      "pageNumber": 19,
+      "callouts": [
+        {
+          "part": "18654",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "2780",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3004",
+          "color": "71",
+          "quantity": 4
+        },
+        {
+          "part": "3020",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "3035",
+          "color": "1",
+          "quantity": 4
+        },
+        {
+          "part": "3040b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "32013",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "32054",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "3622",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3937",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "43093",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "87544",
+          "color": "14",
+          "quantity": 2
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 19,
+      "pageNumber": 20,
+      "callouts": [
+        {
+          "part": "2431",
+          "color": "84",
+          "quantity": 4
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3002",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "3008",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "4",
+          "quantity": 4
+        },
+        {
+          "part": "3032",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3037",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3068b",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "32028",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 4
+        },
+        {
+          "part": "3626c",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "3710",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 4
+        },
+        {
+          "part": "41769",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "4488",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "6091",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "98138",
+          "color": "2",
+          "quantity": 3
+        }
+      ],
+      "pieceCount": 44
+    },
+    {
+      "stepNumber": 20,
+      "pageNumber": 21,
+      "callouts": [
+        {
+          "part": "15712",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3010",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "3023",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "32000",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3660",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "4286",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 2
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 21,
+      "pageNumber": 22,
+      "callouts": [
+        {
+          "part": "2420",
+          "color": "19",
+          "quantity": 4
+        },
+        {
+          "part": "3001",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3005",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3021",
+          "color": "72",
+          "quantity": 4
+        },
+        {
+          "part": "3031",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3036",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3062b",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "32016",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "32062",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3623",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "3938",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "4162",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "60592",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "87580",
+          "color": "71",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 22,
+      "pageNumber": 23,
+      "callouts": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "2450",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3003",
+          "color": "179",
+          "quantity": 4
+        },
+        {
+          "part": "3009",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3023",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3039",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 4
+        },
+        {
+          "part": "32039",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "32123b",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 4
+        },
+        {
+          "part": "3795",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "4081b",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "4274",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "4599b",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "6141",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "98283",
+          "color": "34",
+          "quantity": 4
+        }
+      ],
+      "pieceCount": 44
+    },
+    {
+      "stepNumber": 23,
+      "pageNumber": 24,
+      "callouts": [
+        {
+          "part": "2780",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3004",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3035",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "32054",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3937",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "87544",
+          "color": "14",
+          "quantity": 3
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 24,
+      "pageNumber": 25,
+      "callouts": [
+        {
+          "part": "2431",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3002",
+          "color": "28",
+          "quantity": 4
+        },
+        {
+          "part": "3008",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "3037",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3068b",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "32028",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3626c",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3710",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "41769",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "4488",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "6091",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "98138",
+          "color": "2",
+          "quantity": 4
+        }
+      ],
+      "pieceCount": 28
+    },
+    {
+      "stepNumber": 25,
+      "pageNumber": 26,
+      "callouts": [
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "2456",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3004",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "3024",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 4
+        },
+        {
+          "part": "3040b",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "32000",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 4
+        },
+        {
+          "part": "32523",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3665",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3832",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "4150",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "4286",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "4624",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "6231",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "99207",
+          "color": "308",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 41
+    },
+    {
+      "stepNumber": 26,
+      "pageNumber": 27,
+      "callouts": [
+        {
+          "part": "2420",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "3021",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "3062b",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3623",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "4162",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "60592",
+          "color": "0",
+          "quantity": 3
+        }
+      ],
+      "pieceCount": 16
+    },
+    {
+      "stepNumber": 27,
+      "pageNumber": 28,
+      "callouts": [
+        {
+          "part": "2450",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3003",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3009",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "3023",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3039",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "32039",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "32123b",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3795",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "4274",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "4599b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "6141",
+          "color": "84",
+          "quantity": 4
+        },
+        {
+          "part": "98283",
+          "color": "34",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 25
+    }
+  ],
+  "expectedBags": [
+    {
+      "sequence": 1,
+      "stepStart": 1,
+      "stepEnd": 1,
+      "pageStart": 2,
+      "pageEnd": 2,
+      "pieceCount": 45,
+      "uniquePartCount": 19,
+      "items": [
+        {
+          "part": "11211",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "2420",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "2780",
+          "color": "1",
+          "quantity": 3
+        },
+        {
+          "part": "3005",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 4
+        },
+        {
+          "part": "3031",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "3035",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "32013",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "32062",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3622",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "3666",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3937",
+          "color": "46",
+          "quantity": 4
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "4162",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "43093",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "48336",
+          "color": "308",
+          "quantity": 4
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "63868",
+          "color": "70",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "sequence": 2,
+      "stepStart": 2,
+      "stepEnd": 3,
+      "pageStart": 3,
+      "pageEnd": 4,
+      "pieceCount": 43,
+      "uniquePartCount": 23,
+      "items": [
+        {
+          "part": "2456",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3002",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3004",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "3032",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3040b",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "32000",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "32028",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "32523",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3710",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "3832",
+          "color": "4",
+          "quantity": 4
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "4150",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "4488",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "4624",
+          "color": "34",
+          "quantity": 4
+        },
+        {
+          "part": "6231",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "98138",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "99207",
+          "color": "308",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "sequence": 3,
+      "stepStart": 4,
+      "stepEnd": 5,
+      "pageStart": 5,
+      "pageEnd": 6,
+      "pieceCount": 60,
+      "uniquePartCount": 26,
+      "items": [
+        {
+          "part": "15068",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "2431",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 4
+        },
+        {
+          "part": "3008",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3009",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3021",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 4
+        },
+        {
+          "part": "3036",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3039",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "3068b",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "32016",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "32064a",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "32123b",
+          "color": "1",
+          "quantity": 3
+        },
+        {
+          "part": "3623",
+          "color": "14",
+          "quantity": 4
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3710",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "3938",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "41769",
+          "color": "70",
+          "quantity": 4
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "44728",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "54200",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "6141",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "63965",
+          "color": "1",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "sequence": 4,
+      "stepStart": 6,
+      "stepEnd": 7,
+      "pageStart": 7,
+      "pageEnd": 8,
+      "pieceCount": 72,
+      "uniquePartCount": 34,
+      "items": [
+        {
+          "part": "11211",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 4
+        },
+        {
+          "part": "2420",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "2450",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "2780",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3002",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3005",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 4
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "3031",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3035",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3037",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3070b",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "32013",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "32028",
+          "color": "0",
+          "quantity": 4
+        },
+        {
+          "part": "32062",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "32123b",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3622",
+          "color": "179",
+          "quantity": 4
+        },
+        {
+          "part": "3626c",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3666",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3795",
+          "color": "15",
+          "quantity": 4
+        },
+        {
+          "part": "3937",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "4070",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "4162",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "4274",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "48336",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "60470b",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "63868",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "85984",
+          "color": "28",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "sequence": 5,
+      "stepStart": 8,
+      "stepEnd": 9,
+      "pageStart": 9,
+      "pageEnd": 10,
+      "pieceCount": 44,
+      "uniquePartCount": 24,
+      "items": [
+        {
+          "part": "15068",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "2431",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "2456",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3008",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3021",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "3024",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3036",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3068b",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "32000",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "32016",
+          "color": "46",
+          "quantity": 4
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "32064a",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3623",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3710",
+          "color": "308",
+          "quantity": 4
+        },
+        {
+          "part": "3832",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "3938",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "41769",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "4624",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "54200",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "63965",
+          "color": "1",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "sequence": 6,
+      "stepStart": 10,
+      "stepEnd": 11,
+      "pageStart": 11,
+      "pageEnd": 12,
+      "pieceCount": 60,
+      "uniquePartCount": 26,
+      "items": [
+        {
+          "part": "11211",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "15712",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "3003",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "3005",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3010",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "3023",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "3034",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3035",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "3039",
+          "color": "71",
+          "quantity": 4
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "32000",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "32039",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "32062",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "32523",
+          "color": "1",
+          "quantity": 4
+        },
+        {
+          "part": "3622",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3660",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "3832",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "4162",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "4286",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "60478",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 4
+        }
+      ]
+    },
+    {
+      "sequence": 7,
+      "stepStart": 12,
+      "stepEnd": 13,
+      "pageStart": 13,
+      "pageEnd": 14,
+      "pieceCount": 72,
+      "uniquePartCount": 34,
+      "items": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "18654",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "2450",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "2780",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3002",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3004",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3020",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "3022",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "19",
+          "quantity": 4
+        },
+        {
+          "part": "3033",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3035",
+          "color": "1",
+          "quantity": 3
+        },
+        {
+          "part": "3037",
+          "color": "14",
+          "quantity": 4
+        },
+        {
+          "part": "3040b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3070b",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "32013",
+          "color": "72",
+          "quantity": 4
+        },
+        {
+          "part": "32028",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "32054",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "32123b",
+          "color": "70",
+          "quantity": 4
+        },
+        {
+          "part": "3622",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3626c",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "3795",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3937",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "4070",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "4274",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "43093",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "60470b",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 4
+        },
+        {
+          "part": "85984",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "87544",
+          "color": "14",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "sequence": 8,
+      "stepStart": 14,
+      "stepEnd": 15,
+      "pageStart": 15,
+      "pageEnd": 16,
+      "pieceCount": 44,
+      "uniquePartCount": 24,
+      "items": [
+        {
+          "part": "15712",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "2431",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3003",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3021",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "3023",
+          "color": "0",
+          "quantity": 4
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3034",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3039",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3068b",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "32000",
+          "color": "15",
+          "quantity": 4
+        },
+        {
+          "part": "32016",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "32039",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "32523",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3660",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3710",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "3832",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "4286",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "60478",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "63965",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "sequence": 9,
+      "stepStart": 16,
+      "stepEnd": 17,
+      "pageStart": 17,
+      "pageEnd": 18,
+      "pieceCount": 60,
+      "uniquePartCount": 26,
+      "items": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "2420",
+          "color": "19",
+          "quantity": 3
+        },
+        {
+          "part": "3001",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3002",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "3005",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3020",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "3021",
+          "color": "72",
+          "quantity": 3
+        },
+        {
+          "part": "3031",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "3036",
+          "color": "28",
+          "quantity": 4
+        },
+        {
+          "part": "3037",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3062b",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3062b",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "32016",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "32062",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "32123b",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3623",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 4
+        },
+        {
+          "part": "3938",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "4070",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "4162",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 4
+        },
+        {
+          "part": "60470b",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "60592",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "87580",
+          "color": "71",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "sequence": 10,
+      "stepStart": 18,
+      "stepEnd": 19,
+      "pageStart": 19,
+      "pageEnd": 20,
+      "pieceCount": 72,
+      "uniquePartCount": 34,
+      "items": [
+        {
+          "part": "18654",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "2431",
+          "color": "84",
+          "quantity": 4
+        },
+        {
+          "part": "2780",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3002",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "3004",
+          "color": "71",
+          "quantity": 4
+        },
+        {
+          "part": "3008",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3020",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "4",
+          "quantity": 4
+        },
+        {
+          "part": "3024",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3032",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "3035",
+          "color": "1",
+          "quantity": 4
+        },
+        {
+          "part": "3037",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3040b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3068b",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "32013",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "32028",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "32054",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 4
+        },
+        {
+          "part": "3622",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3626c",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "3665",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3710",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "3937",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 4
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "41769",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "43093",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "4488",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "6091",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "87544",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "98138",
+          "color": "2",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "sequence": 11,
+      "stepStart": 20,
+      "stepEnd": 21,
+      "pageStart": 21,
+      "pageEnd": 22,
+      "pieceCount": 44,
+      "uniquePartCount": 24,
+      "items": [
+        {
+          "part": "15712",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "2420",
+          "color": "19",
+          "quantity": 4
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3005",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "3021",
+          "color": "72",
+          "quantity": 4
+        },
+        {
+          "part": "3023",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3031",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "3036",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "3062b",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "32000",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "32016",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "32062",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3623",
+          "color": "179",
+          "quantity": 3
+        },
+        {
+          "part": "3660",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "3938",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "4162",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "4286",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "60592",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "87580",
+          "color": "71",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "sequence": 12,
+      "stepStart": 22,
+      "stepEnd": 23,
+      "pageStart": 23,
+      "pageEnd": 24,
+      "pieceCount": 60,
+      "uniquePartCount": 26,
+      "items": [
+        {
+          "part": "15573",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "2450",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "2780",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3003",
+          "color": "179",
+          "quantity": 4
+        },
+        {
+          "part": "3004",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3009",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3009",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3023",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "3035",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3039",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 4
+        },
+        {
+          "part": "32039",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "32054",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "32123b",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 4
+        },
+        {
+          "part": "3795",
+          "color": "72",
+          "quantity": 2
+        },
+        {
+          "part": "3937",
+          "color": "4",
+          "quantity": 2
+        },
+        {
+          "part": "4081b",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "4150",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "4274",
+          "color": "28",
+          "quantity": 3
+        },
+        {
+          "part": "4599b",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "60479",
+          "color": "46",
+          "quantity": 2
+        },
+        {
+          "part": "6141",
+          "color": "84",
+          "quantity": 3
+        },
+        {
+          "part": "87544",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "98283",
+          "color": "34",
+          "quantity": 4
+        }
+      ]
+    },
+    {
+      "sequence": 13,
+      "stepStart": 24,
+      "stepEnd": 25,
+      "pageStart": 25,
+      "pageEnd": 26,
+      "pieceCount": 69,
+      "uniquePartCount": 34,
+      "items": [
+        {
+          "part": "2431",
+          "color": "84",
+          "quantity": 1
+        },
+        {
+          "part": "2456",
+          "color": "7",
+          "quantity": 2
+        },
+        {
+          "part": "2456",
+          "color": "70",
+          "quantity": 2
+        },
+        {
+          "part": "3002",
+          "color": "28",
+          "quantity": 4
+        },
+        {
+          "part": "3004",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3008",
+          "color": "34",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "15",
+          "quantity": 3
+        },
+        {
+          "part": "3022",
+          "color": "4",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "3032",
+          "color": "7",
+          "quantity": 3
+        },
+        {
+          "part": "3034",
+          "color": "1",
+          "quantity": 4
+        },
+        {
+          "part": "3037",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3040b",
+          "color": "71",
+          "quantity": 3
+        },
+        {
+          "part": "3068b",
+          "color": "308",
+          "quantity": 1
+        },
+        {
+          "part": "32000",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "32028",
+          "color": "46",
+          "quantity": 3
+        },
+        {
+          "part": "32054",
+          "color": "19",
+          "quantity": 4
+        },
+        {
+          "part": "32064a",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "32523",
+          "color": "28",
+          "quantity": 2
+        },
+        {
+          "part": "3626c",
+          "color": "14",
+          "quantity": 1
+        },
+        {
+          "part": "3665",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3710",
+          "color": "15",
+          "quantity": 2
+        },
+        {
+          "part": "3832",
+          "color": "4",
+          "quantity": 3
+        },
+        {
+          "part": "4070",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "4150",
+          "color": "84",
+          "quantity": 2
+        },
+        {
+          "part": "41769",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "4286",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "4488",
+          "color": "71",
+          "quantity": 2
+        },
+        {
+          "part": "4624",
+          "color": "34",
+          "quantity": 3
+        },
+        {
+          "part": "6091",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "6231",
+          "color": "7",
+          "quantity": 4
+        },
+        {
+          "part": "87087",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "98138",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "99207",
+          "color": "308",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "sequence": 14,
+      "stepStart": 26,
+      "stepEnd": 27,
+      "pageStart": 27,
+      "pageEnd": 28,
+      "pieceCount": 41,
+      "uniquePartCount": 24,
+      "items": [
+        {
+          "part": "2420",
+          "color": "19",
+          "quantity": 1
+        },
+        {
+          "part": "2450",
+          "color": "7",
+          "quantity": 1
+        },
+        {
+          "part": "3003",
+          "color": "179",
+          "quantity": 1
+        },
+        {
+          "part": "3009",
+          "color": "308",
+          "quantity": 3
+        },
+        {
+          "part": "3021",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "3023",
+          "color": "46",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "70",
+          "quantity": 1
+        },
+        {
+          "part": "3039",
+          "color": "14",
+          "quantity": 3
+        },
+        {
+          "part": "3062b",
+          "color": "34",
+          "quantity": 2
+        },
+        {
+          "part": "3070b",
+          "color": "15",
+          "quantity": 1
+        },
+        {
+          "part": "32039",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "32123b",
+          "color": "1",
+          "quantity": 2
+        },
+        {
+          "part": "3623",
+          "color": "179",
+          "quantity": 2
+        },
+        {
+          "part": "3660",
+          "color": "71",
+          "quantity": 1
+        },
+        {
+          "part": "3666",
+          "color": "308",
+          "quantity": 2
+        },
+        {
+          "part": "3795",
+          "color": "72",
+          "quantity": 1
+        },
+        {
+          "part": "4081b",
+          "color": "19",
+          "quantity": 2
+        },
+        {
+          "part": "4162",
+          "color": "70",
+          "quantity": 3
+        },
+        {
+          "part": "4274",
+          "color": "28",
+          "quantity": 1
+        },
+        {
+          "part": "44728",
+          "color": "14",
+          "quantity": 2
+        },
+        {
+          "part": "4599b",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "60592",
+          "color": "0",
+          "quantity": 3
+        },
+        {
+          "part": "6141",
+          "color": "84",
+          "quantity": 4
+        },
+        {
+          "part": "98283",
+          "color": "34",
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}

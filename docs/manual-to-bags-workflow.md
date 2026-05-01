@@ -5,6 +5,9 @@
 This document defines the target workflow for a progressive web app that turns a
 LEGO MOC instruction manual PDF into builder-friendly parts bags.
 
+For a focused implementation breakdown, see
+[manual-to-bags-implementation-plan.md](manual-to-bags-implementation-plan.md).
+
 The app's primary input is the PDF manual. A Rebrickable parts CSV is optional
 and is used only for validation, not as the main source of truth.
 
@@ -107,10 +110,13 @@ The app should:
 - keep the file reference and decoded PDF data in memory only;
 - render page previews only for active-session inspection;
 - avoid storing original page images or PDF bytes;
+- run OCR locally when pages are rasterized or image-only;
+- avoid storing raw OCR page output;
 - expose progress for local analysis because large manuals may take time.
 
-The first implementation should support text-based/vector PDFs. OCR and
-computer-vision fallbacks can be added after the core flow is working.
+The first implementation must support local OCR because real-world MOC manuals
+are commonly rasterized or image-only. Embedded text and vector layout data
+should be used when available, but cannot be assumed.
 
 ## Step 2: Automatic Section Detection
 
@@ -169,9 +175,8 @@ The extractor should produce inventory rows with:
 - extraction confidence;
 - recognition notes.
 
-Extraction should prefer embedded PDF text and vector layout data. If the manual
-uses rasterized pages, later versions may add local OCR or computer-vision
-recognition.
+Extraction should use local OCR output for rasterized pages and prefer embedded
+PDF text and vector layout data when available.
 
 The app must not silently guess. Rows with uncertain quantity, part number,
 color, or description should enter a review queue.
@@ -447,17 +452,18 @@ A practical MVP should implement:
 
 1. PDF upload and local-only session handling.
 2. Automatic page classification and instruction/parts boundary detection.
-3. Parts-list extraction for text-based/vector PDFs.
-4. Rebrickable catalog matching and image rendering.
-5. Optional Rebrickable CSV validation.
-6. Build step detection for supported PDFs.
-7. Per-step callout extraction for supported PDFs.
-8. Bag allocation targeting 40 to 60 pieces.
-9. Bag validation against extracted inventory.
-10. Interactive and printable bag lists.
+3. Local OCR for rasterized/image-only manuals.
+4. Parts-list extraction from OCR and embedded text/layout signals.
+5. Rebrickable catalog matching and image rendering.
+6. Optional Rebrickable CSV validation.
+7. Build step detection for supported PDFs.
+8. Per-step callout extraction for supported PDFs.
+9. Bag allocation targeting 40 to 60 pieces.
+10. Bag validation against extracted inventory.
+11. Per-bag HTML output and PDF export.
 
-The MVP can limit support to machine-readable PDFs. OCR and advanced computer
-vision should be treated as follow-up work.
+The MVP should support private rasterized manual fixtures through local OCR.
+Advanced computer-vision recognition can remain follow-up work.
 
 ## Implementation Milestones
 
@@ -465,16 +471,16 @@ vision should be treated as follow-up work.
    Playwright, PWA shell.
 2. Privacy foundation: local-only PDF handling, no manual persistence, no service
    worker caching of uploaded files.
-3. PDF page preview and page classification.
-4. Automatic build/parts section boundary detection.
+3. PDF page preview and local OCR.
+4. Page classification and automatic build/parts section boundary detection.
 5. Parts-list extraction and inventory review queue.
 6. Rebrickable catalog API matching and image display.
 7. Optional Rebrickable CSV comparison.
 8. Build step detection.
 9. Step callout extraction and inventory reconciliation.
 10. Bag allocation engine.
-11. Bag boundary editor.
-12. Bag list rendering and exports.
+11. Per-bag HTML rendering and PDF export.
+12. Bag boundary editor after the automatic split works.
 13. End-to-end Playwright coverage for the main workflow.
 
 ## Testing Strategy
@@ -482,6 +488,7 @@ vision should be treated as follow-up work.
 Unit tests should cover:
 
 - page classification scoring;
+- OCR normalization and confidence handling;
 - section boundary detection;
 - parts-list row parsing;
 - Rebrickable matching normalization;
@@ -505,13 +512,14 @@ Privacy tests should verify:
 
 - PDF bytes are not written to IndexedDB or localStorage;
 - manual page renderings are not persisted;
+- raw OCR page output is not persisted;
 - service worker cache excludes uploaded PDFs;
 - no network request sends PDF content.
 
 ## Later Product Features
 
-- Local OCR for rasterized manuals.
 - Computer-vision extraction of part callouts.
+- OCR quality improvements for unusual manual layouts.
 - Visual similarity checks against Rebrickable part images.
 - Better submodel and repeated-assembly detection.
 - Manual correction tools for step regions and callout regions.

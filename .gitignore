@@ -6,6 +6,8 @@ node_modules/
 out/
 tsconfig.tsbuildinfo
 .vercel/
+.mock-fixture-cache/
+/artefacts/
 
 # production
 dist/
@@ -15,6 +17,10 @@ build/
 coverage/
 test-results/
 playwright-report/
+/fixtures/
+
+# generated Python caches
+__pycache__/
 
 # logs
 npm-debug.log*
