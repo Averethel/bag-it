@@ -3,6 +3,14 @@ import { defineConfig, devices } from "@playwright/test";
 const isCi = Boolean(process.env.CI);
 const defaultBaseURL = "http://127.0.0.1:3000";
 const baseURL = resolveBaseURL(process.env.PLAYWRIGHT_BASE_URL);
+const vercelAutomationBypassSecret =
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+const vercelAutomationBypassHeaders = vercelAutomationBypassSecret
+  ? {
+      "x-vercel-protection-bypass": vercelAutomationBypassSecret,
+      "x-vercel-set-bypass-cookie": "true",
+    }
+  : undefined;
 const shouldStartLocalServer = isEquivalentLocalServerUrl(
   baseURL,
   defaultBaseURL,
@@ -101,7 +109,10 @@ export default defineConfig({
     : "html",
   use: {
     baseURL,
-    trace: "on-first-retry",
+    trace: vercelAutomationBypassHeaders ? "off" : "on-first-retry",
+    ...(vercelAutomationBypassHeaders
+      ? { extraHTTPHeaders: vercelAutomationBypassHeaders }
+      : {}),
   },
   ...(shouldStartLocalServer
     ? {

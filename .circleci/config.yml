@@ -11,21 +11,10 @@ executors:
     working_directory: ~/project
 
 commands:
-  install_dependencies:
+  attach_project_workspace:
     steps:
-      - restore_cache:
-          keys:
-            - npm-cache-v1-{{ checksum "package-lock.json" }}
-            - npm-cache-v1-
-      - run:
-          name: Install dependencies
-          environment:
-            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-          command: npm ci
-      - save_cache:
-          key: npm-cache-v1-{{ checksum "package-lock.json" }}
-          paths:
-            - ~/.npm
+      - attach_workspace:
+          at: ~/
 
   require_vercel_environment:
     steps:
@@ -43,13 +32,18 @@ commands:
 
             exit "${missing}"
 
-  install_vercel_cli:
+  require_vercel_automation_bypass:
     steps:
       - run:
-          name: Install Vercel CLI
-          environment:
-            VERCEL_CLI_VERSION: 53.0.1
-          command: npm install --global "vercel@${VERCEL_CLI_VERSION}"
+          name: Check Vercel automation bypass secret
+          command: |
+            trimmed_secret="$(printf "%s" "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" | tr -d '[:space:]')"
+
+            if [ -z "${trimmed_secret}" ]; then
+              echo "Missing required environment variable: VERCEL_AUTOMATION_BYPASS_SECRET"
+              echo "Create a Vercel Protection Bypass for Automation secret and add it to CircleCI for deployed E2E tests."
+              exit 1
+            fi
 
   deploy_to_vercel:
     parameters:
@@ -63,18 +57,21 @@ commands:
         default: ""
     steps:
       - require_vercel_environment
-      - install_vercel_cli
+      - run:
+          name: Configure Vercel CLI version
+          environment:
+            VERCEL_CLI_VERSION: 53.0.1
+          command: printf "export VERCEL_CLI_VERSION=%q\n" "${VERCEL_CLI_VERSION}" >> "$BASH_ENV"
       - run:
           name: Pull Vercel environment
-          command: vercel pull --yes --environment=<< parameters.environment >> --token="$VERCEL_TOKEN"
+          command: npx --yes "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=<< parameters.environment >> --token="$VERCEL_TOKEN"
       - run:
           name: Build Vercel output
-          command: vercel build << parameters.production_flag >> --token="$VERCEL_TOKEN"
+          command: npx --yes "vercel@${VERCEL_CLI_VERSION}" build << parameters.production_flag >> --token="$VERCEL_TOKEN"
       - run:
           name: Deploy Vercel output
           command: |
-            mkdir -p workspace
-            deploy_output="$(vercel deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
             deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1 || true)"
 
             if [ -z "${deployment_url}" ]; then
@@ -83,19 +80,40 @@ commands:
               exit 1
             fi
 
-            printf "%s\n" "${deployment_url}" > workspace/vercel-deployment-url
+            printf "%s\n" "${deployment_url}" > vercel-deployment-url
             echo "Deployed to ${deployment_url}"
       - persist_to_workspace:
-          root: workspace
+          root: ~/
           paths:
-            - vercel-deployment-url
+            - project/vercel-deployment-url
 
 jobs:
-  lint:
+  install_dependencies:
     executor: node
     steps:
       - checkout
-      - install_dependencies
+      - restore_cache:
+          keys:
+            - npm-cache-v1-{{ checksum "package-lock.json" }}
+            - npm-cache-v1-
+      - run:
+          name: Install dependencies
+          environment:
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+          command: npm ci
+      - save_cache:
+          key: npm-cache-v1-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - project
+
+  lint:
+    executor: node
+    steps:
+      - attach_project_workspace
       - run:
           name: Lint
           command: npm run lint
@@ -103,8 +121,7 @@ jobs:
   typecheck:
     executor: node
     steps:
-      - checkout
-      - install_dependencies
+      - attach_project_workspace
       - run:
           name: Typecheck
           command: npm run typecheck
@@ -112,8 +129,7 @@ jobs:
   unit_tests:
     executor: node
     steps:
-      - checkout
-      - install_dependencies
+      - attach_project_workspace
       - run:
           name: Unit tests
           command: npm run test:run
@@ -121,8 +137,7 @@ jobs:
   build:
     executor: node
     steps:
-      - checkout
-      - install_dependencies
+      - attach_project_workspace
       - run:
           name: Build
           command: npm run build
@@ -130,16 +145,14 @@ jobs:
   deploy_preview:
     executor: node
     steps:
-      - checkout
-      - install_dependencies
+      - attach_project_workspace
       - deploy_to_vercel:
           environment: preview
 
   deploy_production:
     executor: node
     steps:
-      - checkout
-      - install_dependencies
+      - attach_project_workspace
       - deploy_to_vercel:
           environment: production
           production_flag: --prod
@@ -147,14 +160,12 @@ jobs:
   e2e:
     executor: playwright
     steps:
-      - checkout
-      - install_dependencies
-      - attach_workspace:
-          at: workspace
+      - attach_project_workspace
+      - require_vercel_automation_bypass
       - run:
           name: Read deployment URL
           command: |
-            deployment_url="$(cat workspace/vercel-deployment-url)"
+            deployment_url="$(cat vercel-deployment-url)"
             printf "export PLAYWRIGHT_BASE_URL=%q\n" "${deployment_url}" >> "$BASH_ENV"
             echo "Testing ${deployment_url}"
       - run:
@@ -170,10 +181,19 @@ jobs:
 workflows:
   ci_cd:
     jobs:
-      - lint
-      - typecheck
-      - unit_tests
-      - build
+      - install_dependencies
+      - lint:
+          requires:
+            - install_dependencies
+      - typecheck:
+          requires:
+            - install_dependencies
+      - unit_tests:
+          requires:
+            - install_dependencies
+      - build:
+          requires:
+            - install_dependencies
       - deploy_preview:
           requires:
             - lint
