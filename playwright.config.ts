@@ -7,6 +7,7 @@ const shouldStartLocalServer = isEquivalentLocalServerUrl(
   baseURL,
   defaultBaseURL,
 );
+const localServerHostname = getLocalServerHostname(baseURL);
 
 function isEquivalentLocalServerUrl(candidate: string, expected: string) {
   try {
@@ -25,7 +26,25 @@ function isEquivalentLocalServerUrl(candidate: string, expected: string) {
 }
 
 function isLoopbackHost(hostname: string) {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  const normalizedHostname = normalizeHostname(hostname);
+
+  return (
+    normalizedHostname === "127.0.0.1" ||
+    normalizedHostname === "localhost" ||
+    normalizedHostname === "::1"
+  );
+}
+
+function getLocalServerHostname(candidate: string) {
+  try {
+    return normalizeHostname(new URL(candidate).hostname);
+  } catch {
+    return normalizeHostname(new URL(defaultBaseURL).hostname);
+  }
+}
+
+function normalizeHostname(hostname: string) {
+  return hostname.replace(/^\[(.*)]$/, "$1");
 }
 
 export default defineConfig({
@@ -48,7 +67,7 @@ export default defineConfig({
   ...(shouldStartLocalServer
     ? {
         webServer: {
-          command: "npm run start -- --hostname 127.0.0.1 --port 3000",
+          command: `npm run start -- --hostname ${localServerHostname} --port 3000`,
           url: baseURL,
           reuseExistingServer: !isCi,
           timeout: 120_000,
