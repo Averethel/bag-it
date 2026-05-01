@@ -1,6 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":semanticCommits"],
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":automergePatch",
+    ":automergePr",
+    ":automergeRequireAllStatusChecks"
+  ],
   "customManagers": [
     {
       "customType": "regex",
@@ -11,11 +17,19 @@
     }
   ],
   "labels": ["dependencies"],
+  "skipInstalls": false,
   "lockFileMaintenance": {
     "enabled": true,
+    "automerge": true,
     "schedule": ["before 6am on monday"]
   },
   "packageRules": [
+    {
+      "description": "Automerge non-major development dependency updates after checks pass.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
     {
       "description": "Group the framework runtime together.",
       "groupName": "next and react",

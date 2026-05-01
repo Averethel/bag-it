@@ -27,11 +27,12 @@ Renovate is configured in `renovate.json` for npm dependencies, CI runtime
 images, the pinned Vercel CLI version used by CircleCI, and weekly lockfile
 maintenance.
 
-CircleCI runs linting, type checking, unit tests, the production build, and
-Playwright E2E as separate workflow jobs. Preview branches deploy to Vercel
-Preview first, then E2E runs against that deployment URL. `main` deploys to
-Vercel Production and then runs the same E2E suite against the production
-deployment.
+CircleCI installs dependencies once, persists the checkout and `node_modules` to
+the workflow workspace, then runs linting, type checking, unit tests, the
+production build, and Playwright E2E as separate workflow jobs. Preview branches
+deploy to Vercel Preview first, then E2E runs against that deployment URL. `main`
+deploys to Vercel Production and then runs the same E2E suite against the
+production deployment.
 
 Set these environment variables in the CircleCI project or context:
 
