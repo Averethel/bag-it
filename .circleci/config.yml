@@ -19,6 +19,8 @@ commands:
             - npm-cache-v1-
       - run:
           name: Install dependencies
+          environment:
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
           command: npm ci
       - save_cache:
           key: npm-cache-v1-{{ checksum "package-lock.json" }}
