@@ -2,12 +2,43 @@ import { defineConfig, devices } from "@playwright/test";
 
 const isCi = Boolean(process.env.CI);
 const defaultBaseURL = "http://127.0.0.1:3000";
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || defaultBaseURL;
+const baseURL = resolveBaseURL(process.env.PLAYWRIGHT_BASE_URL);
 const shouldStartLocalServer = isEquivalentLocalServerUrl(
   baseURL,
   defaultBaseURL,
 );
 const localServerHostname = getLocalServerHostname(baseURL);
+const localServerURL = getLocalServerURL(baseURL);
+
+function resolveBaseURL(configuredBaseURL: string | undefined) {
+  const resolvedBaseURL = configuredBaseURL?.trim() || defaultBaseURL;
+
+  return validateAbsoluteHttpURL(resolvedBaseURL, "PLAYWRIGHT_BASE_URL");
+}
+
+function validateAbsoluteHttpURL(value: string, sourceName: string) {
+  let parsedURL: URL;
+
+  try {
+    parsedURL = new URL(value);
+  } catch {
+    throw new Error(
+      `${sourceName} must be a valid absolute http(s) URL, but received: ${JSON.stringify(value)}`,
+    );
+  }
+
+  if (parsedURL.protocol !== "http:" && parsedURL.protocol !== "https:") {
+    throw new Error(
+      `${sourceName} must use the http or https protocol, but received: ${JSON.stringify(value)}`,
+    );
+  }
+
+  if (parsedURL.pathname === "/" && !parsedURL.search && !parsedURL.hash) {
+    return parsedURL.origin;
+  }
+
+  return parsedURL.toString();
+}
 
 function isEquivalentLocalServerUrl(candidate: string, expected: string) {
   try {
@@ -43,6 +74,14 @@ function getLocalServerHostname(candidate: string) {
   }
 }
 
+function getLocalServerURL(candidate: string) {
+  try {
+    return new URL(candidate).origin;
+  } catch {
+    return new URL(defaultBaseURL).origin;
+  }
+}
+
 function stripIpv6Brackets(hostname: string) {
   return hostname.replace(/^\[(.*)]$/, "$1");
 }
@@ -68,7 +107,7 @@ export default defineConfig({
     ? {
         webServer: {
           command: `npm run start -- --hostname ${localServerHostname} --port 3000`,
-          url: baseURL,
+          url: localServerURL,
           reuseExistingServer: !isCi,
           timeout: 120_000,
         },

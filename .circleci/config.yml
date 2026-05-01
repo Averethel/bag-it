@@ -75,7 +75,7 @@ commands:
           command: |
             mkdir -p workspace
             deploy_output="$(vercel deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
-            deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1)"
+            deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1 || true)"
 
             if [ -z "${deployment_url}" ]; then
               echo "Failed to parse deployment URL from 'vercel deploy' output" >&2
