@@ -47,7 +47,7 @@ describe("HomeShell", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not label inactive intake as current", () => {
+  it("keeps readiness badges consistent when moving off intake", () => {
     renderHomeShell();
 
     fireEvent.click(screen.getByRole("button", { name: /Analysis/ }));
@@ -55,6 +55,9 @@ describe("HomeShell", () => {
     expect(screen.queryByText("Current")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Intake.*Ready/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Analysis.*Blocked/ }),
     ).toBeInTheDocument();
   });
 

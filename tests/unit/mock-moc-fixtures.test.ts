@@ -47,7 +47,12 @@ type FixtureExpectation = {
 };
 
 const fixtureRoot = join(process.cwd(), "tests", "fixtures", "mock-mocs");
-const fixtureIds = ["small", "medium", "large"] as const;
+const defaultFixtureIds = ["small", "medium"] as const;
+const largeFixtureIds = ["large"] as const;
+const fixtureIds =
+  process.env.CHECK_LARGE_MOC_FIXTURE === "1"
+    ? [...defaultFixtureIds, ...largeFixtureIds]
+    : [...defaultFixtureIds];
 const commonRebrickableParts = new Set([
   "2420",
   "2431",

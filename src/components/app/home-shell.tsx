@@ -73,7 +73,7 @@ const workflowStages = [
 
 type WorkflowStage = (typeof workflowStages)[number];
 type WorkflowStageId = WorkflowStage["id"];
-type WorkflowStageStatus = "current" | "ready" | "blocked";
+type WorkflowStageStatus = "ready" | "blocked";
 
 type StageView = {
   status: WorkflowStageStatus;
@@ -118,15 +118,9 @@ function buildStageView(
   manualFileName: string | null,
 ): StageView {
   if (stage.id === "intake") {
-    const status = activeStage === stage.id ? "current" : "ready";
-
     return {
-      status,
-      statusLabel: manualFileName
-        ? "PDF selected"
-        : status === "current"
-          ? "Current"
-          : "Ready",
+      status: "ready",
+      statusLabel: manualFileName ? "PDF selected" : "Ready",
       summary: manualFileName
         ? `${manualFileName} is selected for this browser session.`
         : "No manual selected.",
@@ -136,7 +130,7 @@ function buildStageView(
   }
 
   return {
-    status: activeStage === stage.id ? "current" : "blocked",
+    status: "blocked",
     statusLabel: activeStage === stage.id ? "Blocked" : "Not ready",
     summary: downstreamStageSummaries[stage.id],
     detail: blockedStageDetails[stage.id],
@@ -144,10 +138,6 @@ function buildStageView(
 }
 
 function statusColor(status: WorkflowStageStatus) {
-  if (status === "current") {
-    return "blue";
-  }
-
   if (status === "ready") {
     return "green";
   }

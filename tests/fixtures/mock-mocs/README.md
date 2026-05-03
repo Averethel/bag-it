@@ -26,6 +26,11 @@ The scale mirrors the private fixture set:
 | `medium` | 33 | 146 | 786 | Realistic multi-bag workflow tests |
 | `large` | 221 | 380 | 2842 | Performance and stress tests |
 
+The fast unit suite validates `small` and `medium` by default. The committed
+`large` fixture is kept for explicit stress checks without making every CI test
+run read the 26 MB PDF; include it with `CHECK_LARGE_MOC_FIXTURE=1 npm run
+test:run -- tests/unit/mock-moc-fixtures.test.ts`.
+
 The generator used to create these PDFs is intentionally kept outside version
 control. Generated image/cache data belongs in ignored local directories such as
 `artefacts/` and `.mock-fixture-cache/`.
