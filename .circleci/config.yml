@@ -61,7 +61,10 @@ commands:
           name: Configure Vercel CLI version
           environment:
             VERCEL_CLI_VERSION: 53.0.1
-          command: printf "export VERCEL_CLI_VERSION=%q\n" "${VERCEL_CLI_VERSION}" >> "$BASH_ENV"
+          command: |
+            printf "export VERCEL_CLI_VERSION=%q\n" "${VERCEL_CLI_VERSION}" >> "$BASH_ENV"
+            printf "export NO_UPDATE_NOTIFIER=1\n" >> "$BASH_ENV"
+            printf "export VERCEL_TELEMETRY_DISABLED=1\n" >> "$BASH_ENV"
       - run:
           name: Pull Vercel environment
           command: npx --yes "vercel@${VERCEL_CLI_VERSION}" pull --yes --environment=<< parameters.environment >> --token="$VERCEL_TOKEN"
