@@ -1,0 +1,467 @@
+{
+  "fixtureId": "small",
+  "title": "Small Mock MOC",
+  "synthetic": true,
+  "pdfKind": "raster-image-only",
+  "partNumberSource": "common-rebrickable-parts",
+  "pageCount": 8,
+  "instructionPageRange": [
+    2,
+    6
+  ],
+  "partsListPageRange": [
+    7,
+    8
+  ],
+  "inventory": [
+    {
+      "part": "2420",
+      "name": "Plate 2 x 2 Corner",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2431",
+      "name": "Tile 1 x 4",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 7,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2450",
+      "name": "Wedge Plate 3 x 3",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 4,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2456",
+      "name": "Brick 2 x 6",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 9,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "2780",
+      "name": "Technic Pin",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 6,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3001",
+      "name": "Brick 2 x 4",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 3,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3002",
+      "name": "Brick 2 x 3",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 8,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3003",
+      "name": "Brick 2 x 2",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 5,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3004",
+      "name": "Brick 1 x 2",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 2,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3005",
+      "name": "Brick 1 x 1",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3008",
+      "name": "Brick 1 x 8",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3009",
+      "name": "Brick 1 x 6",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3010",
+      "name": "Brick 1 x 4",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3020",
+      "name": "Plate 2 x 4",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3021",
+      "name": "Plate 2 x 3",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3022",
+      "name": "Plate 2 x 2",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3023",
+      "name": "Plate 1 x 2",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-api"
+    },
+    {
+      "part": "3024",
+      "name": "Plate 1 x 1",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3031",
+      "name": "Plate 4 x 4",
+      "color": "0",
+      "colorName": "Black",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3032",
+      "name": "Plate 4 x 6",
+      "color": "1",
+      "colorName": "Blue",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    },
+    {
+      "part": "3033",
+      "name": "Plate 6 x 10",
+      "color": "2",
+      "colorName": "Green",
+      "quantity": 1,
+      "isSpare": false,
+      "imageSource": "rebrickable-ldraw"
+    }
+  ],
+  "steps": [
+    {
+      "stepNumber": 1,
+      "pageNumber": 2,
+      "callouts": [
+        {
+          "part": "2420",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "3001",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3008",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "2",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 8
+    },
+    {
+      "stepNumber": 2,
+      "pageNumber": 3,
+      "callouts": [
+        {
+          "part": "2450",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "3003",
+          "color": "1",
+          "quantity": 5
+        },
+        {
+          "part": "3010",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "2",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 11
+    },
+    {
+      "stepNumber": 3,
+      "pageNumber": 4,
+      "callouts": [
+        {
+          "part": "2780",
+          "color": "1",
+          "quantity": 6
+        },
+        {
+          "part": "3005",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3021",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "1",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 9
+    },
+    {
+      "stepNumber": 4,
+      "pageNumber": 5,
+      "callouts": [
+        {
+          "part": "2431",
+          "color": "1",
+          "quantity": 7
+        },
+        {
+          "part": "3002",
+          "color": "0",
+          "quantity": 8
+        },
+        {
+          "part": "3009",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3023",
+          "color": "1",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 17
+    },
+    {
+      "stepNumber": 5,
+      "pageNumber": 6,
+      "callouts": [
+        {
+          "part": "2456",
+          "color": "0",
+          "quantity": 9
+        },
+        {
+          "part": "3004",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3020",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3031",
+          "color": "0",
+          "quantity": 1
+        }
+      ],
+      "pieceCount": 13
+    }
+  ],
+  "expectedBags": [
+    {
+      "sequence": 1,
+      "stepStart": 1,
+      "stepEnd": 5,
+      "pageStart": 2,
+      "pageEnd": 6,
+      "pieceCount": 58,
+      "uniquePartCount": 21,
+      "items": [
+        {
+          "part": "2420",
+          "color": "0",
+          "quantity": 2
+        },
+        {
+          "part": "2431",
+          "color": "1",
+          "quantity": 7
+        },
+        {
+          "part": "2450",
+          "color": "2",
+          "quantity": 4
+        },
+        {
+          "part": "2456",
+          "color": "0",
+          "quantity": 9
+        },
+        {
+          "part": "2780",
+          "color": "1",
+          "quantity": 6
+        },
+        {
+          "part": "3001",
+          "color": "2",
+          "quantity": 3
+        },
+        {
+          "part": "3002",
+          "color": "0",
+          "quantity": 8
+        },
+        {
+          "part": "3003",
+          "color": "1",
+          "quantity": 5
+        },
+        {
+          "part": "3004",
+          "color": "2",
+          "quantity": 2
+        },
+        {
+          "part": "3005",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3008",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3009",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3010",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3020",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3021",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3022",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3023",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3024",
+          "color": "2",
+          "quantity": 1
+        },
+        {
+          "part": "3031",
+          "color": "0",
+          "quantity": 1
+        },
+        {
+          "part": "3032",
+          "color": "1",
+          "quantity": 1
+        },
+        {
+          "part": "3033",
+          "color": "2",
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}
