@@ -18,6 +18,15 @@ Prefer common types such as `feat`, `fix`, `docs`, `test`, `refactor`,
 Use semantic PR titles too. This repository squash merges pull requests, so the
 PR title should be ready to become the final merge commit message.
 
+PR titles must use the same format as commit messages:
+
+```text
+type: short imperative summary
+```
+
+Do not add agent/tool prefixes such as `[codex]`, author tags, or branch names
+to PR titles.
+
 ## Implementation Review Loop
 
 After finishing an implementation, run a review subagent against the local diff
