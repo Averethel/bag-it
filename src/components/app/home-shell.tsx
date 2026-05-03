@@ -12,7 +12,26 @@ import {
   Stack,
   Text,
 } from "@chakra-ui/react";
-import { useMemo, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type RefObject,
+} from "react";
+
+import {
+  createEmptyLocalProjectData,
+  createIndexedDbProjectStore,
+  withPdfSessionMetadata,
+  type LocalProjectData,
+  type LocalProjectStore,
+} from "@/domain/local-project-data";
+import {
+  createPdfSessionFromFile,
+  type PdfSession,
+} from "@/domain/pdf-session";
 
 const workflowStages = [
   {
@@ -82,6 +101,8 @@ type StageView = {
   detail: string;
 };
 
+type StorageState = "loading" | "ready" | "saving" | "saved" | "unavailable";
+
 const blockedStageDetails: Record<Exclude<WorkflowStageId, "intake">, string> = {
   analysis: "Waiting for an active PDF session.",
   "inventory-review": "Waiting for classified parts-list pages.",
@@ -108,15 +129,13 @@ function stageNumber(stage: WorkflowStage) {
   return String(workflowStages.indexOf(stage) + 1).padStart(2, "0");
 }
 
-function selectedFileName(event: ChangeEvent<HTMLInputElement>) {
-  return event.target.files?.[0]?.name ?? null;
-}
-
 function buildStageView(
   stage: WorkflowStage,
   activeStage: WorkflowStageId,
-  manualFileName: string | null,
+  pdfSession: PdfSession | null,
 ): StageView {
+  const manualFileName = pdfSession?.metadata.fileName ?? null;
+
   if (stage.id === "intake") {
     return {
       status: "ready",
@@ -126,6 +145,15 @@ function buildStageView(
         : "No manual selected.",
       detail:
         "Manual bytes, rendered pages, and page crops stay in memory for the active session only.",
+    };
+  }
+
+  if (stage.id === "analysis" && pdfSession) {
+    return {
+      status: "ready",
+      statusLabel: "Ready",
+      summary: `${pdfSession.metadata.fileName} is ready for local analysis.`,
+      detail: "Page rendering and OCR have not run yet.",
     };
   }
 
@@ -148,17 +176,30 @@ function statusColor(status: WorkflowStageStatus) {
 type WorkflowPanelProps = {
   stage: WorkflowStage;
   view: StageView;
-  manualFileName: string | null;
+  pdfSession: PdfSession | null;
+  projectData: LocalProjectData | null;
+  intakeError: string | null;
+  isLoadingPdf: boolean;
+  storageState: StorageState;
+  manualInputRef: RefObject<HTMLInputElement | null>;
   onManualChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onClearManual: () => void;
 };
 
 function WorkflowPanel({
   stage,
   view,
-  manualFileName,
+  pdfSession,
+  projectData,
+  intakeError,
+  isLoadingPdf,
+  storageState,
+  manualInputRef,
   onManualChange,
+  onClearManual,
 }: WorkflowPanelProps) {
   const isIntake = stage.id === "intake";
+  const manualFileName = pdfSession?.metadata.fileName ?? null;
 
   return (
     <Box
@@ -200,7 +241,9 @@ function WorkflowPanel({
               bg="white"
               borderColor="gray.300"
               data-testid="manual-pdf-input"
+              disabled={isLoadingPdf}
               onChange={onManualChange}
+              ref={manualInputRef}
               type="file"
             />
             <Box
@@ -215,7 +258,52 @@ function WorkflowPanel({
                   Active manual
                 </Text>
                 <Text color="gray.900" fontSize="md">
-                  {manualFileName ?? "No PDF selected"}
+                  {manualFileName ?? "No active PDF"}
+                </Text>
+                {pdfSession ? (
+                  <Text color="gray.600" fontSize="sm">
+                    {formatByteSize(pdfSession.metadata.byteLength)} loaded in memory
+                    for this session.
+                  </Text>
+                ) : null}
+              </Stack>
+            </Box>
+            {intakeError ? (
+              <Text color="red.700" fontSize="sm" role="alert">
+                {intakeError}
+              </Text>
+            ) : null}
+            <HStack gap="3" wrap="wrap">
+              <Button
+                colorPalette="gray"
+                disabled={!pdfSession || isLoadingPdf}
+                onClick={onClearManual}
+                variant="outline"
+              >
+                Clear PDF
+              </Button>
+              <Text color="gray.600" fontSize="sm">
+                {storageStatusLabel(storageState)}
+              </Text>
+            </HStack>
+            <Box
+              borderWidth="1px"
+              borderColor="gray.200"
+              bg="gray.50"
+              borderRadius="md"
+              p="4"
+            >
+              <Stack gap="1">
+                <Text color="gray.600" fontSize="sm" fontWeight="medium">
+                  Local project data
+                </Text>
+                <Text color="gray.900" fontSize="md">
+                  {projectData?.manual?.fileName ?? "No saved manual metadata"}
+                </Text>
+                <Text color="gray.600" fontSize="sm">
+                  {projectData?.manual
+                    ? "Original PDF name and size are saved as metadata only."
+                    : "No derived project data saved yet."}
                 </Text>
               </Stack>
             </Box>
@@ -224,7 +312,7 @@ function WorkflowPanel({
           <Box borderTopWidth="1px" borderColor="gray.200" pt="6">
             <Stack gap="2">
               <Text color="gray.900" fontWeight="semibold">
-                Blocked state
+                {view.status === "ready" ? "Ready state" : "Blocked state"}
               </Text>
               <Text color="gray.700">{view.detail}</Text>
             </Stack>
@@ -243,9 +331,50 @@ function WorkflowPanel({
   );
 }
 
-export function HomeShell() {
+type HomeShellProps = {
+  projectStore?: LocalProjectStore;
+};
+
+export function HomeShell({ projectStore }: HomeShellProps = {}) {
   const [activeStage, setActiveStage] = useState<WorkflowStageId>("intake");
-  const [manualFileName, setManualFileName] = useState<string | null>(null);
+  const [pdfSession, setPdfSession] = useState<PdfSession | null>(null);
+  const [projectData, setProjectData] = useState<LocalProjectData | null>(null);
+  const [intakeError, setIntakeError] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  const [storageState, setStorageState] = useState<StorageState>("loading");
+  const manualInputRef = useRef<HTMLInputElement>(null);
+  const fileSelectionId = useRef(0);
+  const projectDataRef = useRef<LocalProjectData | null>(null);
+  const hasLocalProjectMutation = useRef(false);
+  const localProjectStore = useMemo(
+    () => projectStore ?? createIndexedDbProjectStore(),
+    [projectStore],
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    localProjectStore
+      .load()
+      .then((loadedProjectData) => {
+        if (!isMounted || hasLocalProjectMutation.current) {
+          return;
+        }
+
+        projectDataRef.current = loadedProjectData;
+        setProjectData(loadedProjectData);
+        setStorageState("ready");
+      })
+      .catch(() => {
+        if (isMounted) {
+          setStorageState("unavailable");
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [localProjectStore]);
 
   const activeWorkflowStage = useMemo(
     () => workflowStages.find((stage) => stage.id === activeStage) ?? workflowStages[0],
@@ -254,8 +383,82 @@ export function HomeShell() {
   const activeStageView = buildStageView(
     activeWorkflowStage,
     activeStage,
-    manualFileName,
+    pdfSession,
   );
+
+  function clearManualInput() {
+    if (manualInputRef.current) {
+      manualInputRef.current.value = "";
+    }
+  }
+
+  async function handleManualChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const currentSelectionId = fileSelectionId.current + 1;
+    fileSelectionId.current = currentSelectionId;
+    setIsLoadingPdf(true);
+    setIntakeError(null);
+
+    let nextPdfSession: PdfSession;
+
+    try {
+      nextPdfSession = await createPdfSessionFromFile(file);
+    } catch (error) {
+      if (fileSelectionId.current === currentSelectionId) {
+        setPdfSession(null);
+        setIntakeError(toErrorMessage(error));
+        clearManualInput();
+        setIsLoadingPdf(false);
+      }
+
+      return;
+    }
+
+    if (fileSelectionId.current !== currentSelectionId) {
+      return;
+    }
+
+    hasLocalProjectMutation.current = true;
+    setPdfSession(nextPdfSession);
+
+    const nextProjectData = withPdfSessionMetadata(
+      projectDataRef.current ?? projectData ?? createEmptyLocalProjectData(),
+      nextPdfSession.metadata,
+    );
+
+    projectDataRef.current = nextProjectData;
+    setProjectData(nextProjectData);
+    setStorageState("saving");
+
+    try {
+      await localProjectStore.save(nextProjectData);
+
+      if (fileSelectionId.current === currentSelectionId) {
+        setStorageState("saved");
+      }
+    } catch {
+      if (fileSelectionId.current === currentSelectionId) {
+        setStorageState("unavailable");
+      }
+    } finally {
+      if (fileSelectionId.current === currentSelectionId) {
+        setIsLoadingPdf(false);
+      }
+    }
+  }
+
+  function clearPdfSession() {
+    fileSelectionId.current += 1;
+    setPdfSession(null);
+    setIntakeError(null);
+    setIsLoadingPdf(false);
+    clearManualInput();
+  }
 
   return (
     <Box as="main" minH="100vh" bg="gray.50">
@@ -282,7 +485,7 @@ export function HomeShell() {
 
               <Stack gap="2">
                 {workflowStages.map((stage) => {
-                  const view = buildStageView(stage, activeStage, manualFileName);
+                  const view = buildStageView(stage, activeStage, pdfSession);
                   const isActive = stage.id === activeStage;
 
                   return (
@@ -319,13 +522,59 @@ export function HomeShell() {
           </Box>
 
           <WorkflowPanel
-            manualFileName={manualFileName}
-            onManualChange={(event) => setManualFileName(selectedFileName(event))}
+            intakeError={intakeError}
+            isLoadingPdf={isLoadingPdf}
+            manualInputRef={manualInputRef}
+            onClearManual={clearPdfSession}
+            onManualChange={handleManualChange}
+            pdfSession={pdfSession}
+            projectData={projectData}
             stage={activeWorkflowStage}
+            storageState={storageState}
             view={activeStageView}
           />
         </Grid>
       </Container>
     </Box>
   );
+}
+
+function formatByteSize(byteLength: number) {
+  if (byteLength < 1024) {
+    return `${byteLength} B`;
+  }
+
+  if (byteLength < 1024 * 1024) {
+    return `${(byteLength / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function storageStatusLabel(storageState: StorageState) {
+  if (storageState === "loading") {
+    return "Loading local data";
+  }
+
+  if (storageState === "saving") {
+    return "Saving local data";
+  }
+
+  if (storageState === "saved") {
+    return "Saved locally";
+  }
+
+  if (storageState === "unavailable") {
+    return "Local storage unavailable";
+  }
+
+  return "Local data ready";
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Could not load the selected PDF.";
 }
