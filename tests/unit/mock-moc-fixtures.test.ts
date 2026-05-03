@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -163,12 +163,25 @@ function readFixture(fixtureId: string) {
   return { csv, expected, pdfPath };
 }
 
+function readPdfHeader(pdfPath: string) {
+  const descriptor = openSync(pdfPath, "r");
+  const header = Buffer.alloc(5);
+
+  try {
+    readSync(descriptor, header, 0, header.length, 0);
+  } finally {
+    closeSync(descriptor);
+  }
+
+  return header.toString("utf8");
+}
+
 describe("mock MOC fixtures", () => {
   it.each(fixtureIds)(
     "%s fixture has consistent inventory, steps, bags, and PDF",
     (fixtureId) => {
       const { csv, expected, pdfPath } = readFixture(fixtureId);
-      const pdfHeader = readFileSync(pdfPath).subarray(0, 5).toString("utf8");
+      const pdfHeader = readPdfHeader(pdfPath);
 
       expect(expected.fixtureId).toBe(fixtureId);
       expect(expected.synthetic).toBe(true);

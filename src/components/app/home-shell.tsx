@@ -118,9 +118,15 @@ function buildStageView(
   manualFileName: string | null,
 ): StageView {
   if (stage.id === "intake") {
+    const status = activeStage === stage.id ? "current" : "ready";
+
     return {
-      status: activeStage === stage.id ? "current" : "ready",
-      statusLabel: manualFileName ? "PDF selected" : "Current",
+      status,
+      statusLabel: manualFileName
+        ? "PDF selected"
+        : status === "current"
+          ? "Current"
+          : "Ready",
       summary: manualFileName
         ? `${manualFileName} is selected for this browser session.`
         : "No manual selected.",

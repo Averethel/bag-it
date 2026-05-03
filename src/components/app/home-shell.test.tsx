@@ -47,6 +47,17 @@ describe("HomeShell", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not label inactive intake as current", () => {
+    renderHomeShell();
+
+    fireEvent.click(screen.getByRole("button", { name: /Analysis/ }));
+
+    expect(screen.queryByText("Current")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Intake.*Ready/ }),
+    ).toBeInTheDocument();
+  });
+
   it.each([
     ["Analysis", "Analyze manual locally", "Waiting for an active PDF session."],
     [
