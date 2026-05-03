@@ -15,6 +15,23 @@ Examples:
 Prefer common types such as `feat`, `fix`, `docs`, `test`, `refactor`,
 `chore`, and `ci`.
 
+## Branch Freshness
+
+Before creating a feature branch or opening a PR, fetch the remote default
+branch and base the work on the current `origin/main`.
+
+Do not rely on a local `main` checkout being current. The expected starting
+point is:
+
+```bash
+git fetch origin main
+git switch -c codex/<description> origin/main
+```
+
+For an existing PR branch, verify that GitHub does not report the branch as
+behind the base branch before pushing or opening the PR. If it is behind, rebase
+onto `origin/main` and rerun the relevant checks.
+
 Use semantic PR titles too. This repository squash merges pull requests, so the
 PR title should be ready to become the final merge commit message.
 
