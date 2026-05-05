@@ -439,8 +439,10 @@ describe("HomeShell", () => {
           quantity: 7,
         }),
       ],
-      workerCount: 2,
     });
+    expect(analyzePdfSession.mock.calls[0]?.[1]).not.toHaveProperty(
+      "workerCount",
+    );
     expect(analyzePdfSession.mock.calls[0]?.[1]).not.toHaveProperty(
       "partsListPageLimit",
     );

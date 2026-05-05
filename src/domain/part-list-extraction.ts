@@ -191,7 +191,7 @@ export function extractPartListFromOcrPages(
 ): PartListExtractionResult {
   const colorVocabulary = createColorVocabulary(options.validationInventory);
   const pageCandidates = pages
-    .map((page) => parsePageCandidates(page, colorVocabulary))
+    .map((page) => parsePageCandidates(page, colorVocabulary, options))
     .filter((candidate) => candidate.items.length > 0)
     .sort((left, right) => left.pageNumber - right.pageNumber);
   const candidatePageNumbers = pageCandidates.map((candidate) => candidate.pageNumber);
@@ -234,7 +234,7 @@ export function extractPartListFromOcrPages(
 }
 
 export function summarizePartsListPage(page: OcrPageText): PartsListPageSummary {
-  const candidate = parsePageCandidates(page, createColorVocabulary());
+  const candidate = parsePageCandidates(page, createColorVocabulary(), {});
 
   return {
     pageNumber: candidate.pageNumber,
@@ -249,6 +249,7 @@ export function summarizePartsListPage(page: OcrPageText): PartsListPageSummary 
 function parsePageCandidates(
   page: OcrPageText,
   colorVocabulary: ColorVocabularyEntry[],
+  options: PartListExtractionOptions,
 ): PageCandidate {
   const lines = page.lines
     .map((line, pageLineIndex): NormalizedLine => ({
@@ -280,12 +281,10 @@ function parsePageCandidates(
     );
   });
 
-  const lineOrWordItems = wordItems.length >= items.length ? wordItems : items;
-  const baseItems =
-    cardItems.length >= Math.ceil(lineOrWordItems.length * 0.8) &&
-    scoreCandidateItems(cardItems) >= scoreCandidateItems(lineOrWordItems)
-      ? cardItems
-      : lineOrWordItems;
+  const baseItems = selectBestPageCandidateItems(
+    [cardItems, wordItems, items],
+    options,
+  );
 
   return {
     pageNumber: page.pageNumber,
@@ -294,6 +293,47 @@ function parsePageCandidates(
       lines.some((line) => inventoryHeaderPattern.test(line.text)) ||
       (page.words ?? []).some((word) => inventoryHeaderPattern.test(word.text)),
   };
+}
+
+function selectBestPageCandidateItems(
+  candidateSets: ExtractedPartListItem[][],
+  options: PartListExtractionOptions,
+) {
+  return candidateSets
+    .filter((items) => items.length > 0)
+    .map((items) => ({
+      items,
+      score: scorePageCandidateItems(items, options),
+    }))
+    .sort((left, right) => right.score - left.score)[0]?.items ?? [];
+}
+
+function scorePageCandidateItems(
+  items: ExtractedPartListItem[],
+  options: PartListExtractionOptions,
+) {
+  let score = scoreCandidateItems(items);
+
+  if (options.validationInventory?.length) {
+    const validation = validateItemsAgainstCsvInventory(
+      items.map((item, index) => ({
+        ...item,
+        id: `candidate-${item.pageNumber}-${index}`,
+        sequence: index + 1,
+      })),
+      options.validationInventory,
+      { candidateCatalogParts: options.candidateCatalogParts ?? [] },
+    );
+
+    score += validation.summary.exactMatches * 24;
+    score += validation.summary.aliasMatches * 20;
+    score -= validation.summary.unmatchedRows * 70;
+  }
+
+  score -= items.filter((item) => item.quantity === null).length * 4;
+  score -= items.filter((item) => item.colorName === null).length * 3;
+
+  return score;
 }
 
 function parseCardPageCandidates(
@@ -1019,6 +1059,7 @@ function findBestInventoryMatch(
 
       const partScore =
         scorePartNumberMatch(itemPartNumber, inventoryItem) ??
+        scoreNearPartNumberMatch(itemPartNumber, inventoryItem) ??
         scoreCatalogNameMatch(candidateCatalogPart, item, inventoryItem);
 
       if (partScore === null) {
@@ -1173,6 +1214,71 @@ function scoreCatalogNameMatch(
     kind: "alias" as const,
     score: Math.round(62 + similarity * 18 + quantityScore + colorScore),
   };
+}
+
+function scoreNearPartNumberMatch(
+  ocrPartNumber: string,
+  inventoryItem: RebrickableInventoryItem,
+) {
+  const normalizedOcrPartNumber = normalizePartNumberAlias(ocrPartNumber);
+  const normalizedInventoryPartNumber = normalizePartNumberAlias(
+    inventoryItem.partNumber,
+  );
+
+  if (
+    !isNearPartNumberCandidate(
+      normalizedOcrPartNumber,
+      normalizedInventoryPartNumber,
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    kind: "alias" as const,
+    score: nearPartNumberScore(
+      normalizedOcrPartNumber,
+      normalizedInventoryPartNumber,
+    ),
+  };
+}
+
+function isNearPartNumberCandidate(leftPartNumber: string, rightPartNumber: string) {
+  const leftBase = extractPartNumberBase(leftPartNumber);
+  const rightBase = extractPartNumberBase(rightPartNumber);
+
+  if (!leftBase || !rightBase || leftBase.length !== rightBase.length) {
+    return false;
+  }
+
+  if (leftBase.length < 5) {
+    return false;
+  }
+
+  return hammingDistance(leftBase, rightBase) === 1;
+}
+
+function nearPartNumberScore(leftPartNumber: string, rightPartNumber: string) {
+  const leftSuffix = leftPartNumber.replace(/^\d+/, "");
+  const rightSuffix = rightPartNumber.replace(/^\d+/, "");
+
+  return leftSuffix === rightSuffix ? 138 : 126;
+}
+
+function hammingDistance(left: string, right: string) {
+  if (left.length !== right.length) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let distance = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      distance += 1;
+    }
+  }
+
+  return distance;
 }
 
 function scoreCatalogAliasMatch(
@@ -1695,7 +1801,9 @@ function nearestWordToPartNumber<T extends { word: NormalizedWord }>(
 function readQuantityWord(text: string) {
   const normalizedText = text
     .replace(/[×✕]/g, "x")
-    .replace(/^[^\da-z]+|[^\da-z]+$/gi, "");
+    .replace(/^[^\da-z|]+|[^\da-z|]+$/gi, "")
+    .replace(/^[il|](?=x$)/i, "1")
+    .replace(/^x[il|]$/i, "x1");
   const quantityMatch =
     normalizedText.match(/^(\d{1,4})x$/i) ??
     normalizedText.match(/^x(\d{1,4})$/i);

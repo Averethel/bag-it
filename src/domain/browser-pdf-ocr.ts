@@ -113,6 +113,7 @@ type TesseractPageData = {
   text?: string;
   confidence?: number;
   blocks?: TesseractBlock[] | null;
+  tsv?: string | null;
 };
 
 type TesseractBlock = {
@@ -150,6 +151,16 @@ type OcrCardRegion = {
   bbox: OcrTextBox;
   visualColorRgb: string | null;
   visualDescriptor: VisualPartDescriptor | null;
+};
+
+type OcrCanvasTextRegion = {
+  source: OcrTextBox;
+  target: OcrTextBox;
+};
+
+type OcrTextCanvas = {
+  canvas: HTMLCanvasElement;
+  regions: OcrCanvasTextRegion[];
 };
 
 export async function extractPartListFromPdfSession(
@@ -207,20 +218,24 @@ export async function extractPartListFromPdfSession(
     );
 
     await Promise.all(
-      workerEntries.flatMap((workerEntry) => [
+      workerEntries.map((workerEntry) =>
         workerEntry.worker.setParameters({
+          classify_enable_learning: "0",
           preserve_interword_spaces: "1",
+          tessedit_char_whitelist:
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz -_/.,:;()[]&@#%+$'\"xX",
+          tessedit_do_invert: "0",
           tessedit_pageseg_mode: tesseract.PSM.SPARSE_TEXT,
           user_defined_dpi: "240",
         }),
-        workerEntry.quantityWorker.setParameters(workerEntry.quantityPageParameters),
-      ]),
+      ),
     );
 
+    const renderScale = options.renderScale ?? defaultRenderScale;
     const discoveryResult = await discoverPartsListPages({
       pdfDocument: activePdfDocument,
       pageCount,
-      renderScale: options.renderScale ?? defaultRenderScale,
+      renderScale,
       workerEntries,
       onProgress: options.onProgress,
     });
@@ -241,6 +256,7 @@ export async function extractPartListFromPdfSession(
       discoveryResult.pages,
       extractionOptions,
     );
+
     const candidateCatalogParts = await fetchUnmatchedOcrCatalogParts(
       initialExtractionResult,
       options,
@@ -275,10 +291,7 @@ export async function extractPartListFromPdfSession(
     };
   } finally {
     await Promise.all(
-      workerEntries.flatMap((workerEntry) => [
-        workerEntry.worker.terminate(),
-        workerEntry.quantityWorker.terminate(),
-      ]),
+      workerEntries.map((workerEntry) => workerEntry.worker.terminate()),
     );
     await pdfDocument?.destroy();
   }
@@ -334,19 +347,12 @@ async function enrichRelevantCatalogImageDescriptors(
     return null;
   }
 
-  const candidatePartNumbers = collectVisualDescriptorCandidatePartNumbers(
+  const targetRowIds = collectCatalogImageDescriptorTargetRowIds(
     extractionResult,
+    options.validationInventory,
   );
 
-  if (candidatePartNumbers.normalized.size === 0) {
-    return null;
-  }
-
-  const targetRows = options.validationInventory.filter((inventoryItem) =>
-    shouldAttachCatalogImageDescriptor(inventoryItem, candidatePartNumbers),
-  );
-
-  if (targetRows.length === 0) {
+  if (targetRowIds.size === 0) {
     return null;
   }
 
@@ -355,23 +361,75 @@ async function enrichRelevantCatalogImageDescriptors(
     pageNumber: null,
     pageCount: null,
     progress: null,
-    message: "Comparing part thumbnails",
+    message: `Comparing ${targetRowIds.size} candidate part thumbnails`,
   });
-
-  const targetRowIds = new Set(targetRows.map((inventoryItem) => inventoryItem.id));
 
   return attachCatalogImageDescriptorsToInventory(options.validationInventory, {
     shouldAttach: (inventoryItem) => targetRowIds.has(inventoryItem.id),
   });
 }
 
-function collectVisualDescriptorCandidatePartNumbers(
+export function collectCatalogImageDescriptorTargetRowIds(
   extractionResult: PartListExtractionResult,
+  validationInventory: RebrickableInventoryItem[],
+) {
+  const targetRowIds = new Set<string>();
+
+  extractionResult.items.forEach((item) => {
+    if (!shouldUseCatalogImageDescriptorForItem(item)) {
+      return;
+    }
+
+    const candidatePartNumbers = collectVisualDescriptorCandidatePartNumbers(
+      [item],
+    );
+
+    if (candidatePartNumbers.normalized.size === 0) {
+      return;
+    }
+
+    const targetRows = validationInventory.filter((inventoryItem) =>
+      shouldAttachCatalogImageDescriptor(inventoryItem, candidatePartNumbers),
+    );
+    const distinctImageUrls = new Set(
+      targetRows.flatMap((inventoryItem) =>
+        inventoryItem.catalogPart?.partImageUrl
+          ? [inventoryItem.catalogPart.partImageUrl]
+          : [],
+      ),
+    );
+
+    if (distinctImageUrls.size <= 1) {
+      return;
+    }
+
+    targetRows.forEach((inventoryItem) => targetRowIds.add(inventoryItem.id));
+  });
+
+  return targetRowIds;
+}
+
+function shouldUseCatalogImageDescriptorForItem(
+  item: PartListExtractionResult["items"][number],
+) {
+  if (!item.visualDescriptor || !item.partNumber) {
+    return false;
+  }
+
+  if (item.validationStatus === "csv-no-match") {
+    return true;
+  }
+
+  return Boolean(item.ocrPartNumber);
+}
+
+function collectVisualDescriptorCandidatePartNumbers(
+  items: PartListExtractionResult["items"],
 ) {
   const normalized = new Set<string>();
   const bases = new Set<string>();
 
-  extractionResult.items.forEach((item) => {
+  items.forEach((item) => {
     if (!item.visualDescriptor) {
       return;
     }
@@ -438,14 +496,14 @@ function extractCandidatePartNumberBase(partNumber: string) {
 }
 
 const defaultRenderScale = 3;
-const defaultWorkerCount = 2;
+const defaultWorkerCount = 4;
 const maxAutoPartsListScanPages = 64;
 const partsListBoundaryNonPartPages = 2;
+const minConfirmedPartsListPagesBeforeVisualSkip = 3;
 const minimumVisualCardCount = 4;
+const ocrTextSheetScale = 1;
 
 type OcrWorkerEntry = {
-  quantityPageParameters: Record<string, string>;
-  quantityWorker: TesseractWorker;
   worker: TesseractWorker;
   setCurrentPage: (pageNumber: number | null) => void;
 };
@@ -456,36 +514,51 @@ async function createOcrWorker(
   onProgress: ExtractPartListOptions["onProgress"],
 ): Promise<OcrWorkerEntry> {
   let currentOcrPage: number | null = null;
+  let lastProgressAt = 0;
+  let lastProgressValue: number | null = null;
+  let lastProgressStatus = "";
   const worker = await tesseract.createWorker("eng", 1, {
     logger(message) {
       if (currentOcrPage === null) {
         return;
       }
 
+      const progress =
+        typeof message.progress === "number" ? message.progress : null;
+      const status = message.status ?? "Running OCR";
+      const now = Date.now();
+
+      if (
+        progress !== null &&
+        progress < 1 &&
+        status === lastProgressStatus &&
+        lastProgressValue !== null &&
+        Math.abs(progress - lastProgressValue) < 0.03 &&
+        now - lastProgressAt < 250
+      ) {
+        return;
+      }
+
+      lastProgressAt = now;
+      lastProgressValue = progress;
+      lastProgressStatus = status;
+
       onProgress?.({
         phase: "ocr-page",
         pageNumber: currentOcrPage,
         pageCount,
-        progress: typeof message.progress === "number" ? message.progress : null,
-        message: message.status ?? "Running OCR",
+        progress,
+        message: status,
       });
     },
   });
-  const quantityWorker = await tesseract.createWorker("eng", 1);
-  const quantityPageParameters = {
-    classify_bln_numeric_mode: "1",
-    preserve_interword_spaces: "1",
-    tessedit_char_whitelist: "0123456789xX×",
-    tessedit_pageseg_mode: tesseract.PSM.SPARSE_TEXT,
-    user_defined_dpi: "240",
-  };
-
   return {
-    quantityPageParameters,
-    quantityWorker,
     worker,
     setCurrentPage(pageNumber) {
       currentOcrPage = pageNumber;
+      lastProgressAt = 0;
+      lastProgressValue = null;
+      lastProgressStatus = "";
     },
   };
 }
@@ -496,6 +569,7 @@ type AnalyzePagesWithWorkerOptions = {
   pageCount: number;
   renderScale: number;
   workerEntry: OcrWorkerEntry;
+  skipOcrWhenVisualCardsAreMissing: boolean;
   onProgress: ExtractPartListOptions["onProgress"];
 };
 
@@ -525,6 +599,7 @@ async function discoverPartsListPages({
   let scannedPageCount = 0;
   let hasFoundPartsList = false;
   let nonPartPagesBeforePartsList = 0;
+  let confirmedPartsListPageCount = 0;
 
   while (
     nextPageNumber >= 1 &&
@@ -548,6 +623,9 @@ async function discoverPartsListPages({
         pageCount,
         renderScale,
         workerEntries,
+        skipOcrWhenVisualCardsAreMissing:
+          confirmedPartsListPageCount >=
+          minConfirmedPartsListPagesBeforeVisualSkip,
         onProgress,
       })
     ).sort((left, right) => right.pageNumber - left.pageNumber);
@@ -560,6 +638,7 @@ async function discoverPartsListPages({
 
       if (summary.isLikelyPartsListPage) {
         hasFoundPartsList = true;
+        confirmedPartsListPageCount += 1;
         nonPartPagesBeforePartsList = 0;
       } else if (hasFoundPartsList) {
         nonPartPagesBeforePartsList += 1;
@@ -599,6 +678,7 @@ type AnalyzePageBatchOptions = {
   pageCount: number;
   renderScale: number;
   workerEntries: OcrWorkerEntry[];
+  skipOcrWhenVisualCardsAreMissing: boolean;
   onProgress: ExtractPartListOptions["onProgress"];
 };
 
@@ -608,6 +688,7 @@ async function analyzePageBatch({
   pageCount,
   renderScale,
   workerEntries,
+  skipOcrWhenVisualCardsAreMissing,
   onProgress,
 }: AnalyzePageBatchOptions) {
   if (pageNumbers.length === 0) {
@@ -627,6 +708,7 @@ async function analyzePageBatch({
           pageCount,
           renderScale,
           workerEntry,
+          skipOcrWhenVisualCardsAreMissing,
           onProgress,
         }),
       ),
@@ -640,6 +722,7 @@ async function analyzePagesWithWorker({
   pageCount,
   renderScale,
   workerEntry,
+  skipOcrWhenVisualCardsAreMissing,
   onProgress,
 }: AnalyzePagesWithWorkerOptions) {
   const pages: OcrPageText[] = [];
@@ -655,40 +738,61 @@ async function analyzePagesWithWorker({
 
     const page = await pdfDocument.getPage(pageNumber);
     const canvas = await renderPageToCanvas(page, renderScale);
+    const preOcrVisualCardRegions = detectVisualCardRegions(canvas);
+
+    if (
+      skipOcrWhenVisualCardsAreMissing &&
+      preOcrVisualCardRegions.length < minimumVisualCardCount
+    ) {
+      pages.push({
+        pageNumber,
+        width: canvas.width,
+        height: canvas.height,
+        cards: [],
+        lines: [],
+        words: [],
+      });
+
+      canvas.width = 0;
+      canvas.height = 0;
+      continue;
+    }
 
     workerEntry.setCurrentPage(pageNumber);
-    await workerEntry.quantityWorker.setParameters(
-      workerEntry.quantityPageParameters,
-    );
 
-    const [result, quantityResult] = await Promise.all([
-      workerEntry.worker.recognize(canvas, undefined, {
-        blocks: true,
-        text: true,
-      }),
-      workerEntry.quantityWorker.recognize(canvas, undefined, {
-        blocks: true,
-        text: true,
-      }),
-    ]);
-    const lines = extractRecognizedLines(result.data, pageNumber);
-    const recognizedWords = await appendTargetedQuantityWords({
-      canvas,
-      pageNumber,
-      quantityWorker: workerEntry.quantityWorker,
-      words: mergeQuantityCandidateWords(
-        extractRecognizedWords(result.data, pageNumber),
-        extractQuantityCandidateWords(quantityResult.data, pageNumber),
-      ),
+    const ocrCanvas = await createOcrTextCanvas(canvas, preOcrVisualCardRegions);
+    const result = await workerEntry.worker.recognize(ocrCanvas.canvas, undefined, {
+      tsv: true,
     });
+    ocrCanvas.canvas.width = 0;
+    ocrCanvas.canvas.height = 0;
+    const lines = extractRecognizedLines(
+      result.data,
+      pageNumber,
+      ocrCanvas.regions,
+    );
+    const recognizedWords = extractRecognizedWords(
+      result.data,
+      pageNumber,
+      ocrCanvas.regions,
+    );
     const words = attachVisualColorSamplesToWords(canvas, recognizedWords);
-    const visualCardRegions = detectVisualCardRegions(canvas);
+    const detectedCardRegions = detectPartNumberCellRegions(canvas, words);
+    const cardRegions =
+      preOcrVisualCardRegions.length >= minimumVisualCardCount
+        ? preOcrVisualCardRegions
+        : detectedCardRegions;
 
     pages.push({
       pageNumber,
       width: canvas.width,
       height: canvas.height,
-      cards: buildCardsFromRegions(pageNumber, visualCardRegions, lines, words),
+      cards: buildCardsFromRegions(
+        pageNumber,
+        cardRegions,
+        lines,
+        words,
+      ),
       lines,
       words,
     });
@@ -721,6 +825,214 @@ async function renderPageToCanvas(page: PdfPageProxy, scale: number) {
   await renderTask.promise;
 
   return canvas;
+}
+
+async function createOcrTextCanvas(
+  sourceCanvas: HTMLCanvasElement,
+  cardRegions: OcrCardRegion[],
+): Promise<OcrTextCanvas> {
+  const sourceContext = sourceCanvas.getContext("2d", {
+    willReadFrequently: true,
+  });
+  const targetCanvas = document.createElement("canvas");
+  const targetContext = targetCanvas.getContext("2d", {
+    willReadFrequently: true,
+  });
+
+  targetCanvas.width = sourceCanvas.width;
+  targetCanvas.height = sourceCanvas.height;
+
+  if (!sourceContext || !targetContext) {
+    targetContext?.drawImage(sourceCanvas, 0, 0);
+    return {
+      canvas: targetCanvas,
+      regions: [
+        {
+          source: {
+            x0: 0,
+            y0: 0,
+            x1: sourceCanvas.width,
+            y1: sourceCanvas.height,
+          },
+          target: {
+            x0: 0,
+            y0: 0,
+            x1: sourceCanvas.width,
+            y1: sourceCanvas.height,
+          },
+        },
+      ],
+    };
+  }
+
+  const sourceRegions =
+    cardRegions.length >= minimumVisualCardCount
+      ? createCardTextSourceRegions(cardRegions, sourceCanvas.width, sourceCanvas.height)
+      : [
+          {
+            x0: 0,
+            y0: 0,
+            x1: sourceCanvas.width,
+            y1: sourceCanvas.height,
+          },
+        ];
+  const maxRegionWidth = Math.max(
+    1,
+    ...sourceRegions.map((region) =>
+      Math.ceil((region.x1 - region.x0) * ocrTextSheetScale),
+    ),
+  );
+  const maxRegionHeight = Math.max(
+    1,
+    ...sourceRegions.map((region) =>
+      Math.ceil((region.y1 - region.y0) * ocrTextSheetScale),
+    ),
+  );
+  const gutter = Math.max(16, Math.round(maxRegionWidth * 0.04));
+  const columnCount = Math.max(
+    1,
+    Math.min(4, Math.floor(sourceCanvas.width / (maxRegionWidth + gutter))),
+  );
+  const rowCount = Math.ceil(sourceRegions.length / columnCount);
+  const mappings: OcrCanvasTextRegion[] = [];
+
+  targetCanvas.width = gutter + columnCount * (maxRegionWidth + gutter);
+  targetCanvas.height = gutter + rowCount * (maxRegionHeight + gutter);
+  targetContext.fillStyle = "#fff";
+  targetContext.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+
+  sourceRegions.forEach((sourceRegion, index) => {
+    const columnIndex = index % columnCount;
+    const rowIndex = Math.floor(index / columnCount);
+    const sourceWidth = Math.max(1, Math.ceil(sourceRegion.x1 - sourceRegion.x0));
+    const sourceHeight = Math.max(1, Math.ceil(sourceRegion.y1 - sourceRegion.y0));
+    const targetWidth = Math.max(1, Math.ceil(sourceWidth * ocrTextSheetScale));
+    const targetHeight = Math.max(1, Math.ceil(sourceHeight * ocrTextSheetScale));
+    const target = {
+      x0: gutter + columnIndex * (maxRegionWidth + gutter),
+      y0: gutter + rowIndex * (maxRegionHeight + gutter),
+      x1: gutter + columnIndex * (maxRegionWidth + gutter) + targetWidth,
+      y1: gutter + rowIndex * (maxRegionHeight + gutter) + targetHeight,
+    };
+
+    targetContext.drawImage(
+      sourceCanvas,
+      Math.floor(sourceRegion.x0),
+      Math.floor(sourceRegion.y0),
+      sourceWidth,
+      sourceHeight,
+      target.x0,
+      target.y0,
+      targetWidth,
+      targetHeight,
+    );
+    mappings.push({ source: sourceRegion, target });
+  });
+
+  const imageData = targetContext.getImageData(
+    0,
+    0,
+    targetCanvas.width,
+    targetCanvas.height,
+  );
+  const sourceData = imageData.data;
+  const targetData = targetContext.createImageData(
+    targetCanvas.width,
+    targetCanvas.height,
+  );
+
+  targetData.data.fill(255);
+
+  for (const mapping of mappings) {
+    const left = Math.max(0, Math.floor(mapping.target.x0));
+    const top = Math.max(0, Math.floor(mapping.target.y0));
+    const right = Math.min(imageData.width, Math.ceil(mapping.target.x1));
+    const bottom = Math.min(imageData.height, Math.ceil(mapping.target.y1));
+
+    for (let y = top; y < bottom; y += 1) {
+      const rowOffset = y * imageData.width * 4;
+
+      for (let x = left; x < right; x += 1) {
+        const offset = rowOffset + x * 4;
+        const red = sourceData[offset] ?? 255;
+        const green = sourceData[offset + 1] ?? 255;
+        const blue = sourceData[offset + 2] ?? 255;
+        const alpha = sourceData[offset + 3] ?? 255;
+        const value = isLikelyOcrTextPixel(red, green, blue, alpha) ? 0 : 255;
+
+        targetData.data[offset] = value;
+        targetData.data[offset + 1] = value;
+        targetData.data[offset + 2] = value;
+        targetData.data[offset + 3] = 255;
+      }
+    }
+
+    await yieldToBrowserThread();
+  }
+
+  targetContext.putImageData(targetData, 0, 0);
+
+  return { canvas: targetCanvas, regions: mappings };
+}
+
+function createCardTextSourceRegions(
+  cardRegions: OcrCardRegion[],
+  pageWidth: number,
+  pageHeight: number,
+) {
+  return cardRegions.flatMap((cardRegion) => {
+    const box = cardRegion.bbox;
+    const width = box.x1 - box.x0;
+    const height = box.y1 - box.y0;
+    const horizontalPadding = Math.max(3, width * 0.025);
+    const verticalPadding = Math.max(3, height * 0.025);
+
+    return [
+      expandBox(
+        {
+          x0: box.x0 + horizontalPadding,
+          y0: box.y0 + verticalPadding,
+          x1: box.x0 + width * 0.32,
+          y1: box.y0 + height * 0.18,
+        },
+        2,
+        pageWidth,
+        pageHeight,
+      ),
+      expandBox(
+        {
+          x0: box.x0 + horizontalPadding,
+          y0: box.y0 + height * 0.64,
+          x1: box.x1 - horizontalPadding,
+          y1: box.y1 - verticalPadding,
+        },
+        2,
+        pageWidth,
+        pageHeight,
+      ),
+    ];
+  });
+}
+
+function isLikelyOcrTextPixel(
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+) {
+  const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+  const channelSpread = Math.max(red, green, blue) - Math.min(red, green, blue);
+
+  return (
+    alpha > 24 &&
+    (luminance < 135 || (luminance < 185 && channelSpread < 32))
+  );
+}
+
+function yieldToBrowserThread() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 function detectVisualCardRegions(canvas: HTMLCanvasElement): OcrCardRegion[] {
@@ -821,6 +1133,45 @@ function detectVisualCardRegions(canvas: HTMLCanvasElement): OcrCardRegion[] {
 
     return left.bbox.x0 - right.bbox.x0;
   });
+}
+
+function detectPartNumberCellRegions(
+  canvas: HTMLCanvasElement,
+  words: OcrTextWord[],
+): OcrCardRegion[] {
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+
+  if (!context) {
+    return [];
+  }
+
+  const partNumberWords = words
+    .filter((word) => ocrExactPartNumberPattern.test(word.text))
+    .sort(compareOcrWordsTopToBottom);
+
+  if (partNumberWords.length < minimumVisualCardCount) {
+    return [];
+  }
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+  return inferPartNumberCellBoxes(partNumberWords, canvas.width, canvas.height).map(
+    ({ cellBox, partNumberWord }) => {
+      const thumbnailVisual = samplePartThumbnailVisual(
+        imageData,
+        canvas.width,
+        canvas.height,
+        cellBox,
+        partNumberWord,
+      );
+
+      return {
+        bbox: cellBox,
+        visualColorRgb: thumbnailVisual.visualColorRgb,
+        visualDescriptor: thumbnailVisual.visualDescriptor,
+      };
+    },
+  );
 }
 
 function buildCardsFromRegions(
@@ -1298,62 +1649,6 @@ function sumCounts(counts: Uint32Array, start: number, end: number) {
 const ocrExactPartNumberPattern =
   /^(?:\d{4,7}(?:[a-z][a-z0-9]*)?|\d{3}[a-z][a-z0-9]*)$/i;
 
-async function appendTargetedQuantityWords({
-  canvas,
-  pageNumber,
-  quantityWorker,
-  words,
-}: {
-  canvas: HTMLCanvasElement;
-  pageNumber: number;
-  quantityWorker: TesseractWorker;
-  words: OcrTextWord[];
-}) {
-  const partNumberWords = words
-    .filter((word) => ocrExactPartNumberPattern.test(word.text))
-    .sort(compareOcrWordsTopToBottom);
-
-  if (partNumberWords.length === 0) {
-    return words;
-  }
-
-  const targetedQuantityWords: OcrTextWord[] = [];
-
-  for (const { cellBox, partNumberWord } of inferPartNumberCellBoxes(
-    partNumberWords,
-    canvas.width,
-    canvas.height,
-  )) {
-    if (hasNearbyQuantityCandidateWord(words, partNumberWord, cellBox)) {
-      continue;
-    }
-
-    const quantityBoxes = createPartQuantitySearchBoxes(
-      cellBox,
-      partNumberWord,
-      canvas.width,
-      canvas.height,
-    );
-
-    if (quantityBoxes.length === 0) {
-      continue;
-    }
-
-    for (const quantityBox of quantityBoxes) {
-      targetedQuantityWords.push(
-        ...(await recognizeQuantityWordsInBox({
-          canvas,
-          pageNumber,
-          quantityBox,
-          quantityWorker,
-        })),
-      );
-    }
-  }
-
-  return mergeQuantityCandidateWords(words, targetedQuantityWords);
-}
-
 function inferPartNumberCellBoxes(
   partNumberWords: OcrTextWord[],
   pageWidth: number,
@@ -1409,123 +1704,6 @@ function inferPartNumberCellBoxes(
   });
 
   return cells;
-}
-
-async function recognizeQuantityWordsInBox({
-  canvas,
-  pageNumber,
-  quantityBox,
-  quantityWorker,
-}: {
-  canvas: HTMLCanvasElement;
-  pageNumber: number;
-  quantityBox: OcrTextBox;
-  quantityWorker: TesseractWorker;
-}) {
-  const cropScale = 3;
-  const cropWidth = Math.max(1, Math.ceil(quantityBox.x1 - quantityBox.x0));
-  const cropHeight = Math.max(1, Math.ceil(quantityBox.y1 - quantityBox.y0));
-  const cropCanvas = document.createElement("canvas");
-  const cropContext = cropCanvas.getContext("2d", { willReadFrequently: true });
-
-  if (!cropContext) {
-    return [];
-  }
-
-  cropCanvas.width = cropWidth * cropScale;
-  cropCanvas.height = cropHeight * cropScale;
-  cropContext.fillStyle = "#fff";
-  cropContext.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-  cropContext.drawImage(
-    canvas,
-    Math.floor(quantityBox.x0),
-    Math.floor(quantityBox.y0),
-    cropWidth,
-    cropHeight,
-    0,
-    0,
-    cropCanvas.width,
-    cropCanvas.height,
-  );
-
-  const result = await quantityWorker.recognize(cropCanvas, undefined, {
-    blocks: true,
-    text: true,
-  });
-  const words = extractQuantityCandidateWords(result.data, pageNumber).map((word) => ({
-    ...word,
-    bbox: {
-      x0: quantityBox.x0 + word.bbox.x0 / cropScale,
-      y0: quantityBox.y0 + word.bbox.y0 / cropScale,
-      x1: quantityBox.x0 + word.bbox.x1 / cropScale,
-      y1: quantityBox.y0 + word.bbox.y1 / cropScale,
-    },
-  }));
-
-  cropCanvas.width = 0;
-  cropCanvas.height = 0;
-
-  return words;
-}
-
-function createPartQuantitySearchBoxes(
-  cellBox: OcrTextBox,
-  partNumberWord: OcrTextWord,
-  pageWidth: number,
-  pageHeight: number,
-) {
-  const cellWidth = cellBox.x1 - cellBox.x0;
-  const cellHeight = cellBox.y1 - cellBox.y0;
-  const paddingX = Math.max(4, cellWidth * 0.04);
-  const lineBox = {
-    x0: Math.max(0, cellBox.x0 + paddingX),
-    y0: Math.max(0, Math.max(cellBox.y0, partNumberWord.bbox.y0 - cellHeight * 0.18)),
-    x1: Math.min(pageWidth, cellBox.x1 - paddingX),
-    y1: Math.min(
-      pageHeight,
-      Math.min(cellBox.y1, partNumberWord.bbox.y1 + cellHeight * 0.22),
-    ),
-  };
-  const cornerBox = {
-    x0: Math.max(0, cellBox.x0 + paddingX),
-    y0: Math.max(0, cellBox.y0 + Math.max(4, cellHeight * 0.04)),
-    x1: Math.min(pageWidth, cellBox.x0 + cellWidth * 0.58),
-    y1: Math.min(pageHeight, cellBox.y0 + cellHeight * 0.62),
-  };
-  const lowerBox = {
-    x0: Math.max(0, cellBox.x0 + paddingX),
-    y0: Math.max(0, cellBox.y0 + cellHeight * 0.52),
-    x1: Math.min(pageWidth, cellBox.x1 - paddingX),
-    y1: Math.min(pageHeight, cellBox.y1 - Math.max(2, cellHeight * 0.02)),
-  };
-
-  return [lineBox, cornerBox, lowerBox].filter(
-    (box) => box.x1 > box.x0 + 8 && box.y1 > box.y0 + 8,
-  );
-}
-
-function hasNearbyQuantityCandidateWord(
-  words: OcrTextWord[],
-  partNumberWord: OcrTextWord,
-  cellBox: OcrTextBox,
-) {
-  const cellWidth = Math.max(1, cellBox.x1 - cellBox.x0);
-  const cellHeight = Math.max(1, cellBox.y1 - cellBox.y0);
-
-  return words.some((word) => {
-    if (!isQuantityCandidateText(word.text)) {
-      return false;
-    }
-
-    const wordCenterX = centerX(word);
-    const wordCenterY = centerY(word);
-
-    return (
-      pointInBox(wordCenterX, wordCenterY, cellBox) &&
-      Math.abs(wordCenterX - centerX(partNumberWord)) <= cellWidth * 0.58 &&
-      Math.abs(wordCenterY - centerY(partNumberWord)) <= cellHeight * 0.42
-    );
-  });
 }
 
 function attachVisualColorSamplesToWords(
@@ -1667,10 +1845,50 @@ function centerY(word: OcrTextWord) {
   return (word.bbox.y0 + word.bbox.y1) / 2;
 }
 
+function transformOcrCanvasBox(
+  box: OcrTextBox,
+  regions: OcrCanvasTextRegion[],
+): OcrTextBox | null {
+  if (regions.length === 0) {
+    return box;
+  }
+
+  const boxCenterX = (box.x0 + box.x1) / 2;
+  const boxCenterY = (box.y0 + box.y1) / 2;
+  const region = regions.find((candidateRegion) =>
+    pointInBox(boxCenterX, boxCenterY, candidateRegion.target),
+  );
+
+  if (!region) {
+    return null;
+  }
+
+  const targetWidth = Math.max(1, region.target.x1 - region.target.x0);
+  const targetHeight = Math.max(1, region.target.y1 - region.target.y0);
+  const sourceWidth = region.source.x1 - region.source.x0;
+  const sourceHeight = region.source.y1 - region.source.y0;
+  const scaleX = sourceWidth / targetWidth;
+  const scaleY = sourceHeight / targetHeight;
+
+  return {
+    x0: region.source.x0 + (box.x0 - region.target.x0) * scaleX,
+    y0: region.source.y0 + (box.y0 - region.target.y0) * scaleY,
+    x1: region.source.x0 + (box.x1 - region.target.x0) * scaleX,
+    y1: region.source.y0 + (box.y1 - region.target.y0) * scaleY,
+  };
+}
+
 function extractRecognizedWords(
   pageData: TesseractPageData,
   pageNumber: number,
+  regions: OcrCanvasTextRegion[] = [],
 ): OcrTextWord[] {
+  const tsvWords = extractRecognizedWordsFromTsv(pageData.tsv, pageNumber, regions);
+
+  if (tsvWords.length > 0) {
+    return tsvWords;
+  }
+
   return (
     pageData.blocks?.flatMap((block) =>
       block.paragraphs?.flatMap((paragraph) =>
@@ -1683,15 +1901,19 @@ function extractRecognizedWords(
         return [];
       }
 
-      return [
-        {
-          pageNumber,
-          text: word.text,
-          confidence:
-            typeof word.confidence === "number" ? word.confidence : null,
-          bbox: word.bbox,
-        },
-      ];
+      const bbox = transformOcrCanvasBox(word.bbox, regions);
+
+      return bbox
+        ? [
+            {
+              pageNumber,
+              text: word.text,
+              confidence:
+                typeof word.confidence === "number" ? word.confidence : null,
+              bbox,
+            },
+          ]
+        : [];
     })
     .sort((left, right) => {
       if (Math.abs(left.bbox.y0 - right.bbox.y0) > 12) {
@@ -1702,61 +1924,17 @@ function extractRecognizedWords(
     });
 }
 
-function extractQuantityCandidateWords(
-  pageData: TesseractPageData,
-  pageNumber: number,
-) {
-  return extractRecognizedWords(pageData, pageNumber).filter((word) =>
-    isQuantityCandidateText(word.text),
-  );
-}
-
-function mergeQuantityCandidateWords(
-  words: OcrTextWord[],
-  quantityWords: OcrTextWord[],
-) {
-  if (quantityWords.length === 0) {
-    return words;
-  }
-
-  const mergedWords = [...words];
-
-  quantityWords.forEach((quantityWord) => {
-    const duplicateWord = mergedWords.some(
-      (word) =>
-        normalizeQuantityCandidateText(word.text) ===
-          normalizeQuantityCandidateText(quantityWord.text) &&
-        Math.abs(centerX(word) - centerX(quantityWord)) <= 16 &&
-        Math.abs(centerY(word) - centerY(quantityWord)) <= 16,
-    );
-
-    if (!duplicateWord) {
-      mergedWords.push(quantityWord);
-    }
-  });
-
-  return mergedWords.sort(compareOcrWordsTopToBottom);
-}
-
-function isQuantityCandidateText(text: string) {
-  const normalizedText = normalizeQuantityCandidateText(text);
-
-  return (
-    /^\d{1,3}x$/i.test(normalizedText) ||
-    /^x\d{1,3}$/i.test(normalizedText) ||
-    /^x$/i.test(normalizedText) ||
-    /^\d{1,3}$/i.test(normalizedText)
-  );
-}
-
-function normalizeQuantityCandidateText(text: string) {
-  return text.replace(/[×✕]/g, "x").replace(/[^0-9x]/gi, "").toLowerCase();
-}
-
 function extractRecognizedLines(
   pageData: TesseractPageData,
   pageNumber: number,
+  regions: OcrCanvasTextRegion[] = [],
 ): OcrTextLine[] {
+  const tsvLines = extractRecognizedLinesFromTsv(pageData.tsv, pageNumber, regions);
+
+  if (tsvLines.length > 0) {
+    return tsvLines;
+  }
+
   const blockLines = pageData.blocks?.flatMap((block) =>
     block.paragraphs?.flatMap((paragraph) => paragraph.lines ?? []) ?? [],
   );
@@ -1765,7 +1943,7 @@ function extractRecognizedLines(
         pageNumber,
         text: line.text ?? "",
         confidence: typeof line.confidence === "number" ? line.confidence : null,
-        bbox: line.bbox ?? null,
+        bbox: line.bbox ? transformOcrCanvasBox(line.bbox, regions) : null,
       }))
     : fallbackTextLines(pageData, pageNumber);
 
@@ -1785,6 +1963,203 @@ function extractRecognizedLines(
 
       return leftBox.x0 - rightBox.x0;
     });
+}
+
+type TsvOcrWord = OcrTextWord & {
+  blockNumber: string;
+  lineNumber: string;
+  paragraphNumber: string;
+};
+
+function extractRecognizedWordsFromTsv(
+  tsv: string | null | undefined,
+  pageNumber: number,
+  regions: OcrCanvasTextRegion[],
+) {
+  return parseTsvOcrWords(tsv, pageNumber, regions).sort(
+    compareOcrWordsTopToBottom,
+  );
+}
+
+function extractRecognizedLinesFromTsv(
+  tsv: string | null | undefined,
+  pageNumber: number,
+  regions: OcrCanvasTextRegion[],
+): OcrTextLine[] {
+  const words = parseTsvOcrWords(tsv, pageNumber, regions);
+  const wordsByLine = new Map<string, TsvOcrWord[]>();
+
+  words.forEach((word) => {
+    const lineKey = [
+      word.blockNumber,
+      word.paragraphNumber,
+      word.lineNumber,
+    ].join(":");
+    const lineWords = wordsByLine.get(lineKey) ?? [];
+
+    lineWords.push(word);
+    wordsByLine.set(lineKey, lineWords);
+  });
+
+  return [...wordsByLine.values()]
+    .map((lineWords): OcrTextLine => {
+      const sortedWords = lineWords.sort(compareOcrWordsTopToBottom);
+      const confidences = sortedWords
+        .map((word) => word.confidence)
+        .filter((confidence): confidence is number => confidence !== null);
+
+      return {
+        pageNumber,
+        text: sortedWords.map((word) => word.text).join(" "),
+        confidence:
+          confidences.length > 0
+            ? Math.round(
+                confidences.reduce((total, confidence) => total + confidence, 0) /
+                  confidences.length,
+              )
+            : null,
+        bbox: mergeOcrTextBoxes(sortedWords.map((word) => word.bbox)),
+      };
+    })
+    .filter((line) => line.text.trim().length > 0)
+    .sort((left, right) => {
+      const leftBox = left.bbox;
+      const rightBox = right.bbox;
+
+      if (!leftBox || !rightBox) {
+        return 0;
+      }
+
+      if (Math.abs(leftBox.y0 - rightBox.y0) > 12) {
+        return leftBox.y0 - rightBox.y0;
+      }
+
+      return leftBox.x0 - rightBox.x0;
+    });
+}
+
+function parseTsvOcrWords(
+  tsv: string | null | undefined,
+  pageNumber: number,
+  regions: OcrCanvasTextRegion[],
+): TsvOcrWord[] {
+  if (!tsv) {
+    return [];
+  }
+
+  const [headerLine, ...remainingLines] = tsv.split(/\r?\n/);
+  let lines = remainingLines;
+  let headers = headerLine?.split("\t") ?? [];
+
+  if (!headers.includes("level")) {
+    headers = [
+      "level",
+      "page_num",
+      "block_num",
+      "par_num",
+      "line_num",
+      "word_num",
+      "left",
+      "top",
+      "width",
+      "height",
+      "conf",
+      "text",
+    ];
+    lines = headerLine ? [headerLine, ...remainingLines] : remainingLines;
+  }
+  const levelIndex = headers.indexOf("level");
+  const blockIndex = headers.indexOf("block_num");
+  const paragraphIndex = headers.indexOf("par_num");
+  const lineIndex = headers.indexOf("line_num");
+  const leftIndex = headers.indexOf("left");
+  const topIndex = headers.indexOf("top");
+  const widthIndex = headers.indexOf("width");
+  const heightIndex = headers.indexOf("height");
+  const confidenceIndex = headers.indexOf("conf");
+  const textIndex = headers.indexOf("text");
+
+  if (
+    levelIndex === -1 ||
+    leftIndex === -1 ||
+    topIndex === -1 ||
+    widthIndex === -1 ||
+    heightIndex === -1 ||
+    textIndex === -1
+  ) {
+    return [];
+  }
+
+  return lines.flatMap((line): TsvOcrWord[] => {
+    const columns = line.split("\t");
+
+    if (columns[levelIndex]?.trim() !== "5") {
+      return [];
+    }
+
+    const text = columns.slice(textIndex).join("\t").trim();
+
+    if (!text) {
+      return [];
+    }
+
+    const left = readTsvNumber(columns[leftIndex]);
+    const top = readTsvNumber(columns[topIndex]);
+    const width = readTsvNumber(columns[widthIndex]);
+    const height = readTsvNumber(columns[heightIndex]);
+
+    if (left === null || top === null || width === null || height === null) {
+      return [];
+    }
+
+    const bbox = transformOcrCanvasBox(
+      {
+        x0: left,
+        y0: top,
+        x1: left + width,
+        y1: top + height,
+      },
+      regions,
+    );
+
+    if (!bbox) {
+      return [];
+    }
+
+    const confidence = readTsvNumber(columns[confidenceIndex] ?? "");
+
+    return [
+      {
+        blockNumber: columns[blockIndex] ?? "0",
+        confidence:
+          confidence !== null && confidence >= 0 ? Math.round(confidence) : null,
+        lineNumber: columns[lineIndex] ?? "0",
+        pageNumber,
+        paragraphNumber: columns[paragraphIndex] ?? "0",
+        text,
+        bbox,
+      },
+    ];
+  });
+}
+
+function readTsvNumber(value: string | undefined) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : null;
+}
+
+function mergeOcrTextBoxes(boxes: OcrTextBox[]): OcrTextBox | null {
+  if (boxes.length === 0) {
+    return null;
+  }
+
+  return {
+    x0: Math.min(...boxes.map((box) => box.x0)),
+    y0: Math.min(...boxes.map((box) => box.y0)),
+    x1: Math.max(...boxes.map((box) => box.x1)),
+    y1: Math.max(...boxes.map((box) => box.y1)),
+  };
 }
 
 function fallbackTextLines(

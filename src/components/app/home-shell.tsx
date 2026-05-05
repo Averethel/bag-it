@@ -1032,7 +1032,6 @@ export function HomeShell({
       const extractionOptions: ExtractPartListOptions = {
         fetchCatalogParts,
         onProgress: setAnalysisProgress,
-        workerCount: 2,
       };
 
       if (csvInventory) {

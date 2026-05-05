@@ -1028,6 +1028,71 @@ describe("extractPartListFromOcrPages", () => {
     expect(result.items[0]?.notes).not.toContain("Missing or unclear color.");
   });
 
+  it("uses CSV validation to correct one-digit OCR part number misses", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(8, [
+          "Parts",
+          "3x 80481 Dark Bluish Gray",
+        ]),
+      ],
+      {
+        validationInventory: [
+          {
+            id: "csv-1",
+            sequence: 1,
+            partNumber: "60481",
+            color: "72",
+            colorName: "Dark Bluish Gray",
+            quantity: 11,
+            isSpare: false,
+          },
+        ],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "60481",
+      ocrPartNumber: "80481",
+      colorName: "Dark Bluish Gray",
+      validationStatus: "csv-alias-match",
+    });
+  });
+
+  it("uses CSV validation to choose the best OCR candidate shape", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        {
+          ...page(8, ["Parts", "1x 9999 Black"]),
+          words: [
+            word("1x", 40, 80, 8),
+            word("3001", 90, 80, 8),
+            word("Black", 150, 80, 8),
+          ],
+        },
+      ],
+      {
+        validationInventory: [
+          {
+            id: "csv-1",
+            sequence: 1,
+            partNumber: "3001",
+            color: "0",
+            colorName: "Black",
+            quantity: 1,
+            isSpare: false,
+          },
+        ],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "3001",
+      quantity: 1,
+      validationStatus: "csv-exact-match",
+    });
+  });
+
   it("uses the last dense trailing candidate page group as the parts list", () => {
     const result = extractPartListFromOcrPages([
       page(2, [
