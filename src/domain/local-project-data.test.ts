@@ -59,5 +59,13 @@ describe("local project data", () => {
         manual: new Uint8Array([37, 80, 68, 70]),
       }),
     ).toThrow("$.manual contains non-persistable binary manual data.");
+
+    expect(() =>
+      assertSafeLocalProjectData({
+        schemaVersion: 1,
+        projectId: "project-1",
+        inventoryRows: [{ rawText: "Qty 2 2420 Black Plate 2 x 2 Corner" }],
+      }),
+    ).toThrow("$.inventoryRows[0].rawText is not allowed in local project data.");
   });
 });

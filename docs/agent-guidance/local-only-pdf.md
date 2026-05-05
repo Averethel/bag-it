@@ -12,6 +12,10 @@ Hard requirements:
 - Ensure the PWA service worker does not cache user-uploaded manuals.
 - Require the user to reselect the PDF when reopening a project.
 
+Isolated parts-list thumbnails may be processed transiently in browser memory to
+derive non-image matching descriptors. They must not include build instructions,
+and the thumbnail images themselves must not be persisted.
+
 Allowed persisted data:
 
 - Rebrickable catalog data.

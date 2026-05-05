@@ -7,13 +7,32 @@ import {
   type LocalProjectData,
   type LocalProjectStore,
 } from "@/domain/local-project-data";
+import type { ExtractPartListOptions } from "@/domain/browser-pdf-ocr";
+import type { RebrickableCatalogFetchResult } from "@/domain/rebrickable-catalog";
+import type { PartListExtractionResult } from "@/domain/part-list-extraction";
+import type { PdfSession } from "@/domain/pdf-session";
 
 import { HomeShell } from "./home-shell";
 
-function renderHomeShell(projectStore = createMemoryProjectStore()) {
+function renderHomeShell(
+  projectStore = createMemoryProjectStore(),
+  analyzePdfSession?: (
+    pdfSession: PdfSession,
+    options?: ExtractPartListOptions,
+  ) => Promise<PartListExtractionResult>,
+  fetchCatalogParts?: (
+    partNumbers: string[],
+  ) => Promise<RebrickableCatalogFetchResult>,
+) {
+  const homeShellProps = {
+    projectStore,
+    ...(analyzePdfSession ? { analyzePdfSession } : {}),
+    ...(fetchCatalogParts ? { fetchCatalogParts } : {}),
+  };
+
   return render(
     <Provider>
-      <HomeShell projectStore={projectStore} />
+      <HomeShell {...homeShellProps} />
     </Provider>,
   );
 }
@@ -47,6 +66,20 @@ function projectDataWithManual(fileName: string): LocalProjectData {
       lastModified: 1_700_000_000_000,
       pageCount: null,
     },
+  };
+}
+
+function createCatalogFetchResult(
+  parts: RebrickableCatalogFetchResult["parts"] = [],
+  colorNamesById: RebrickableCatalogFetchResult["colorNamesById"] = {},
+  colorRgbById: RebrickableCatalogFetchResult["colorRgbById"] = {},
+): RebrickableCatalogFetchResult {
+  return {
+    parts,
+    missingPartNumbers: [],
+    warnings: [],
+    colorNamesById,
+    colorRgbById,
   };
 }
 
@@ -282,7 +315,200 @@ describe("HomeShell", () => {
     expect(
       screen.getByText("analysis-ready.pdf is ready for local analysis."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Ready state")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run OCR" })).toBeInTheDocument();
+  });
+
+  it("runs local OCR analysis and displays the extracted part list", async () => {
+    const extractionResult: PartListExtractionResult = {
+      items: [
+        {
+          id: "part-list-item-1",
+          sequence: 1,
+          pageNumber: 7,
+          quantity: 2,
+          partNumber: "2420",
+          colorName: "Black",
+          description: "Plate 2 x 2 Corner",
+          confidence: 91,
+          status: "complete",
+          rawText: "Qty 2 2420 Black Plate 2 x 2 Corner",
+          notes: [],
+        },
+        {
+          id: "part-list-item-2",
+          sequence: 2,
+          pageNumber: 7,
+          quantity: 7,
+          partNumber: "2431",
+          colorName: "Blue",
+          description: "Tile 1 x 4",
+          confidence: 88,
+          status: "complete",
+          rawText: "Qty 7 2431 Blue Tile 1 x 4",
+          notes: [],
+        },
+      ],
+      pagesAnalyzed: 8,
+      candidatePageNumbers: [7, 8],
+      selectedPageNumbers: [7, 8],
+      warnings: [],
+    };
+    const analyzePdfSession = vi.fn<
+      (
+        pdfSession: PdfSession,
+        options?: ExtractPartListOptions,
+      ) => Promise<PartListExtractionResult>
+    >(async () => extractionResult);
+    const fetchCatalogParts = vi.fn(async () =>
+      createCatalogFetchResult(
+        [
+          {
+            requestedPartNumber: "2420",
+            partNumber: "2420",
+            name: "Plate 2 x 2 Corner",
+            partImageUrl: null,
+            partUrl: null,
+            aliases: [],
+          },
+          {
+            requestedPartNumber: "2431",
+            partNumber: "2431",
+            name: "Tile 1 x 4",
+            partImageUrl: null,
+            partUrl: null,
+            aliases: [],
+          },
+        ],
+        {
+          "0": "Black",
+          "1": "Blue",
+        },
+      ),
+    );
+
+    renderHomeShell(
+      createMemoryProjectStore(),
+      analyzePdfSession,
+      fetchCatalogParts,
+    );
+
+    fireEvent.change(screen.getByLabelText("Manual PDF"), {
+      target: {
+        files: [
+          new File(["%PDF-1.7"], "analysis.pdf", {
+            type: "application/pdf",
+          }),
+        ],
+      },
+    });
+    fireEvent.change(screen.getByLabelText("Rebrickable parts CSV"), {
+      target: {
+        files: [
+          new File(["Part,Color,Quantity\n2420,0,2\n2431,1,7"], "parts.csv", {
+            type: "text/csv",
+          }),
+        ],
+      },
+    });
+
+    await screen.findByText(
+      "analysis.pdf is selected for this browser session.",
+    );
+    await screen.findByText("parts.csv (2 rows)");
+    await screen.findByText("2 CSV rows have Rebrickable catalog details.");
+
+    fireEvent.click(screen.getByRole("button", { name: /Analysis/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Run OCR" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Review extracted inventory" }),
+    ).toBeInTheDocument();
+    expect(analyzePdfSession).toHaveBeenCalledTimes(1);
+    expect(analyzePdfSession.mock.calls[0]?.[1]).toMatchObject({
+      validationInventory: [
+        expect.objectContaining({
+          catalogPart: expect.objectContaining({ partNumber: "2420" }),
+          colorName: "Black",
+          partNumber: "2420",
+          quantity: 2,
+        }),
+        expect.objectContaining({
+          catalogPart: expect.objectContaining({ partNumber: "2431" }),
+          colorName: "Blue",
+          partNumber: "2431",
+          quantity: 7,
+        }),
+      ],
+      workerCount: 2,
+    });
+    expect(analyzePdfSession.mock.calls[0]?.[1]).not.toHaveProperty(
+      "partsListPageLimit",
+    );
+    expect(screen.getByText("2 rows")).toBeInTheDocument();
+    expect(screen.getByText("2420")).toBeInTheDocument();
+    expect(screen.getByText("Plate 2 x 2 Corner")).toBeInTheDocument();
+    expect(screen.getByText("2431")).toBeInTheDocument();
+    expect(screen.getByText("Tile 1 x 4")).toBeInTheDocument();
+  });
+
+  it("continues with CSV-only validation when catalog lookup fails", async () => {
+    const extractionResult: PartListExtractionResult = {
+      items: [],
+      pagesAnalyzed: 0,
+      candidatePageNumbers: [],
+      selectedPageNumbers: [],
+      warnings: [],
+    };
+    const analyzePdfSession = vi.fn<
+      (
+        pdfSession: PdfSession,
+        options?: ExtractPartListOptions,
+      ) => Promise<PartListExtractionResult>
+    >(async () => extractionResult);
+    const fetchCatalogParts = vi.fn(async () => {
+      throw new Error("Rebrickable catalog request timed out.");
+    });
+
+    renderHomeShell(
+      createMemoryProjectStore(),
+      analyzePdfSession,
+      fetchCatalogParts,
+    );
+
+    fireEvent.change(screen.getByLabelText("Manual PDF"), {
+      target: {
+        files: [
+          new File(["%PDF-1.7"], "analysis.pdf", {
+            type: "application/pdf",
+          }),
+        ],
+      },
+    });
+    fireEvent.change(screen.getByLabelText("Rebrickable parts CSV"), {
+      target: {
+        files: [
+          new File(["Part,Color,Quantity\n2420,0,2"], "parts.csv", {
+            type: "text/csv",
+          }),
+        ],
+      },
+    });
+
+    await screen.findByText(
+      "Rebrickable catalog details are unavailable; CSV validation will use uploaded rows only.",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Analysis/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Run OCR" }));
+
+    await screen.findByRole("heading", { name: "Review extracted inventory" });
+    expect(analyzePdfSession.mock.calls[0]?.[1]).toMatchObject({
+      validationInventory: [
+        expect.not.objectContaining({
+          catalogPart: expect.anything(),
+        }),
+      ],
+    });
   });
 
   it.each([

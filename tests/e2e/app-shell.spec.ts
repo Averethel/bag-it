@@ -21,6 +21,7 @@ test("renders the manual workflow shell", async ({ page }) => {
   await expect(
     page.getByRole("navigation", { name: "Manual processing workflow" }),
   ).toBeVisible();
+  await expect(page.getByText("Local data ready")).toBeVisible();
 
   await page.getByRole("button", { name: /Analysis/ }).click();
 
@@ -51,6 +52,7 @@ test("keeps PDF bytes session-only while restoring local metadata", async ({
 
   await page.goto("/");
   const appOrigin = new URL(page.url()).origin;
+  await expect(page.getByText("Local data ready")).toBeVisible();
 
   await page.getByTestId("manual-pdf-input").setInputFiles(smallManualPath);
 

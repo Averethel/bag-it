@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 
@@ -29,9 +30,28 @@ import {
   type LocalProjectStore,
 } from "@/domain/local-project-data";
 import {
+  extractPartListFromPdfSession,
+  type ExtractPartListOptions,
+  type PdfOcrProgress,
+} from "@/domain/browser-pdf-ocr";
+import type {
+  ExtractedPartListItem,
+  PartListExtractionResult,
+} from "@/domain/part-list-extraction";
+import {
   createPdfSessionFromFile,
   type PdfSession,
 } from "@/domain/pdf-session";
+import {
+  attachCatalogColorsToInventory,
+  attachCatalogPartsToInventory,
+  fetchRebrickableCatalogParts,
+  type RebrickableCatalogFetchResult,
+} from "@/domain/rebrickable-catalog";
+import {
+  parseRebrickablePartsCsv,
+  type RebrickableInventoryItem,
+} from "@/domain/rebrickable-csv";
 
 const workflowStages = [
   {
@@ -102,6 +122,18 @@ type StageView = {
 };
 
 type StorageState = "loading" | "ready" | "saving" | "saved" | "unavailable";
+type AnalysisState = "idle" | "running" | "complete" | "failed";
+type AnalyzePdfSession = typeof extractPartListFromPdfSession;
+type FetchCatalogParts = typeof fetchRebrickableCatalogParts;
+type CsvCatalogState = "idle" | "loading" | "complete" | "failed";
+type CsvInventoryState = {
+  catalogMatchedRows: number;
+  catalogStatus: CsvCatalogState;
+  catalogWarnings: string[];
+  fileName: string;
+  items: RebrickableInventoryItem[];
+  warnings: string[];
+};
 
 const blockedStageDetails: Record<Exclude<WorkflowStageId, "intake">, string> = {
   analysis: "Waiting for an active PDF session.",
@@ -133,6 +165,9 @@ function buildStageView(
   stage: WorkflowStage,
   activeStage: WorkflowStageId,
   pdfSession: PdfSession | null,
+  csvInventory: CsvInventoryState | null,
+  analysisState: AnalysisState,
+  partListExtraction: PartListExtractionResult | null,
 ): StageView {
   const manualFileName = pdfSession?.metadata.fileName ?? null;
 
@@ -144,16 +179,45 @@ function buildStageView(
         ? `${manualFileName} is selected for this browser session.`
         : "No manual selected.",
       detail:
-        "Manual bytes, rendered pages, and page crops stay in memory for the active session only.",
+        "Manual bytes, rendered pages, page crops, and raw OCR stay in memory for the active session only.",
     };
   }
 
   if (stage.id === "analysis" && pdfSession) {
+    if (analysisState === "running") {
+      return {
+        status: "ready",
+        statusLabel: "Running",
+        summary: `${pdfSession.metadata.fileName} is being analyzed locally.`,
+        detail: "Rendered pages and OCR output remain in memory only.",
+      };
+    }
+
+    if (partListExtraction) {
+      return {
+        status: "ready",
+        statusLabel: "Complete",
+        summary: `${partListExtraction.items.length} candidate part rows were extracted.`,
+        detail: "Validated rows can move forward without manual correction.",
+      };
+    }
+
     return {
       status: "ready",
       statusLabel: "Ready",
       summary: `${pdfSession.metadata.fileName} is ready for local analysis.`,
-      detail: "Page rendering and OCR have not run yet.",
+      detail: csvInventory
+        ? `${csvInventory.items.length} CSV rows will be used as validation candidates.`
+        : "Page rendering and OCR have not run yet. Uploading a Rebrickable CSV enables validation.",
+    };
+  }
+
+  if (stage.id === "inventory-review" && partListExtraction) {
+    return {
+      status: "ready",
+      statusLabel: "Ready",
+      summary: `${partListExtraction.items.length} candidate part rows are available in PDF read order.`,
+      detail: "Only unresolved quantity, part, or color fields should block automation.",
     };
   }
 
@@ -176,29 +240,51 @@ function statusColor(status: WorkflowStageStatus) {
 type WorkflowPanelProps = {
   stage: WorkflowStage;
   view: StageView;
+  csvError: string | null;
+  csvInputRef: RefObject<HTMLInputElement | null>;
+  csvInventory: CsvInventoryState | null;
   pdfSession: PdfSession | null;
   projectData: LocalProjectData | null;
   intakeError: string | null;
   isLoadingPdf: boolean;
   storageState: StorageState;
+  analysisError: string | null;
+  analysisProgress: PdfOcrProgress | null;
+  analysisState: AnalysisState;
+  partListExtraction: PartListExtractionResult | null;
   manualInputRef: RefObject<HTMLInputElement | null>;
+  onAnalyzeManual: () => void;
+  onClearCsv: () => void;
   onManualChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onCsvChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onClearManual: () => void;
 };
 
 function WorkflowPanel({
   stage,
   view,
+  csvError,
+  csvInputRef,
+  csvInventory,
   pdfSession,
   projectData,
   intakeError,
   isLoadingPdf,
   storageState,
+  analysisError,
+  analysisProgress,
+  analysisState,
+  partListExtraction,
   manualInputRef,
+  onAnalyzeManual,
+  onClearCsv,
   onManualChange,
+  onCsvChange,
   onClearManual,
 }: WorkflowPanelProps) {
   const isIntake = stage.id === "intake";
+  const isAnalysis = stage.id === "analysis";
+  const isInventoryReview = stage.id === "inventory-review";
   const manualFileName = pdfSession?.metadata.fileName ?? null;
 
   return (
@@ -246,6 +332,16 @@ function WorkflowPanel({
               ref={manualInputRef}
               type="file"
             />
+            <Input
+              aria-label="Rebrickable parts CSV"
+              accept=".csv,text/csv"
+              bg="white"
+              borderColor="gray.300"
+              data-testid="parts-csv-input"
+              onChange={onCsvChange}
+              ref={csvInputRef}
+              type="file"
+            />
             <Box
               borderWidth="1px"
               borderColor="gray.200"
@@ -268,9 +364,57 @@ function WorkflowPanel({
                 ) : null}
               </Stack>
             </Box>
+            <Box
+              borderWidth="1px"
+              borderColor="gray.200"
+              bg="gray.50"
+              borderRadius="md"
+              p="4"
+            >
+              <Stack gap="1">
+                <Text color="gray.600" fontSize="sm" fontWeight="medium">
+                  Rebrickable CSV validation
+                </Text>
+                <Text color="gray.900" fontSize="md">
+                  {csvInventory
+                    ? `${csvInventory.fileName} (${csvInventory.items.length} rows)`
+                    : "No CSV loaded"}
+                </Text>
+                <Text color="gray.600" fontSize="sm">
+                  CSV rows validate OCR output but do not create inventory rows.
+                </Text>
+                {csvInventory ? (
+                  <Text
+                    color={
+                      csvInventory.catalogStatus === "failed"
+                        ? "orange.700"
+                        : "gray.600"
+                    }
+                    fontSize="sm"
+                  >
+                    {formatCsvCatalogStatus(csvInventory)}
+                  </Text>
+                ) : null}
+                {csvInventory?.warnings.map((warning) => (
+                  <Text color="orange.700" fontSize="sm" key={warning}>
+                    {warning}
+                  </Text>
+                ))}
+                {csvInventory?.catalogWarnings.map((warning) => (
+                  <Text color="orange.700" fontSize="sm" key={warning}>
+                    {warning}
+                  </Text>
+                ))}
+              </Stack>
+            </Box>
             {intakeError ? (
               <Text color="red.700" fontSize="sm" role="alert">
                 {intakeError}
+              </Text>
+            ) : null}
+            {csvError ? (
+              <Text color="red.700" fontSize="sm" role="alert">
+                {csvError}
               </Text>
             ) : null}
             <HStack gap="3" wrap="wrap">
@@ -281,6 +425,14 @@ function WorkflowPanel({
                 variant="outline"
               >
                 Clear PDF
+              </Button>
+              <Button
+                colorPalette="gray"
+                disabled={!csvInventory}
+                onClick={onClearCsv}
+                variant="outline"
+              >
+                Clear CSV
               </Button>
               <Text color="gray.600" fontSize="sm">
                 {storageStatusLabel(storageState)}
@@ -308,6 +460,19 @@ function WorkflowPanel({
               </Stack>
             </Box>
           </Stack>
+        ) : isAnalysis && pdfSession ? (
+          <AnalysisPanel
+            analysisError={analysisError}
+            analysisProgress={analysisProgress}
+            analysisState={analysisState}
+            onAnalyzeManual={onAnalyzeManual}
+            partListExtraction={partListExtraction}
+            pdfSession={pdfSession}
+            isCatalogLoading={csvInventory?.catalogStatus === "loading"}
+            csvInventory={csvInventory}
+          />
+        ) : isInventoryReview && partListExtraction ? (
+          <PartListOutput result={partListExtraction} />
         ) : (
           <Box borderTopWidth="1px" borderColor="gray.200" pt="6">
             <Stack gap="2">
@@ -331,19 +496,300 @@ function WorkflowPanel({
   );
 }
 
+type AnalysisPanelProps = {
+  analysisError: string | null;
+  analysisProgress: PdfOcrProgress | null;
+  analysisState: AnalysisState;
+  csvInventory: CsvInventoryState | null;
+  isCatalogLoading: boolean;
+  onAnalyzeManual: () => void;
+  partListExtraction: PartListExtractionResult | null;
+  pdfSession: PdfSession | null;
+};
+
+function AnalysisPanel({
+  analysisError,
+  analysisProgress,
+  analysisState,
+  csvInventory,
+  isCatalogLoading,
+  onAnalyzeManual,
+  partListExtraction,
+  pdfSession,
+}: AnalysisPanelProps) {
+  const isRunning = analysisState === "running";
+
+  return (
+    <Box borderTopWidth="1px" borderColor="gray.200" pt="6">
+      <Stack gap="5" maxW="3xl">
+        <HStack gap="3" wrap="wrap">
+          <Button
+            colorPalette="blue"
+            disabled={!pdfSession || isRunning || isCatalogLoading}
+            loading={isRunning}
+            onClick={onAnalyzeManual}
+          >
+            Run OCR
+          </Button>
+          <Text color="gray.600" fontSize="sm">
+            {analysisProgress?.message ?? "No analysis has run."}
+          </Text>
+        </HStack>
+        <Text color="gray.600" fontSize="sm">
+          {csvInventory
+            ? `${csvInventory.items.length} CSV rows will validate the manual OCR result. ${formatCsvCatalogStatus(csvInventory)}`
+            : "No CSV validation loaded; OCR will run without catalog-list validation."}
+        </Text>
+
+        {analysisProgress ? (
+          <Box
+            borderWidth="1px"
+            borderColor="gray.200"
+            bg="gray.50"
+            borderRadius="md"
+            p="4"
+          >
+            <Stack gap="1">
+              <Text color="gray.600" fontSize="sm" fontWeight="medium">
+                OCR progress
+              </Text>
+              <Text color="gray.900" fontSize="md">
+                {formatOcrProgress(analysisProgress)}
+              </Text>
+            </Stack>
+          </Box>
+        ) : null}
+
+        {analysisError ? (
+          <Text color="red.700" fontSize="sm" role="alert">
+            {analysisError}
+          </Text>
+        ) : null}
+
+        {partListExtraction ? (
+          <PartListSummary result={partListExtraction} />
+        ) : null}
+      </Stack>
+    </Box>
+  );
+}
+
+function PartListSummary({ result }: { result: PartListExtractionResult }) {
+  return (
+    <Box
+      borderWidth="1px"
+      borderColor="gray.200"
+      bg="gray.50"
+      borderRadius="md"
+      p="4"
+    >
+      <Stack gap="2">
+        <Text color="gray.600" fontSize="sm" fontWeight="medium">
+          First-pass part list
+        </Text>
+        <Text color="gray.900">
+          {result.items.length} rows from pages{" "}
+          {formatPageList(result.selectedPageNumbers)}.
+        </Text>
+        {result.validationSummary ? (
+          <Text color="gray.700" fontSize="sm">
+            CSV validation matched{" "}
+            {result.validationSummary.exactMatches +
+              result.validationSummary.aliasMatches}{" "}
+            rows and suggested {result.validationSummary.aliasMatches} aliases.
+          </Text>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+}
+
+function PartListOutput({ result }: { result: PartListExtractionResult }) {
+  return (
+    <Stack gap="5">
+      <HStack gap="3" wrap="wrap">
+        <Badge colorPalette="blue" variant="subtle">
+          {result.items.length} rows
+        </Badge>
+        <Badge colorPalette="gray" variant="subtle">
+          {result.pagesAnalyzed} pages analyzed
+        </Badge>
+        <Badge colorPalette="green" variant="subtle">
+          Pages {formatPageList(result.selectedPageNumbers)}
+        </Badge>
+        {result.validationSummary ? (
+          <Badge colorPalette="purple" variant="subtle">
+            {result.validationSummary.exactMatches +
+              result.validationSummary.aliasMatches}{" "}
+            CSV matches
+          </Badge>
+        ) : null}
+      </HStack>
+      {result.validationSummary ? (
+        <Text color="gray.700" fontSize="sm">
+          {result.validationSummary.unmatchedRows} OCR rows had no CSV match;{" "}
+          {result.validationSummary.unusedCsvRows} CSV rows were not seen in this
+          manual scan.
+        </Text>
+      ) : null}
+
+      {result.warnings.map((warning) => (
+        <Text color="orange.700" fontSize="sm" key={warning}>
+          {warning}
+        </Text>
+      ))}
+
+      {result.items.length > 0 ? (
+        <Box
+          borderWidth="1px"
+          borderColor="gray.200"
+          borderRadius="md"
+          overflowX="auto"
+        >
+          <Box
+            as="table"
+            borderCollapse="collapse"
+            minW="900px"
+            w="full"
+          >
+            <Box as="thead" bg="gray.50">
+              <Box as="tr">
+                {[
+                  "#",
+                  "Page",
+                  "Qty",
+                  "Part",
+                  "Color",
+                  "Description",
+                  "Confidence",
+                  "Validation",
+                  "OCR row",
+                ].map((heading) => (
+                  <Box
+                    as="th"
+                    borderBottomWidth="1px"
+                    borderColor="gray.200"
+                    color="gray.600"
+                    fontSize="xs"
+                    fontWeight="bold"
+                    key={heading}
+                    px="3"
+                    py="2"
+                    textAlign="left"
+                  >
+                    {heading}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+            <Box as="tbody">
+              {result.items.map((item) => (
+                <PartListOutputRow item={item} key={item.id} />
+              ))}
+            </Box>
+          </Box>
+        </Box>
+      ) : (
+        <Text color="gray.700">No candidate part rows were extracted.</Text>
+      )}
+    </Stack>
+  );
+}
+
+function PartListOutputRow({ item }: { item: ExtractedPartListItem }) {
+  return (
+    <Box as="tr">
+      <TableCell>{item.sequence}</TableCell>
+      <TableCell>{item.pageNumber}</TableCell>
+      <TableCell>{item.quantity ?? "Review"}</TableCell>
+      <TableCell>
+        <Stack gap="1">
+          <Text>{item.partNumber ?? "Review"}</Text>
+          {item.ocrPartNumber ? (
+            <Text color="gray.600" fontSize="xs">
+              OCR: {item.ocrPartNumber}
+            </Text>
+          ) : null}
+        </Stack>
+      </TableCell>
+      <TableCell>
+        <Stack gap="1">
+          <Text>{item.colorName ?? "Review"}</Text>
+          {item.ocrColorName ? (
+            <Text color="gray.600" fontSize="xs">
+              OCR: {item.ocrColorName}
+            </Text>
+          ) : null}
+        </Stack>
+      </TableCell>
+      <TableCell>{item.description ?? "—"}</TableCell>
+      <TableCell>{formatConfidence(item.confidence)}</TableCell>
+      <TableCell>{formatValidationStatus(item.validationStatus)}</TableCell>
+      <TableCell>
+        <Stack gap="1">
+          <Text color="gray.800" fontSize="sm">
+            {item.rawText}
+          </Text>
+          {item.notes.length > 0 ? (
+            <Text color="orange.700" fontSize="xs">
+              {item.notes.join(" ")}
+            </Text>
+          ) : null}
+        </Stack>
+      </TableCell>
+    </Box>
+  );
+}
+
+function TableCell({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      as="td"
+      borderBottomWidth="1px"
+      borderColor="gray.100"
+      color="gray.800"
+      fontSize="sm"
+      px="3"
+      py="2"
+      verticalAlign="top"
+    >
+      {children}
+    </Box>
+  );
+}
+
 type HomeShellProps = {
+  analyzePdfSession?: AnalyzePdfSession;
+  fetchCatalogParts?: FetchCatalogParts;
   projectStore?: LocalProjectStore;
 };
 
-export function HomeShell({ projectStore }: HomeShellProps = {}) {
+export function HomeShell({
+  analyzePdfSession = extractPartListFromPdfSession,
+  fetchCatalogParts = fetchRebrickableCatalogParts,
+  projectStore,
+}: HomeShellProps = {}) {
   const [activeStage, setActiveStage] = useState<WorkflowStageId>("intake");
   const [pdfSession, setPdfSession] = useState<PdfSession | null>(null);
   const [projectData, setProjectData] = useState<LocalProjectData | null>(null);
   const [intakeError, setIntakeError] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [storageState, setStorageState] = useState<StorageState>("loading");
+  const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
+  const [analysisProgress, setAnalysisProgress] = useState<PdfOcrProgress | null>(
+    null,
+  );
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [csvInventory, setCsvInventory] = useState<CsvInventoryState | null>(
+    null,
+  );
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [partListExtraction, setPartListExtraction] =
+    useState<PartListExtractionResult | null>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const fileSelectionId = useRef(0);
+  const csvSelectionId = useRef(0);
   const projectDataRef = useRef<LocalProjectData | null>(null);
   const hasLocalProjectMutation = useRef(false);
   const localProjectStore = useMemo(
@@ -384,12 +830,28 @@ export function HomeShell({ projectStore }: HomeShellProps = {}) {
     activeWorkflowStage,
     activeStage,
     pdfSession,
+    csvInventory,
+    analysisState,
+    partListExtraction,
   );
 
   function clearManualInput() {
     if (manualInputRef.current) {
       manualInputRef.current.value = "";
     }
+  }
+
+  function clearCsvInput() {
+    if (csvInputRef.current) {
+      csvInputRef.current.value = "";
+    }
+  }
+
+  function resetAnalysisOutput() {
+    setAnalysisState("idle");
+    setAnalysisProgress(null);
+    setAnalysisError(null);
+    setPartListExtraction(null);
   }
 
   async function handleManualChange(event: ChangeEvent<HTMLInputElement>) {
@@ -403,6 +865,7 @@ export function HomeShell({ projectStore }: HomeShellProps = {}) {
     fileSelectionId.current = currentSelectionId;
     setIsLoadingPdf(true);
     setIntakeError(null);
+    resetAnalysisOutput();
 
     let nextPdfSession: PdfSession;
 
@@ -452,12 +915,147 @@ export function HomeShell({ projectStore }: HomeShellProps = {}) {
     }
   }
 
+  async function handleCsvChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const currentCsvSelectionId = csvSelectionId.current + 1;
+    csvSelectionId.current = currentCsvSelectionId;
+    setCsvError(null);
+    resetAnalysisOutput();
+
+    try {
+      const parseResult = parseRebrickablePartsCsv(await file.text());
+
+      if (parseResult.items.length === 0) {
+        setCsvInventory(null);
+        setCsvError(parseResult.warnings[0] ?? "CSV did not contain any rows.");
+        clearCsvInput();
+        return;
+      }
+
+      const baseCsvInventory: CsvInventoryState = {
+        catalogMatchedRows: 0,
+        catalogStatus: "loading",
+        catalogWarnings: [],
+        fileName: file.name,
+        items: parseResult.items,
+        warnings: parseResult.warnings,
+      };
+
+      setCsvInventory(baseCsvInventory);
+
+      try {
+        const catalogResult = await fetchCatalogParts(
+          parseResult.items.map((item) => item.partNumber),
+        );
+
+        if (csvSelectionId.current !== currentCsvSelectionId) {
+          return;
+        }
+
+        const colorEnrichedItems = attachCatalogColorsToInventory(
+          parseResult.items,
+          catalogResult.colorNamesById,
+          catalogResult.colorRgbById,
+        );
+        const enrichedItems = attachCatalogPartsToInventory(
+          colorEnrichedItems,
+          catalogResult.parts,
+        );
+
+        setCsvInventory({
+          ...baseCsvInventory,
+          catalogMatchedRows: countInventoryRowsWithCatalog(enrichedItems),
+          catalogStatus: "complete",
+          catalogWarnings: buildCatalogWarnings(catalogResult),
+          items: enrichedItems,
+        });
+      } catch (error) {
+        if (csvSelectionId.current !== currentCsvSelectionId) {
+          return;
+        }
+
+        setCsvInventory({
+          ...baseCsvInventory,
+          catalogStatus: "failed",
+          catalogWarnings: [toErrorMessage(error)],
+        });
+      }
+    } catch (error) {
+      setCsvInventory(null);
+      setCsvError(toErrorMessage(error));
+      clearCsvInput();
+    }
+  }
+
   function clearPdfSession() {
     fileSelectionId.current += 1;
     setPdfSession(null);
     setIntakeError(null);
     setIsLoadingPdf(false);
+    resetAnalysisOutput();
     clearManualInput();
+  }
+
+  function clearCsvInventory() {
+    csvSelectionId.current += 1;
+    setCsvInventory(null);
+    setCsvError(null);
+    resetAnalysisOutput();
+    clearCsvInput();
+  }
+
+  async function handleAnalyzeManual() {
+    if (!pdfSession) {
+      setAnalysisError("Select a manual PDF before running analysis.");
+      return;
+    }
+
+    const currentSelectionId = fileSelectionId.current;
+
+    setAnalysisState("running");
+    setAnalysisError(null);
+    setPartListExtraction(null);
+    setAnalysisProgress({
+      phase: "loading-pdf",
+      pageNumber: null,
+      pageCount: null,
+      progress: null,
+      message: "Starting local analysis",
+    });
+
+    try {
+      const extractionOptions: ExtractPartListOptions = {
+        fetchCatalogParts,
+        onProgress: setAnalysisProgress,
+        workerCount: 2,
+      };
+
+      if (csvInventory) {
+        extractionOptions.validationInventory = csvInventory.items;
+      }
+
+      const extractionResult = await analyzePdfSession(pdfSession, extractionOptions);
+
+      if (fileSelectionId.current !== currentSelectionId) {
+        return;
+      }
+
+      setPartListExtraction(extractionResult);
+      setAnalysisState("complete");
+      setActiveStage("inventory-review");
+    } catch (error) {
+      if (fileSelectionId.current !== currentSelectionId) {
+        return;
+      }
+
+      setAnalysisError(toErrorMessage(error));
+      setAnalysisState("failed");
+    }
   }
 
   return (
@@ -485,7 +1083,14 @@ export function HomeShell({ projectStore }: HomeShellProps = {}) {
 
               <Stack gap="2">
                 {workflowStages.map((stage) => {
-                  const view = buildStageView(stage, activeStage, pdfSession);
+                  const view = buildStageView(
+                    stage,
+                    activeStage,
+                    pdfSession,
+                    csvInventory,
+                    analysisState,
+                    partListExtraction,
+                  );
                   const isActive = stage.id === activeStage;
 
                   return (
@@ -522,11 +1127,21 @@ export function HomeShell({ projectStore }: HomeShellProps = {}) {
           </Box>
 
           <WorkflowPanel
+            csvError={csvError}
+            csvInputRef={csvInputRef}
+            csvInventory={csvInventory}
             intakeError={intakeError}
             isLoadingPdf={isLoadingPdf}
+            analysisError={analysisError}
+            analysisProgress={analysisProgress}
+            analysisState={analysisState}
             manualInputRef={manualInputRef}
+            onAnalyzeManual={handleAnalyzeManual}
+            onClearCsv={clearCsvInventory}
             onClearManual={clearPdfSession}
+            onCsvChange={handleCsvChange}
             onManualChange={handleManualChange}
+            partListExtraction={partListExtraction}
             pdfSession={pdfSession}
             projectData={projectData}
             stage={activeWorkflowStage}
@@ -549,6 +1164,85 @@ function formatByteSize(byteLength: number) {
   }
 
   return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatOcrProgress(progress: PdfOcrProgress) {
+  const pageStatus =
+    progress.pageNumber && progress.pageCount
+      ? `Page ${progress.pageNumber} of ${progress.pageCount}`
+      : "Preparing";
+  const percent =
+    typeof progress.progress === "number"
+      ? `, ${Math.round(progress.progress * 100)}%`
+      : "";
+
+  return `${pageStatus}: ${progress.message}${percent}`;
+}
+
+function formatPageList(pageNumbers: number[]) {
+  if (pageNumbers.length === 0) {
+    return "none";
+  }
+
+  return pageNumbers.join(", ");
+}
+
+function formatConfidence(confidence: number | null) {
+  if (confidence === null) {
+    return "Unknown";
+  }
+
+  return `${Math.round(confidence)}%`;
+}
+
+function formatValidationStatus(
+  validationStatus: ExtractedPartListItem["validationStatus"],
+) {
+  if (validationStatus === "csv-exact-match") {
+    return "CSV exact";
+  }
+
+  if (validationStatus === "csv-alias-match") {
+    return "CSV alias";
+  }
+
+  if (validationStatus === "csv-no-match") {
+    return "No CSV match";
+  }
+
+  return "Not checked";
+}
+
+function formatCsvCatalogStatus(csvInventory: CsvInventoryState) {
+  if (csvInventory.catalogStatus === "loading") {
+    return "Fetching Rebrickable catalog details.";
+  }
+
+  if (csvInventory.catalogStatus === "failed") {
+    return "Rebrickable catalog details are unavailable; CSV validation will use uploaded rows only.";
+  }
+
+  if (csvInventory.catalogStatus === "complete") {
+    return `${csvInventory.catalogMatchedRows} CSV rows have Rebrickable catalog details.`;
+  }
+
+  return "Rebrickable catalog details have not been requested.";
+}
+
+function countInventoryRowsWithCatalog(items: RebrickableInventoryItem[]) {
+  return items.filter((item) => item.catalogPart).length;
+}
+
+function buildCatalogWarnings(result: RebrickableCatalogFetchResult) {
+  const warnings = [...result.warnings];
+
+  if (result.missingPartNumbers.length > 0) {
+    warnings.push(
+      `${result.missingPartNumbers.length} CSV parts were not returned by Rebrickable catalog lookup.`,
+    );
+  }
+
+  return warnings;
 }
 
 function storageStatusLabel(storageState: StorageState) {

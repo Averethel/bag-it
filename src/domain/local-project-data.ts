@@ -58,13 +58,18 @@ const forbiddenPersistedKeys = new Set([
   "file",
   "manualBytes",
   "manualFile",
+  "ocrLines",
+  "ocrText",
   "pageImage",
   "pageImages",
   "pdfBytes",
+  "rawText",
   "rawOcr",
   "rawOcrOutput",
   "renderedPage",
   "renderedPages",
+  "sourceText",
+  "textLines",
 ]);
 
 export function createEmptyLocalProjectData(

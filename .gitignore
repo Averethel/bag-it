@@ -6,6 +6,7 @@ node_modules/
 out/
 tsconfig.tsbuildinfo
 .vercel/
+.cache/
 .mock-fixture-cache/
 /artefacts/
 
