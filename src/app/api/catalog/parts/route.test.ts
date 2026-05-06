@@ -57,27 +57,58 @@ describe("POST /api/catalog/parts", () => {
     expect(payload.colorRgbById).toMatchObject({
       "71": "A0A5A9",
     });
+    expect(payload.colorIdsByName).toMatchObject({
+      "light bluish gray": "71",
+    });
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("returns local image routes instead of provider image URLs", async () => {
+  it("uses the generated catalog cache even when an API key is configured", async () => {
     vi.stubEnv("REBRICKABLE_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn());
     vi.mocked(readGeneratedRebrickableCatalogCache).mockResolvedValue(
-      createCatalogCache({}),
+      createCatalogCache({
+        parts: {
+          "3001": {
+            name: "Brick 2 x 4",
+            categoryId: "11",
+            material: "Plastic",
+          },
+        },
+      }),
     );
+
+    const response = await POST(createPartsRequest(["3001"]));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.parts[0]).toMatchObject({
+      name: "Brick 2 x 4",
+      partNumber: "3001",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns local image routes instead of provider image URLs when live lookup is explicitly enabled", async () => {
+    vi.stubEnv("REBRICKABLE_API_KEY", "test-key");
+    vi.stubEnv("REBRICKABLE_LIVE_CATALOG", "1");
+    vi.mocked(readGeneratedRebrickableCatalogCache).mockResolvedValue(null);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        Response.json({
-          results: [
-            {
-              name: "Brick 2 x 4",
-              part_img_url:
-                "https://cdn.rebrickable.com/media/parts/photos/15/3001.jpg",
-              part_num: "3001",
-            },
-          ],
-        }),
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                name: "Brick 2 x 4",
+                part_img_url:
+                  "https://cdn.rebrickable.com/media/parts/photos/15/3001.jpg",
+                part_num: "3001",
+              },
+            ],
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
       ),
     );
 
@@ -86,9 +117,51 @@ describe("POST /api/catalog/parts", () => {
 
     expect(response.status).toBe(200);
     expect(payload.parts[0]).toMatchObject({
-      partImageUrl: "/api/catalog/part-image?partNumber=3001",
+      partImageUrl:
+        "/api/catalog/part-image?partNumber=3001&source=rebrickable-cache-v1",
       partNumber: "3001",
     });
+  });
+
+  it("falls back to generated catalog cache when the live API request fails", async () => {
+    vi.stubEnv("REBRICKABLE_API_KEY", "test-key");
+    vi.stubEnv("REBRICKABLE_LIVE_CATALOG", "1");
+    vi.mocked(readGeneratedRebrickableCatalogCache).mockResolvedValue(
+      createCatalogCache({
+        colors: {
+          "297": "Pearl Gold",
+        },
+        colorRgbById: {
+          "297": "AA7F2E",
+        },
+        parts: {
+          "22388": {
+            categoryId: "27",
+            material: "Plastic",
+            name: "Minifig, Weapon Bladed Claw",
+          },
+        },
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("upstream unavailable", { status: 502 })),
+    );
+
+    const response = await POST(createPartsRequest(["22388"]));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.parts[0]).toMatchObject({
+      name: "Minifig, Weapon Bladed Claw",
+      partNumber: "22388",
+    });
+    expect(payload.colorNamesById).toMatchObject({
+      "297": "Pearl Gold",
+    });
+    expect(payload.warnings).toContain(
+      "Live catalog request failed with HTTP 502; using generated catalog cache.",
+    );
   });
 
   it("rejects over-limit requests without truncating part numbers", async () => {
@@ -123,12 +196,12 @@ function createCatalogCache(
   overrides: Partial<
     Pick<
       RebrickableCatalogCacheIndex,
-      "aliases" | "colorRgbById" | "colors" | "parts"
+      "aliases" | "colorRgbById" | "colors" | "elementIdsByPartColor" | "parts"
     >
   >,
 ): RebrickableCatalogCacheIndex {
   return {
-    schemaVersion: 3,
+    schemaVersion: 5,
     generatedAt: "2026-05-05T00:00:00.000Z",
     checkedAt: "2026-05-05T00:00:00.000Z",
     sources: {
@@ -139,6 +212,15 @@ function createCatalogCache(
         lastModified: "Tue, 05 May 2026 00:00:00 GMT",
         contentLength: "1",
         sha256: "colors-sha",
+        rowCount: 1,
+      },
+      elements: {
+        fileName: "elements.csv.gz",
+        url: "https://cdn.rebrickable.com/media/downloads/elements.csv.gz",
+        etag: "\"elements\"",
+        lastModified: "Tue, 05 May 2026 00:00:00 GMT",
+        contentLength: "1",
+        sha256: "elements-sha",
         rowCount: 1,
       },
       parts: {
@@ -163,6 +245,7 @@ function createCatalogCache(
     aliases: overrides.aliases ?? {},
     colorRgbById: overrides.colorRgbById ?? {},
     colors: overrides.colors ?? {},
+    elementIdsByPartColor: overrides.elementIdsByPartColor ?? {},
     parts: overrides.parts ?? {},
   };
 }

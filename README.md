@@ -10,6 +10,22 @@ npm install
 npm run dev
 ```
 
+Part thumbnails use cached Rebrickable element images first. When that misses,
+the server renders an LDraw fallback by fetching only the needed official LDraw
+`.dat` files on demand. Set `BLOB_READ_WRITE_TOKEN` to persist rendered fallback
+SVGs in Vercel Blob. Without Blob, rendered fallbacks are cached only for the
+current server instance.
+
+Production builds require a fresh generated Rebrickable catalog cache. If the
+public Rebrickable bulk catalog CSVs cannot be downloaded and indexed,
+`npm run build` fails instead of deploying degraded catalog matching.
+
+`npm run ldraw:build` is optional for local offline fallback work. It downloads
+the official LDraw `complete.zip` library into the OS temp directory. Set
+`BAG_IT_LDRAW_CACHE_DIR` to override the cache location, or `LDRAW_LIBRARY_PATH`
+to point the runtime at an existing extracted library. When `LDRAW_LIBRARY_PATH`
+is set, `npm run ldraw:build` validates that library but does not modify it.
+
 ## Workflows
 
 ```sh
@@ -17,6 +33,7 @@ npm run lint
 npm run typecheck
 npm run test:run
 npm run build
+npm run ldraw:build
 npm run test:e2e
 npm run verify
 ```

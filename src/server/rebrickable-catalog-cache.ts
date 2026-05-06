@@ -45,15 +45,17 @@ function isRebrickableCatalogCacheIndex(
 ): value is RebrickableCatalogCacheIndex {
   return (
     isRecord(value) &&
-    value.schemaVersion === 3 &&
+    value.schemaVersion === 5 &&
     typeof value.generatedAt === "string" &&
     typeof value.checkedAt === "string" &&
     isRecord(value.sources) &&
     isRecord(value.sources.colors) &&
+    isRecord(value.sources.elements) &&
     isRecord(value.sources.parts) &&
     isRecord(value.sources.partRelationships) &&
     isRecord(value.colors) &&
     isRecord(value.colorRgbById) &&
+    isRecord(value.elementIdsByPartColor) &&
     isRecord(value.parts) &&
     isRecord(value.aliases)
   );

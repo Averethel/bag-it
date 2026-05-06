@@ -592,6 +592,7 @@ describe("extractPartListFromOcrPages", () => {
             partNumber: "49661pr0001",
             color: "15",
             colorName: "White",
+            colorRgb: "FFFFFF",
             quantity: 1,
             isSpare: false,
             catalogPart: {
@@ -620,6 +621,7 @@ describe("extractPartListFromOcrPages", () => {
             partNumber: "3040b",
             color: "71",
             colorName: "Light Bluish Gray",
+            colorRgb: "A0A5A9",
             quantity: 2,
             isSpare: false,
             catalogPart: {
@@ -649,6 +651,22 @@ describe("extractPartListFromOcrPages", () => {
       "49661pb01",
       "3040",
     ]);
+    expect(result.items[0]).toMatchObject({
+      catalogPart: expect.objectContaining({
+        name: "Torso with Print",
+        partNumber: "49661pr0001",
+      }),
+      colorRgb: "FFFFFF",
+      rebrickableColorId: "15",
+    });
+    expect(result.items[1]).toMatchObject({
+      catalogPart: expect.objectContaining({
+        name: "Slope 45 2 x 1",
+        partNumber: "3040b",
+      }),
+      colorRgb: "A0A5A9",
+      rebrickableColorId: "71",
+    });
     expect(result.validationSummary).toMatchObject({
       aliasMatches: 2,
       unmatchedRows: 0,
@@ -656,6 +674,168 @@ describe("extractPartListFromOcrPages", () => {
     expect(result.items[0]?.notes).toContain(
       "Rebrickable catalog suggests 49661pr0001 for OCR part 49661pb01.",
     );
+  });
+
+  it("hydrates CSV color ids from catalog colors during validation", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(12, [
+          "Parts List",
+          "1x 22388 PearlGold Decorative Ornament",
+        ]),
+      ],
+      {
+        catalogColorNamesById: {
+          "297": "Pearl Gold",
+        },
+        catalogColorRgbById: {
+          "297": "AA7F2E",
+        },
+        validationInventory: [
+          {
+            color: "297",
+            colorName: "297",
+            id: "csv-1",
+            isSpare: false,
+            partNumber: "22388",
+            quantity: 1,
+            sequence: 1,
+          },
+        ],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      colorName: "Pearl Gold",
+      colorRgb: "AA7F2E",
+      rebrickableColorId: "297",
+      validationStatus: "csv-exact-match",
+    });
+  });
+
+  it("adds Rebrickable color IDs from catalog color names for colored previews", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(12, [
+          "Parts List",
+          "2x 3001 Black Brick",
+          "4x 3040 Light Bluish Gray Slope",
+        ]),
+      ],
+      {
+        catalogValidationEnabled: true,
+        catalogColorIdsByName: {
+          black: "0",
+          "light bluish gray": "71",
+        },
+        candidateCatalogParts: [
+          {
+            requestedPartNumber: "3001",
+            partNumber: "3001",
+            name: "Brick 2 x 4",
+            partImageUrl: "/api/catalog/part-image?partNumber=3001",
+            partUrl: null,
+            aliases: [],
+          },
+          {
+            requestedPartNumber: "3040",
+            partNumber: "3040b",
+            name: "Slope 45 2 x 1",
+            partImageUrl: "/api/catalog/part-image?partNumber=3040b",
+            partUrl: null,
+            aliases: [
+              {
+                partNumber: "3040",
+                kind: "canonical",
+                source: "Rebrickable",
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      colorName: "Black",
+      partNumber: "3001",
+      rebrickableColorId: "0",
+    });
+    expect(result.items[1]).toMatchObject({
+      colorName: "Light Bluish Gray",
+      partNumber: "3040",
+      rebrickableColorId: "71",
+    });
+  });
+
+  it("prefers Rebrickable canonical catalog color names over local aliases", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(12, [
+          "Parts List",
+          "1x 20482 Trans Clear Tile Round",
+          "2x 30153 Trans-Orange Flame",
+        ]),
+      ],
+      {
+        catalogColorIdsByName: {
+          "trans clear": "47",
+          "trans orange": "182",
+        },
+        catalogColorNames: ["Trans-Clear", "Trans-Orange"],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      colorName: "Trans-Clear",
+      description: "Tile Round",
+      rebrickableColorId: "47",
+    });
+    expect(result.items[1]).toMatchObject({
+      colorName: "Trans-Orange",
+      description: "Flame",
+      rebrickableColorId: "182",
+    });
+  });
+
+  it("reads merged OCR color words as canonical catalog colors", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(12, [
+          "Parts List",
+          "1x 3040 LightBluishGray Slope",
+          "2x 4073 ReddishBrown Plate Round",
+          "3x 53454 PearlDarkGray Sword",
+        ]),
+      ],
+      {
+        catalogColorIdsByName: {
+          "light bluish gray": "71",
+          "pearl dark gray": "77",
+          "reddish brown": "70",
+        },
+        catalogColorNames: [
+          "Light Bluish Gray",
+          "Pearl Dark Gray",
+          "Reddish Brown",
+        ],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      colorName: "Light Bluish Gray",
+      description: "Slope",
+      rebrickableColorId: "71",
+    });
+    expect(result.items[1]).toMatchObject({
+      colorName: "Reddish Brown",
+      description: "Plate Round",
+      rebrickableColorId: "70",
+    });
+    expect(result.items[2]).toMatchObject({
+      colorName: "Pearl Dark Gray",
+      description: "Sword",
+      rebrickableColorId: "77",
+    });
   });
 
   it("does not let weak catalog aliases consume later exact CSV matches", () => {

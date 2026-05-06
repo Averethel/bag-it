@@ -224,8 +224,10 @@ describe("normalizeRebrickablePartsResponse", () => {
         parts: [],
         missingPartNumbers: ["30241b"],
         warnings: [],
+        colorIdsByName: {},
         colorNamesById: {},
         colorRgbById: {},
+        elementIdsByPartColor: {},
       },
       ["30241b"],
       createCatalogCache({
@@ -253,6 +255,8 @@ describe("normalizeRebrickablePartsResponse", () => {
       requestedPartNumber: "30241b",
       partNumber: "30241b",
       name: "Legacy bracket",
+      partImageUrl:
+        "/api/catalog/part-image?partNumber=30241b&source=rebrickable-cache-v1",
       aliases: [
         {
           partNumber: "60475b",
@@ -269,8 +273,10 @@ describe("normalizeRebrickablePartsResponse", () => {
         parts: [],
         missingPartNumbers: ["4589b"],
         warnings: [],
+        colorIdsByName: {},
         colorNamesById: {},
         colorRgbById: {},
+        elementIdsByPartColor: {},
       },
       ["4589b"],
       createCatalogCache({
@@ -300,6 +306,8 @@ describe("normalizeRebrickablePartsResponse", () => {
           requestedPartNumber: "4589b",
           partNumber: "59900",
           name: "Cone 1 x 1 with Top Groove",
+          partImageUrl:
+            "/api/catalog/part-image?partNumber=59900&source=rebrickable-cache-v1",
           aliases: expect.arrayContaining([
             {
               partNumber: "4589b",
@@ -322,12 +330,12 @@ function createCatalogCache(
   overrides: Partial<
     Pick<
       RebrickableCatalogCacheIndex,
-      "aliases" | "colorRgbById" | "colors" | "parts"
+      "aliases" | "colorRgbById" | "colors" | "elementIdsByPartColor" | "parts"
     >
   >,
 ): RebrickableCatalogCacheIndex {
   return {
-    schemaVersion: 3,
+    schemaVersion: 5,
     generatedAt: "2026-05-05T00:00:00.000Z",
     checkedAt: "2026-05-05T00:00:00.000Z",
     sources: {
@@ -338,6 +346,15 @@ function createCatalogCache(
         lastModified: "Tue, 05 May 2026 00:00:00 GMT",
         contentLength: "1",
         sha256: "colors-sha",
+        rowCount: 1,
+      },
+      elements: {
+        fileName: "elements.csv.gz",
+        url: "https://cdn.rebrickable.com/media/downloads/elements.csv.gz",
+        etag: "\"elements\"",
+        lastModified: "Tue, 05 May 2026 00:00:00 GMT",
+        contentLength: "1",
+        sha256: "elements-sha",
         rowCount: 1,
       },
       parts: {
@@ -361,6 +378,7 @@ function createCatalogCache(
     },
     colors: overrides.colors ?? {},
     colorRgbById: overrides.colorRgbById ?? {},
+    elementIdsByPartColor: overrides.elementIdsByPartColor ?? {},
     aliases: overrides.aliases ?? {},
     parts: overrides.parts ?? {},
   };

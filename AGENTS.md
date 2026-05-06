@@ -27,3 +27,8 @@ Non-negotiables:
 - Manual PDFs, rendered pages, and manual image crops must never be uploaded or
   persisted.
 - Bag allocation preserves build order and targets 40 to 60 pieces per bag.
+
+Local operations:
+
+- Agents may start, stop, and kill local development/production servers and
+  Playwright sessions without asking first.

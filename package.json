@@ -7,7 +7,8 @@
     "catalog:build": "node scripts/build-rebrickable-catalog-cache.mjs",
     "catalog:build:required": "node scripts/build-rebrickable-catalog-cache.mjs --required",
     "dev": "next dev --webpack",
-    "build": "npm run catalog:build -- --optional && next build --webpack",
+    "build": "npm run catalog:build:required && next build --webpack",
+    "ldraw:build": "node scripts/build-ldraw-library.mjs",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -29,6 +30,7 @@
   "dependencies": {
     "@chakra-ui/react": "3.35.0",
     "@emotion/react": "11.14.0",
+    "@vercel/blob": "2.3.3",
     "next": "16.2.4",
     "next-themes": "0.4.6",
     "pdfjs-dist": "4.10.38",

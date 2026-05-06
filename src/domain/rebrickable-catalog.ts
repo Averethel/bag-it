@@ -26,8 +26,10 @@ export type RebrickableCatalogFetchResult = {
   parts: RebrickableCatalogPart[];
   missingPartNumbers: string[];
   warnings: string[];
+  colorIdsByName: Record<string, string>;
   colorNamesById: Record<string, string>;
   colorRgbById: Record<string, string>;
+  elementIdsByPartColor: Record<string, Record<string, string[]>>;
 };
 
 export type RebrickableCatalogCachePart = {
@@ -47,16 +49,18 @@ export type RebrickableCatalogCacheSource = {
 };
 
 export type RebrickableCatalogCacheIndex = {
-  schemaVersion: 3;
+  schemaVersion: 5;
   generatedAt: string;
   checkedAt: string;
   sources: {
     colors: RebrickableCatalogCacheSource;
+    elements: RebrickableCatalogCacheSource;
     parts: RebrickableCatalogCacheSource;
     partRelationships: RebrickableCatalogCacheSource;
   };
   colors: Record<string, string>;
   colorRgbById: Record<string, string>;
+  elementIdsByPartColor: Record<string, Record<string, string[]>>;
   parts: Record<string, RebrickableCatalogCachePart>;
   aliases: Record<string, RebrickableCatalogAlias[]>;
 };
@@ -105,8 +109,10 @@ export function normalizeRebrickablePartsResponse(
     parts,
     missingPartNumbers,
     warnings: [],
+    colorIdsByName: {},
     colorNamesById: {},
     colorRgbById: {},
+    elementIdsByPartColor: {},
   };
 }
 
@@ -173,8 +179,10 @@ export function enrichRebrickablePartsWithCatalogCache(
   return {
     ...result,
     parts,
+    colorIdsByName: createColorIdsByName(catalogCache.colors),
     colorNamesById: catalogCache.colors,
     colorRgbById: catalogCache.colorRgbById,
+    elementIdsByPartColor: catalogCache.elementIdsByPartColor,
     missingPartNumbers: [...requestedPartNumberSet].filter(
       (partNumber) => !returnedWithCachePartNumberSet.has(partNumber),
     ),
@@ -193,8 +201,10 @@ export async function fetchRebrickableCatalogParts(
       parts: [],
       missingPartNumbers: [],
       warnings: [],
+      colorIdsByName: {},
       colorNamesById: {},
       colorRgbById: {},
+      elementIdsByPartColor: {},
     };
   }
 
@@ -217,9 +227,30 @@ export async function fetchRebrickableCatalogParts(
     parts: payload?.parts ?? [],
     missingPartNumbers: payload?.missingPartNumbers ?? [],
     warnings: payload?.warnings ?? [],
+    colorIdsByName: payload?.colorIdsByName ?? {},
     colorNamesById: payload?.colorNamesById ?? {},
     colorRgbById: payload?.colorRgbById ?? {},
+    elementIdsByPartColor: payload?.elementIdsByPartColor ?? {},
   };
+}
+
+export function createColorIdsByName(colorNamesById: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(colorNamesById).flatMap(([colorId, colorName]) => {
+      const normalizedName = normalizeColorNameLookupKey(colorName);
+
+      return normalizedName ? [[normalizedName, colorId]] : [];
+    }),
+  );
+}
+
+export function normalizeColorNameLookupKey(colorName: string) {
+  return colorName
+    .toLowerCase()
+    .replace(/\bgrey\b/g, "gray")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function createCatalogPartLookup(catalogParts: RebrickableCatalogPart[]) {
@@ -319,7 +350,7 @@ function createDirectCatalogPartFromCache(
     partNumber: requestedPartNumber,
     name: cachedPart?.name ?? null,
     partUrl: null,
-    partImageUrl: null,
+    partImageUrl: createLocalCatalogPartImageUrl(requestedPartNumber),
     aliases,
   };
 }
@@ -343,7 +374,7 @@ function createAliasTargetCatalogPartFromCache(
       partNumber: targetPartNumber,
       name: cachedPart.name,
       partUrl: null,
-      partImageUrl: null,
+      partImageUrl: createLocalCatalogPartImageUrl(targetPartNumber),
       aliases: dedupeCatalogAliases([
         {
           partNumber: requestedPartNumber,
@@ -363,6 +394,10 @@ function createAliasTargetCatalogPartFromCache(
       ]),
     },
   ];
+}
+
+function createLocalCatalogPartImageUrl(partNumber: string) {
+  return `/api/catalog/part-image?partNumber=${encodeURIComponent(partNumber)}&source=rebrickable-cache-v1`;
 }
 
 function collectCacheLookupRoots(partNumber: string) {

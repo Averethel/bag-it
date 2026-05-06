@@ -1,5 +1,6 @@
 import type { RebrickableInventoryItem } from "./rebrickable-csv";
 import type { RebrickableCatalogPart } from "./rebrickable-catalog";
+import { normalizeColorNameLookupKey } from "./rebrickable-catalog";
 import { describeRebrickableColor } from "./rebrickable-csv";
 import {
   scoreVisualPartDescriptorMatch,
@@ -55,8 +56,11 @@ export type ExtractedPartListItem = {
   partNumber: string | null;
   ocrPartNumber?: string | null;
   colorName: string | null;
+  colorRgb?: string | null;
   ocrColorName?: string | null;
   description: string | null;
+  catalogPart?: RebrickableCatalogPart;
+  rebrickableColorId?: string | null;
   confidence: number | null;
   status: "complete" | "needs-review";
   rawText: string;
@@ -95,6 +99,9 @@ export type PartListValidationSummary = {
 
 export type PartListExtractionOptions = {
   catalogValidationEnabled?: boolean;
+  catalogColorIdsByName?: Record<string, string>;
+  catalogColorNamesById?: Record<string, string>;
+  catalogColorRgbById?: Record<string, string>;
   candidateCatalogParts?: RebrickableCatalogPart[];
   catalogColorNames?: string[];
   validationInventory?: RebrickableInventoryItem[];
@@ -201,12 +208,21 @@ export function extractPartListFromOcrPages(
   pages: OcrPageText[],
   options: PartListExtractionOptions = {},
 ): PartListExtractionResult {
+  const validationInventory = hydrateValidationInventoryColors(
+    options.validationInventory ?? [],
+    options.catalogColorNamesById ?? {},
+    options.catalogColorRgbById ?? {},
+  );
+  const extractionOptions: PartListExtractionOptions = {
+    ...options,
+    ...(options.validationInventory ? { validationInventory } : {}),
+  };
   const colorVocabulary = createColorVocabulary(
-    options.validationInventory,
+    validationInventory,
     options.catalogColorNames,
   );
   const pageCandidates = pages
-    .map((page) => parsePageCandidates(page, colorVocabulary, options))
+    .map((page) => parsePageCandidates(page, colorVocabulary, extractionOptions))
     .filter((candidate) => candidate.items.length > 0)
     .sort((left, right) => left.pageNumber - right.pageNumber);
   const candidatePageNumbers = pageCandidates.map((candidate) => candidate.pageNumber);
@@ -220,17 +236,21 @@ export function extractPartListFromOcrPages(
       id: `part-list-item-${index + 1}`,
       sequence: index + 1,
     }));
-  const validationResult = options.validationInventory?.length
-    ? validateItemsAgainstCsvInventory(extractedItems, options.validationInventory, {
-        candidateCatalogParts: options.candidateCatalogParts ?? [],
+  const validationResult = validationInventory.length
+    ? validateItemsAgainstCsvInventory(extractedItems, validationInventory, {
+        candidateCatalogParts: extractionOptions.candidateCatalogParts ?? [],
       })
-    : options.catalogValidationEnabled || options.candidateCatalogParts?.length
+    : extractionOptions.catalogValidationEnabled ||
+        extractionOptions.candidateCatalogParts?.length
       ? validateItemsAgainstCatalog(
           extractedItems,
-          options.candidateCatalogParts ?? [],
+          extractionOptions.candidateCatalogParts ?? [],
         )
       : null;
-  const items = validationResult?.items ?? extractedItems;
+  const items = attachRebrickableColorIds(
+    validationResult?.items ?? extractedItems,
+    extractionOptions.catalogColorIdsByName ?? {},
+  );
   const warnings: string[] = [];
 
   if (candidatePageNumbers.length === 0) {
@@ -251,6 +271,62 @@ export function extractPartListFromOcrPages(
     warnings,
     ...(validationResult ? { validationSummary: validationResult.summary } : {}),
   };
+}
+
+function hydrateValidationInventoryColors(
+  inventory: RebrickableInventoryItem[],
+  catalogColorNamesById: Record<string, string>,
+  catalogColorRgbById: Record<string, string>,
+) {
+  if (
+    inventory.length === 0 ||
+    (Object.keys(catalogColorNamesById).length === 0 &&
+      Object.keys(catalogColorRgbById).length === 0)
+  ) {
+    return inventory;
+  }
+
+  return inventory.map((inventoryItem) => {
+    const colorId = inventoryItem.color.trim();
+    const catalogColorName = catalogColorNamesById[colorId];
+    const catalogColorRgb = catalogColorRgbById[colorId];
+
+    return catalogColorName || catalogColorRgb
+      ? {
+          ...inventoryItem,
+          ...(catalogColorName ? { colorName: catalogColorName } : {}),
+          ...(catalogColorRgb ? { colorRgb: catalogColorRgb } : {}),
+        }
+      : inventoryItem;
+  });
+}
+
+function attachRebrickableColorIds(
+  items: ExtractedPartListItem[],
+  catalogColorIdsByName: Record<string, string>,
+) {
+  if (Object.keys(catalogColorIdsByName).length === 0) {
+    return items;
+  }
+
+  const normalizedColorIdsByName = Object.fromEntries(
+    Object.entries(catalogColorIdsByName).map(([colorName, colorId]) => [
+      normalizeColorNameLookupKey(colorName),
+      colorId,
+    ]),
+  );
+
+  return items.map((item) => {
+    if (item.rebrickableColorId || !item.colorName) {
+      return item;
+    }
+
+    const colorId = normalizedColorIdsByName[
+      normalizeColorNameLookupKey(item.colorName)
+    ]?.trim();
+
+    return colorId ? { ...item, rebrickableColorId: colorId } : item;
+  });
 }
 
 export function summarizePartsListPage(page: OcrPageText): PartsListPageSummary {
@@ -1135,6 +1211,13 @@ function validateItemsAgainstCsvInventory(
     return {
       ...item,
       partNumber: validatedPartNumber,
+      ...(match.inventoryItem.catalogPart
+        ? { catalogPart: match.inventoryItem.catalogPart }
+        : {}),
+      ...(match.inventoryItem.colorRgb
+        ? { colorRgb: match.inventoryItem.colorRgb }
+        : {}),
+      rebrickableColorId: match.inventoryItem.color,
       ...(item.partNumber !== validatedPartNumber
         ? { ocrPartNumber: item.partNumber }
         : {}),
@@ -1208,6 +1291,7 @@ function validateItemsAgainstCatalog(
     return {
       ...item,
       partNumber: validatedPartNumber ?? match.catalogPart.partNumber,
+      catalogPart: match.catalogPart,
       ...(validatedPartNumber !== item.partNumber
         ? { ocrPartNumber: item.partNumber }
         : {}),
@@ -2397,24 +2481,37 @@ function createColorVocabulary(
   inventory: RebrickableInventoryItem[] = [],
   catalogColorNames: string[] = [],
 ) {
-  const colorNames = new Set(defaultColorNames);
+  const colorNames: string[] = [];
+  const seenColorNames = new Set<string>();
+  const addColorName = (colorName: string | null | undefined) => {
+    const normalizedColorName = colorName?.trim();
 
-  catalogColorNames.forEach((colorName) => {
-    if (colorName.trim()) {
-      colorNames.add(colorName);
+    if (!normalizedColorName) {
+      return;
     }
-  });
+
+    const dedupeKey = normalizeColorName(normalizedColorName);
+
+    if (seenColorNames.has(dedupeKey)) {
+      return;
+    }
+
+    seenColorNames.add(dedupeKey);
+    colorNames.push(normalizedColorName);
+  };
+
+  catalogColorNames.forEach(addColorName);
 
   inventory.forEach((inventoryItem) => {
     const inventoryColorName =
       inventoryItem.colorName ?? describeRebrickableColor(inventoryItem.color);
 
-    if (inventoryColorName) {
-      colorNames.add(inventoryColorName);
-    }
+    addColorName(inventoryColorName);
   });
 
-  const entries = [...colorNames].flatMap((colorName) =>
+  defaultColorNames.forEach(addColorName);
+
+  const entries = colorNames.flatMap((colorName) =>
     createColorNameVariants(colorName).map((matchName) => ({
       colorName,
       matchName,
@@ -2425,7 +2522,9 @@ function createColorVocabulary(
 
   return entries
     .filter((entry) => {
-      const normalizedMatchName = normalizeColorName(entry.matchName);
+      const normalizedMatchName = normalizeColorMatchNameDedupeKey(
+        entry.matchName,
+      );
 
       if (!normalizedMatchName || seenMatchNames.has(normalizedMatchName)) {
         return false;
@@ -2435,6 +2534,14 @@ function createColorVocabulary(
       return true;
     })
     .sort((left, right) => right.matchName.length - left.matchName.length);
+}
+
+function normalizeColorMatchNameDedupeKey(matchName: string) {
+  return matchName
+    .toLowerCase()
+    .replace(/\bgrey\b/g, "gray")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function createColorNameVariants(colorName: string) {
@@ -2450,6 +2557,10 @@ function createColorNameVariants(colorName: string) {
   variants.add(normalizedColorName.replace(/\s+/g, "-"));
 
   [...variants].forEach((variant) => {
+    if (/[-\s]/.test(variant)) {
+      variants.add(variant.replace(/[-\s]+/g, ""));
+    }
+
     if (/\bgray\b/i.test(variant)) {
       variants.add(variant.replace(/\bgray\b/gi, "Grey"));
     }
@@ -2527,7 +2638,7 @@ function extractColorMatches(
         tokens: colorName.tokens,
       })),
     )
-    .sort((left, right) => left.index - right.index)
+    .sort((left, right) => left.index - right.index || right.length - left.length)
     .filter(
       (match, index, matches) =>
         !matches
@@ -2535,8 +2646,8 @@ function extractColorMatches(
           .some(
             (previousMatch) =>
               previousMatch.index <= match.index &&
-              previousMatch.index + previousMatch.matchName.length >=
-                match.index + match.matchName.length,
+              previousMatch.index + previousMatch.length >=
+                match.index + match.length,
           ),
     );
 }
@@ -2676,10 +2787,7 @@ function extractDescription(
   }
 
   if (colorName) {
-    description = description.replace(
-      new RegExp(`\\b${escapeRegExp(colorName)}\\b`, "gi"),
-      " ",
-    );
+    description = removeColorNameFromDescription(description, colorName);
   }
 
   description = description
@@ -2689,6 +2797,16 @@ function extractDescription(
   description = stripLeadingOcrNoise(description);
 
   return description.length > 0 ? description : null;
+}
+
+function removeColorNameFromDescription(description: string, colorName: string) {
+  return createColorNameVariants(colorName)
+    .sort((left, right) => right.length - left.length)
+    .reduce(
+      (currentDescription, colorVariant) =>
+        currentDescription.replace(createColorMatchPattern(colorVariant), " "),
+      description,
+    );
 }
 
 function stripLeadingOcrNoise(description: string) {

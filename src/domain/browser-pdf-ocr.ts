@@ -11,7 +11,10 @@ import {
   type OcrTextWord,
   type PartListExtractionResult,
 } from "./part-list-extraction";
-import type { RebrickableInventoryItem } from "./rebrickable-csv";
+import {
+  normalizePartNumber,
+  type RebrickableInventoryItem,
+} from "./rebrickable-csv";
 import {
   attachCatalogImageDescriptorsToInventory,
   createVisualPartDescriptorFromImageData,
@@ -265,6 +268,9 @@ export async function extractPartListFromPdfSession(
       options,
     );
     const candidateCatalogParts = catalogResult?.parts ?? [];
+    const catalogColorIdsByName = catalogResult?.colorIdsByName ?? {};
+    const catalogColorNamesById = catalogResult?.colorNamesById ?? {};
+    const catalogColorRgbById = catalogResult?.colorRgbById ?? {};
     const catalogColorNames = Object.values(catalogResult?.colorNamesById ?? {});
     const descriptorEnrichedInventory = await enrichRelevantCatalogImageDescriptors(
       initialExtractionResult,
@@ -277,6 +283,9 @@ export async function extractPartListFromPdfSession(
               ? { catalogValidationEnabled: true }
               : {}),
             candidateCatalogParts,
+            catalogColorIdsByName,
+            catalogColorNamesById,
+            catalogColorRgbById,
             catalogColorNames,
             ...(descriptorEnrichedInventory !== null
               ? { validationInventory: descriptorEnrichedInventory }
@@ -344,8 +353,15 @@ async function fetchOcrCatalogPartsForExtraction(
     extractionResult,
     Boolean(options.validationInventory?.length),
   );
+  const shouldLoadCatalogColors =
+    candidatePartNumbers.length === 0 && Boolean(options.validationInventory?.length);
+  const catalogPartNumbers = shouldLoadCatalogColors
+    ? collectValidationInventoryCatalogPartNumbers(
+        options.validationInventory ?? [],
+      ).slice(0, 1)
+    : candidatePartNumbers;
 
-  if (candidatePartNumbers.length === 0) {
+  if (catalogPartNumbers.length === 0) {
     return null;
   }
 
@@ -354,12 +370,14 @@ async function fetchOcrCatalogPartsForExtraction(
     pageNumber: null,
     pageCount: null,
     progress: null,
-    message: options.validationInventory?.length
+    message: shouldLoadCatalogColors
+      ? "Checking Rebrickable catalog colors"
+      : options.validationInventory?.length
       ? "Checking unmatched OCR part numbers"
       : "Checking OCR part numbers against Rebrickable catalog",
   });
 
-  return options.fetchCatalogParts(candidatePartNumbers);
+  return options.fetchCatalogParts(catalogPartNumbers);
 }
 
 function toErrorMessage(error: unknown) {
@@ -380,6 +398,18 @@ export function collectCatalogCandidatePartNumbers(
         .filter((partNumber): partNumber is string => Boolean(partNumber)),
     ),
   ];
+}
+
+function collectValidationInventoryCatalogPartNumbers(
+  validationInventory: RebrickableInventoryItem[],
+) {
+  return [
+    ...new Set(
+      validationInventory
+        .map((inventoryItem) => normalizePartNumber(inventoryItem.partNumber))
+        .filter(Boolean),
+    ),
+  ].sort();
 }
 
 async function enrichRelevantCatalogImageDescriptors(

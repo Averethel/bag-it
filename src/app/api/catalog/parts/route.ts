@@ -30,11 +30,34 @@ export async function POST(request: Request) {
   }
 
   const catalogCachePromise = readGeneratedRebrickableCatalogCache();
+  const catalogCache = await catalogCachePromise;
+  const liveCatalogEnabled = process.env.REBRICKABLE_LIVE_CATALOG === "1";
+
+  if (catalogCache && !liveCatalogEnabled) {
+    return NextResponse.json(
+      withLocalPartImageRoutes(
+        enrichRebrickablePartsWithCatalogCache(
+          createEmptyCatalogFetchResult(),
+          partNumbers,
+          catalogCache,
+        ),
+      ),
+    );
+  }
+
+  if (!liveCatalogEnabled) {
+    return NextResponse.json(
+      {
+        error:
+          "Generated catalog cache is unavailable. Run npm run catalog:build before catalog lookup.",
+      },
+      { status: 503 },
+    );
+  }
+
   const apiKey = process.env.REBRICKABLE_API_KEY?.trim();
 
   if (!apiKey) {
-    const catalogCache = await catalogCachePromise;
-
     if (catalogCache) {
       return NextResponse.json(
         withLocalPartImageRoutes(
@@ -63,6 +86,16 @@ export async function POST(request: Request) {
     });
 
     if (!response.ok) {
+      const cachedFallback = await createCachedCatalogFallback(
+        partNumbers,
+        catalogCachePromise,
+        `Live catalog request failed with HTTP ${response.status}; using generated catalog cache.`,
+      );
+
+      if (cachedFallback) {
+        return cachedFallback;
+      }
+
       return NextResponse.json(
         {
           error: `Catalog request failed with HTTP ${response.status}.`,
@@ -71,9 +104,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const [payload, catalogCache] = await Promise.all([
+    const [payload, generatedCatalogCache] = await Promise.all([
       response.json() as Promise<unknown>,
-      catalogCachePromise,
+      Promise.resolve(catalogCache),
     ]);
     const normalizedResult = normalizeRebrickablePartsResponse(partNumbers, payload);
 
@@ -82,11 +115,21 @@ export async function POST(request: Request) {
         enrichRebrickablePartsWithCatalogCache(
           normalizedResult,
           partNumbers,
-          catalogCache,
+          generatedCatalogCache,
         ),
       ),
     );
   } catch (error) {
+    const cachedFallback = await createCachedCatalogFallback(
+      partNumbers,
+      catalogCachePromise,
+      `Live catalog request failed: ${toCatalogErrorMessage(error)}; using generated catalog cache.`,
+    );
+
+    if (cachedFallback) {
+      return cachedFallback;
+    }
+
     return NextResponse.json(
       { error: toCatalogErrorMessage(error) },
       { status: 502 },
@@ -139,9 +182,34 @@ function createEmptyCatalogFetchResult(): RebrickableCatalogFetchResult {
     parts: [],
     missingPartNumbers: [],
     warnings: [],
+    colorIdsByName: {},
     colorNamesById: {},
     colorRgbById: {},
+    elementIdsByPartColor: {},
   };
+}
+
+async function createCachedCatalogFallback(
+  partNumbers: string[],
+  catalogCachePromise: Promise<Awaited<ReturnType<typeof readGeneratedRebrickableCatalogCache>>>,
+  warning: string,
+) {
+  const catalogCache = await catalogCachePromise;
+
+  if (!catalogCache) {
+    return null;
+  }
+
+  return NextResponse.json(
+    withLocalPartImageRoutes({
+      ...enrichRebrickablePartsWithCatalogCache(
+        createEmptyCatalogFetchResult(),
+        partNumbers,
+        catalogCache,
+      ),
+      warnings: [warning],
+    }),
+  );
 }
 
 function withLocalPartImageRoutes(
@@ -153,7 +221,7 @@ function withLocalPartImageRoutes(
       part.partImageUrl
         ? {
             ...part,
-            partImageUrl: `/api/catalog/part-image?partNumber=${encodeURIComponent(part.partNumber)}`,
+            partImageUrl: `/api/catalog/part-image?partNumber=${encodeURIComponent(part.partNumber)}&source=rebrickable-cache-v1`,
           }
         : part,
     ),

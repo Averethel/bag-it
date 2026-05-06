@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
-const schemaVersion = 3;
+const schemaVersion = 5;
 const freshnessWindowMs = 24 * 60 * 60 * 1000;
 const cacheDir = path.join(process.cwd(), ".cache", "rebrickable-catalog");
 const outputPath = path.join(cacheDir, "catalog-index.json");
@@ -16,6 +16,10 @@ const sources = {
   colors: {
     fileName: "colors.csv.gz",
     url: "https://cdn.rebrickable.com/media/downloads/colors.csv.gz",
+  },
+  elements: {
+    fileName: "elements.csv.gz",
+    url: "https://cdn.rebrickable.com/media/downloads/elements.csv.gz",
   },
   parts: {
     fileName: "parts.csv.gz",
@@ -53,15 +57,18 @@ async function main() {
   log("Downloading Rebrickable catalogue CSV files.");
 
   let colorsSource;
+  let elementsSource;
   let partsSource;
   let relationshipsSource;
 
   try {
-    [colorsSource, partsSource, relationshipsSource] = await Promise.all([
-      downloadSource("colors", sources.colors.url),
-      downloadSource("parts", sources.parts.url),
-      downloadSource("partRelationships", sources.partRelationships.url),
-    ]);
+    [colorsSource, elementsSource, partsSource, relationshipsSource] =
+      await Promise.all([
+        downloadSource("colors", sources.colors.url),
+        downloadSource("elements", sources.elements.url),
+        downloadSource("parts", sources.parts.url),
+        downloadSource("partRelationships", sources.partRelationships.url),
+      ]);
   } catch (error) {
     if (existingIndex) {
       log(`Using stale Rebrickable catalogue cache. ${toErrorMessage(error)}`);
@@ -81,6 +88,9 @@ async function main() {
   log("Building Rebrickable color index.");
   const colors = buildColorsIndex(colorsSource.text);
 
+  log("Building Rebrickable element image index.");
+  const elementIdsByPartColor = buildElementImageIndex(elementsSource.text);
+
   log("Building Rebrickable part metadata index.");
   const parts = buildPartsIndex(partsSource.text);
 
@@ -97,6 +107,11 @@ async function main() {
         ...colorsSource.metadata,
         rowCount: Object.keys(colors.namesById).length,
       },
+      elements: {
+        ...sources.elements,
+        ...elementsSource.metadata,
+        rowCount: countDataRows(elementsSource.text),
+      },
       parts: {
         ...sources.parts,
         ...partsSource.metadata,
@@ -110,6 +125,7 @@ async function main() {
     },
     colors: colors.namesById,
     colorRgbById: colors.rgbById,
+    elementIdsByPartColor,
     parts,
     aliases,
   };
@@ -119,7 +135,7 @@ async function main() {
   await rename(tempOutputPath, outputPath);
 
   log(
-    `Wrote ${path.relative(process.cwd(), outputPath)} with ${Object.keys(colors.namesById).length} colors, ${Object.keys(parts).length} parts, and ${Object.keys(aliases).length} alias roots.`,
+    `Wrote ${path.relative(process.cwd(), outputPath)} with ${Object.keys(colors.namesById).length} colors, ${countElementColorPairs(elementIdsByPartColor)} part-color images, ${Object.keys(parts).length} parts, and ${Object.keys(aliases).length} alias roots.`,
   );
 }
 
@@ -292,6 +308,59 @@ function buildPartsIndex(csvText) {
   return parts;
 }
 
+function buildElementImageIndex(csvText) {
+  const elementIdsByPartColor = new Map();
+  const rows = parseCsvRows(csvText);
+  const headers = createHeaderLookup(rows.shift() ?? []);
+
+  const elementIdIndex = headers.get("element_id");
+  const partNumberIndex = headers.get("part_num");
+  const colorIdIndex = headers.get("color_id");
+
+  if (
+    elementIdIndex === undefined ||
+    partNumberIndex === undefined ||
+    colorIdIndex === undefined
+  ) {
+    throw new Error(
+      "elements.csv is missing required element_id, part_num, or color_id columns.",
+    );
+  }
+
+  rows.forEach((row) => {
+    const elementId = normalizeElementId(row[elementIdIndex] ?? "");
+    const partNumber = normalizePartNumber(row[partNumberIndex] ?? "");
+    const colorId = (row[colorIdIndex] ?? "").trim();
+
+    if (!elementId || !partNumber || !colorId) {
+      return;
+    }
+
+    const colorElementIds = elementIdsByPartColor.get(partNumber) ?? new Map();
+    const existingElementIds = colorElementIds.get(colorId) ?? [];
+
+    if (!existingElementIds.includes(elementId)) {
+      existingElementIds.push(elementId);
+      colorElementIds.set(colorId, existingElementIds);
+    }
+
+    elementIdsByPartColor.set(partNumber, colorElementIds);
+  });
+
+  return Object.fromEntries(
+    [...elementIdsByPartColor.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([partNumber, colorElementIds]) => [
+        partNumber,
+        Object.fromEntries(
+          [...colorElementIds.entries()].sort(([left], [right]) =>
+            compareColorIds(left, right),
+          ),
+        ),
+      ]),
+  );
+}
+
 function buildRelationshipAliasIndex(csvText) {
   const aliases = new Map();
   const rows = parseCsvRows(csvText);
@@ -429,6 +498,30 @@ function createHeaderLookup(headers) {
 
 function normalizePartNumber(partNumber) {
   return partNumber.trim().toLowerCase();
+}
+
+function normalizeElementId(elementId) {
+  const normalizedElementId = elementId.trim();
+
+  return /^[a-z0-9_-]+$/i.test(normalizedElementId) ? normalizedElementId : null;
+}
+
+function compareColorIds(left, right) {
+  const numericLeft = Number(left);
+  const numericRight = Number(right);
+
+  if (Number.isFinite(numericLeft) && Number.isFinite(numericRight)) {
+    return numericLeft - numericRight;
+  }
+
+  return left.localeCompare(right);
+}
+
+function countElementColorPairs(elementIdsByPartColor) {
+  return Object.values(elementIdsByPartColor).reduce(
+    (count, colorElementIds) => count + Object.keys(colorElementIds).length,
+    0,
+  );
 }
 
 function normalizeNullableString(value) {

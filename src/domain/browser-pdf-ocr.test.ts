@@ -183,6 +183,56 @@ describe("collectCatalogCandidatePartNumbers", () => {
 });
 
 describe("fetchOptionalOcrCatalogPartsForExtraction", () => {
+  it("fetches catalog data for CSV color hydration when all OCR rows matched CSV", async () => {
+    let requestedPartNumbers: string[] = [];
+
+    const result = await fetchOptionalOcrCatalogPartsForExtraction(
+      extractionResult(
+        item({
+          partNumber: "3001",
+          validationStatus: "csv-exact-match",
+        }),
+      ),
+      {
+        fetchCatalogParts: async (partNumbers) => {
+          requestedPartNumbers = partNumbers;
+
+          return {
+            colorIdsByName: {
+              "pearl gold": "297",
+            },
+            colorNamesById: {
+              "297": "Pearl Gold",
+            },
+            colorRgbById: {
+              "297": "AA7F2E",
+            },
+            elementIdsByPartColor: {},
+            missingPartNumbers: [],
+            parts: [],
+            warnings: [],
+          };
+        },
+        validationInventory: [
+          {
+            color: "297",
+            colorName: "297",
+            id: "csv-1",
+            isSpare: false,
+            partNumber: "22388",
+            quantity: 1,
+            sequence: 1,
+          },
+        ],
+      },
+    );
+
+    expect(requestedPartNumbers).toEqual(["22388"]);
+    expect(result.catalogResult?.colorNamesById).toEqual({
+      "297": "Pearl Gold",
+    });
+  });
+
   it("keeps OCR extraction usable when catalog lookup fails", async () => {
     const result = await fetchOptionalOcrCatalogPartsForExtraction(
       extractionResult(item({ partNumber: "3001" })),
