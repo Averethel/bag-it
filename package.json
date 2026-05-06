@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "catalog:build": "node scripts/build-rebrickable-catalog-cache.mjs",
+    "catalog:build:required": "node scripts/build-rebrickable-catalog-cache.mjs --required",
     "dev": "next dev --webpack",
-    "build": "npm run catalog:build && next build --webpack",
+    "build": "npm run catalog:build -- --optional && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

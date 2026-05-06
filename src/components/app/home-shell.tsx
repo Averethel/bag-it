@@ -1175,7 +1175,7 @@ function formatByteSize(byteLength: number) {
 
 function formatOcrProgress(progress: PdfOcrProgress) {
   const pageStatus =
-    progress.pageNumber && progress.pageCount
+    progress.pageNumber !== null && progress.pageCount !== null
       ? `Page ${progress.pageNumber} of ${progress.pageCount}`
       : "Preparing";
   const percent =

@@ -8,6 +8,9 @@ const freshnessWindowMs = 24 * 60 * 60 * 1000;
 const cacheDir = path.join(process.cwd(), ".cache", "rebrickable-catalog");
 const outputPath = path.join(cacheDir, "catalog-index.json");
 const tempOutputPath = path.join(cacheDir, "catalog-index.json.tmp");
+const requireCatalogCache = process.argv.includes("--required");
+const allowMissingCatalogCache =
+  process.argv.includes("--optional") && !requireCatalogCache;
 
 const sources = {
   colors: {
@@ -62,6 +65,13 @@ async function main() {
   } catch (error) {
     if (existingIndex) {
       log(`Using stale Rebrickable catalogue cache. ${toErrorMessage(error)}`);
+      return;
+    }
+
+    if (allowMissingCatalogCache) {
+      log(
+        `Could not generate Rebrickable catalogue cache; continuing without it. ${toErrorMessage(error)}`,
+      );
       return;
     }
 
@@ -153,9 +163,9 @@ async function readRemoteMetadata(existingIndex) {
           },
         ];
       } catch (error) {
-        if (existingIndex) {
+        if (existingIndex || allowMissingCatalogCache) {
           log(
-            `Could not validate ${source.fileName}; using stale cache if no download succeeds. ${toErrorMessage(error)}`,
+            `Could not validate ${source.fileName}; will try to download it next. ${toErrorMessage(error)}`,
           );
           return [key, null];
         }

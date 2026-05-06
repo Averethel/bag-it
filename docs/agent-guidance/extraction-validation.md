@@ -19,11 +19,13 @@ flow with:
 npm run catalog:build
 ```
 
-`npm run build` runs the catalog build first and bundles the generated
+`npm run build` runs the catalog build first in optional mode and bundles the generated
 `.cache/rebrickable-catalog/catalog-index.json` file into the catalog route
 handler output. The generated cache may contain public Rebrickable color names,
 catalog rows, and relationship aliases, but it must never contain manual PDF
 content, rendered manual pages, image crops, or OCR output from user manuals.
+Use `npm run catalog:build:required` when a deployment or maintenance job must
+fail unless the catalog cache is generated successfully.
 
 For now, keep this as a build/development cache so we can prove matching quality.
 Once the approach is validated, move catalog generation to a scheduled job that

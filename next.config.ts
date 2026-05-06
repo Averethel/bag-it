@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["localhost", "127.0.0.1", "[::1]"],
   experimental: {
     optimizePackageImports: ["@chakra-ui/react"],
   },
