@@ -198,7 +198,7 @@ export async function fetchRebrickableCatalogParts(
     };
   }
 
-  const response = await fetch("/api/rebrickable/parts", {
+  const response = await fetch("/api/catalog/parts", {
     body: JSON.stringify({ partNumbers: requestedPartNumbers }),
     headers: {
       "Content-Type": "application/json",

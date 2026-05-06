@@ -150,75 +150,78 @@ export async function attachCatalogImageDescriptorsToInventory(
     shouldAttach?: (inventoryItem: RebrickableInventoryItem) => boolean;
   } = {},
 ) {
-  const descriptorByUrl = new Map<string, VisualPartDescriptor | null>();
+  const descriptorByPartNumber = new Map<string, VisualPartDescriptor | null>();
   const targetItems = inventory.filter((inventoryItem) => {
-    const imageUrl = inventoryItem.catalogPart?.partImageUrl;
+    const partNumber = inventoryItem.catalogPart?.partNumber;
 
-    return Boolean(imageUrl) && (options.shouldAttach?.(inventoryItem) ?? true);
+    return Boolean(partNumber) && (options.shouldAttach?.(inventoryItem) ?? true);
   });
 
   await runWithConcurrency(
     [
       ...new Set(
         targetItems.flatMap((item) => {
-          const imageUrl = item.catalogPart?.partImageUrl;
+          const partNumber = item.catalogPart?.partNumber;
 
-          return imageUrl ? [imageUrl] : [];
+          return partNumber ? [partNumber] : [];
         }),
       ),
     ],
     4,
-    async (imageUrl) => {
-      descriptorByUrl.set(imageUrl, await fetchCatalogImageDescriptor(imageUrl));
+    async (partNumber) => {
+      descriptorByPartNumber.set(
+        partNumber,
+        await fetchCatalogImageDescriptor(partNumber),
+      );
     },
   );
 
   return inventory.map((inventoryItem) => {
-    const imageUrl = inventoryItem.catalogPart?.partImageUrl;
+    const partNumber = inventoryItem.catalogPart?.partNumber;
 
-    if (!imageUrl || !descriptorByUrl.has(imageUrl)) {
+    if (!partNumber || !descriptorByPartNumber.has(partNumber)) {
       return inventoryItem;
     }
 
     return {
       ...inventoryItem,
-      catalogImageDescriptor: descriptorByUrl.get(imageUrl) ?? null,
+      catalogImageDescriptor: descriptorByPartNumber.get(partNumber) ?? null,
     };
   });
 }
 
-async function fetchCatalogImageDescriptor(imageUrl: string) {
-  const cachedDescriptor = descriptorCache.get(imageUrl);
+async function fetchCatalogImageDescriptor(partNumber: string) {
+  const cachedDescriptor = descriptorCache.get(partNumber);
 
   if (cachedDescriptor) {
     return cachedDescriptor;
   }
 
-  const descriptorPromise = fetchCatalogImageDescriptorUncached(imageUrl).then(
+  const descriptorPromise = fetchCatalogImageDescriptorUncached(partNumber).then(
     (descriptor) => {
       if (descriptor === null) {
-        descriptorCache.delete(imageUrl);
+        descriptorCache.delete(partNumber);
       }
 
       return descriptor;
     },
     (error: unknown) => {
-      descriptorCache.delete(imageUrl);
+      descriptorCache.delete(partNumber);
       throw error;
     },
   );
-  descriptorCache.set(imageUrl, descriptorPromise);
+  descriptorCache.set(partNumber, descriptorPromise);
 
   return descriptorPromise;
 }
 
-async function fetchCatalogImageDescriptorUncached(imageUrl: string) {
+async function fetchCatalogImageDescriptorUncached(partNumber: string) {
   if (typeof document === "undefined") {
     return null;
   }
 
   const response = await fetch(
-    `/api/rebrickable/image?url=${encodeURIComponent(imageUrl)}`,
+    `/api/catalog/part-image?partNumber=${encodeURIComponent(partNumber)}`,
   );
 
   if (!response.ok) {

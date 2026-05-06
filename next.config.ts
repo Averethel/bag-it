@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["@chakra-ui/react"],
   },
   outputFileTracingIncludes: {
-    "/api/rebrickable/parts": ["./.cache/rebrickable-catalog/**/*"],
+    "/api/catalog/parts": ["./.cache/rebrickable-catalog/**/*"],
   },
   poweredByHeader: false,
 };

@@ -9,7 +9,7 @@ vi.mock("@/server/rebrickable-catalog-cache", () => ({
   readGeneratedRebrickableCatalogCache: vi.fn(),
 }));
 
-describe("POST /api/rebrickable/parts", () => {
+describe("POST /api/catalog/parts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -60,6 +60,37 @@ describe("POST /api/rebrickable/parts", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("returns local image routes instead of provider image URLs", async () => {
+    vi.stubEnv("REBRICKABLE_API_KEY", "test-key");
+    vi.mocked(readGeneratedRebrickableCatalogCache).mockResolvedValue(
+      createCatalogCache({}),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          results: [
+            {
+              name: "Brick 2 x 4",
+              part_img_url:
+                "https://cdn.rebrickable.com/media/parts/photos/15/3001.jpg",
+              part_num: "3001",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const response = await POST(createPartsRequest(["3001"]));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.parts[0]).toMatchObject({
+      partImageUrl: "/api/catalog/part-image?partNumber=3001",
+      partNumber: "3001",
+    });
+  });
+
   it("rejects over-limit requests without truncating part numbers", async () => {
     vi.stubEnv("REBRICKABLE_API_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn());
@@ -79,7 +110,7 @@ describe("POST /api/rebrickable/parts", () => {
 });
 
 function createPartsRequest(partNumbers: string[]) {
-  return new Request("http://localhost/api/rebrickable/parts", {
+  return new Request("http://localhost/api/catalog/parts", {
     body: JSON.stringify({ partNumbers }),
     headers: {
       "Content-Type": "application/json",

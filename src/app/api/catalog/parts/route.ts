@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   enrichRebrickablePartsWithCatalogCache,
   normalizeRebrickablePartsResponse,
+  type RebrickableCatalogFetchResult,
 } from "@/domain/rebrickable-catalog";
 import { normalizePartNumber } from "@/domain/rebrickable-csv";
 import { readGeneratedRebrickableCatalogCache } from "@/server/rebrickable-catalog-cache";
@@ -10,7 +11,7 @@ import { readGeneratedRebrickableCatalogCache } from "@/server/rebrickable-catal
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const rebrickablePartsUrl = "https://rebrickable.com/api/v3/lego/parts/";
+const catalogPartsUrl = "https://rebrickable.com/api/v3/lego/parts/";
 const maxRequestedPartNumbers = 1_000;
 const requestTimeoutMs = 15_000;
 
@@ -36,16 +37,18 @@ export async function POST(request: Request) {
 
     if (catalogCache) {
       return NextResponse.json(
-        enrichRebrickablePartsWithCatalogCache(
-          createEmptyCatalogFetchResult(),
-          partNumbers,
-          catalogCache,
+        withLocalPartImageRoutes(
+          enrichRebrickablePartsWithCatalogCache(
+            createEmptyCatalogFetchResult(),
+            partNumbers,
+            catalogCache,
+          ),
         ),
       );
     }
 
     return NextResponse.json(
-      { error: "REBRICKABLE_API_KEY is not configured." },
+      { error: "Catalog API key is not configured." },
       { status: 503 },
     );
   }
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
     if (!response.ok) {
       return NextResponse.json(
         {
-          error: `Rebrickable catalog request failed with HTTP ${response.status}.`,
+          error: `Catalog request failed with HTTP ${response.status}.`,
         },
         { status: 502 },
       );
@@ -75,10 +78,12 @@ export async function POST(request: Request) {
     const normalizedResult = normalizeRebrickablePartsResponse(partNumbers, payload);
 
     return NextResponse.json(
-      enrichRebrickablePartsWithCatalogCache(
-        normalizedResult,
-        partNumbers,
-        catalogCache,
+      withLocalPartImageRoutes(
+        enrichRebrickablePartsWithCatalogCache(
+          normalizedResult,
+          partNumbers,
+          catalogCache,
+        ),
       ),
     );
   } catch (error) {
@@ -119,7 +124,7 @@ function readPartNumberValue(value: unknown) {
 }
 
 function createPartsRequestUrl(partNumbers: string[]) {
-  const url = new URL(rebrickablePartsUrl);
+  const url = new URL(catalogPartsUrl);
 
   url.searchParams.set("part_nums", partNumbers.join(","));
   url.searchParams.set("inc_part_details", "1");
@@ -129,7 +134,7 @@ function createPartsRequestUrl(partNumbers: string[]) {
   return url;
 }
 
-function createEmptyCatalogFetchResult() {
+function createEmptyCatalogFetchResult(): RebrickableCatalogFetchResult {
   return {
     parts: [],
     missingPartNumbers: [],
@@ -139,14 +144,30 @@ function createEmptyCatalogFetchResult() {
   };
 }
 
+function withLocalPartImageRoutes(
+  result: RebrickableCatalogFetchResult,
+): RebrickableCatalogFetchResult {
+  return {
+    ...result,
+    parts: result.parts.map((part) =>
+      part.partImageUrl
+        ? {
+            ...part,
+            partImageUrl: `/api/catalog/part-image?partNumber=${encodeURIComponent(part.partNumber)}`,
+          }
+        : part,
+    ),
+  };
+}
+
 function toCatalogErrorMessage(error: unknown) {
   if (error instanceof DOMException && error.name === "TimeoutError") {
-    return "Rebrickable catalog request timed out.";
+    return "Catalog request timed out.";
   }
 
   if (error instanceof Error) {
     return error.message;
   }
 
-  return "Rebrickable catalog request failed.";
+  return "Catalog request failed.";
 }

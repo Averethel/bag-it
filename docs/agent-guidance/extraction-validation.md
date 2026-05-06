@@ -20,7 +20,7 @@ npm run catalog:build
 ```
 
 `npm run build` runs the catalog build first and bundles the generated
-`.cache/rebrickable-catalog/catalog-index.json` file into the Rebrickable route
+`.cache/rebrickable-catalog/catalog-index.json` file into the catalog route
 handler output. The generated cache may contain public Rebrickable color names,
 catalog rows, and relationship aliases, but it must never contain manual PDF
 content, rendered manual pages, image crops, or OCR output from user manuals.
