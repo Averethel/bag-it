@@ -7,8 +7,16 @@ parts bags.
 
 ```sh
 npm install
+npm run ldraw:build
 npm run dev
 ```
+
+`npm run ldraw:build` downloads the official LDraw `complete.zip` library into
+the OS temp directory for local part thumbnail rendering. Set
+`BAG_IT_LDRAW_CACHE_DIR` to override the cache location, or
+`LDRAW_LIBRARY_PATH` to point the runtime at an existing extracted library.
+When `LDRAW_LIBRARY_PATH` is set, `npm run ldraw:build` validates that library
+but does not modify it.
 
 ## Workflows
 
@@ -17,6 +25,7 @@ npm run lint
 npm run typecheck
 npm run test:run
 npm run build
+npm run ldraw:build
 npm run test:e2e
 npm run verify
 ```

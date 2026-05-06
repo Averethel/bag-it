@@ -1,184 +1,247 @@
 import { NextResponse } from "next/server";
 
+import type { RebrickableCatalogCacheIndex } from "@/domain/rebrickable-catalog";
 import { normalizePartNumber } from "@/domain/rebrickable-csv";
+import { hasLDrawLibrary } from "@/server/ldraw-library";
+import { readGeneratedRebrickableCatalogCache } from "@/server/rebrickable-catalog-cache";
+import { readCachedRebrickableElementImage } from "@/server/rebrickable-image-cache";
+import { renderLDrawPartSvg } from "@/server/ldraw-thumbnail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const catalogPartsUrl = "https://rebrickable.com/api/v3/lego/parts/";
-const allowedImageHosts = new Set(["cdn.rebrickable.com"]);
-const allowedImagePathPrefixes = ["/media/parts/", "/media/thumbs/parts/"];
-const partImageUrlCache = new Map<string, Promise<URL | null>>();
-const catalogRequestTimeoutMs = 10_000;
-const imageRequestTimeoutMs = 10_000;
+const neutralColorHex = "#A0A5A9";
+const renderedPartImageCache = new Map<string, Promise<string | null>>();
+const ldrawPartNumberSubstitutions: Record<string, string[]> = {
+  "24126": ["2412b", "2412"],
+  "25375": ["25375-f1", "25375-f2", "25375-f3"],
+  "92338": ["92338-f1", "92338-f2"],
+  "100728": ["30292a", "30292b", "30292"],
+  "108721": ["30292a", "30292b", "30292"],
+  "15744": ["33211"],
+};
 
 export async function GET(request: Request) {
-  const partNumber = readPartNumber(request);
+  const imageRequest = readPartImageRequest(request);
 
-  if (!partNumber) {
+  if (!imageRequest) {
     return NextResponse.json(
       { error: "A valid part number is required." },
       { status: 400 },
     );
   }
 
-  const apiKey = process.env.REBRICKABLE_API_KEY?.trim();
+  const catalogCache = await readGeneratedRebrickableCatalogCache();
+  const colorHex = readColorHex(imageRequest.colorId, catalogCache);
+  const catalogPartNumberCandidates = createCatalogPartNumberCandidates(
+    imageRequest.partNumber,
+    catalogCache,
+  );
+  const rebrickableImage = imageRequest.useRebrickableCache
+    ? await readRebrickableElementImage({
+        catalogCache,
+        colorId: imageRequest.colorId,
+        partNumberCandidates: catalogPartNumberCandidates,
+      })
+    : null;
 
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "Catalog image lookup is not configured." },
-      { status: 503 },
-    );
-  }
-
-  try {
-    const imageUrl = await fetchPartImageUrl(partNumber, apiKey);
-
-    if (!imageUrl) {
-      return NextResponse.json(
-        { error: "Catalog image was not found." },
-        { status: 404 },
-      );
-    }
-
-    const response = await fetch(imageUrl, {
-      cache: "force-cache",
-      signal: AbortSignal.timeout(imageRequestTimeoutMs),
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Catalog image request failed with HTTP ${response.status}.` },
-        { status: 502 },
-      );
-    }
-
-    const contentType = response.headers.get("content-type") ?? "image/jpeg";
-
-    if (!contentType.startsWith("image/")) {
-      return NextResponse.json(
-        { error: "Catalog image lookup did not return an image." },
-        { status: 502 },
-      );
-    }
-
-    return new NextResponse(response.body, {
+  if (rebrickableImage) {
+    return new NextResponse(toArrayBuffer(rebrickableImage.bytes), {
       headers: {
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=604800, stale-while-revalidate=2592000",
+        "Content-Type": rebrickableImage.contentType,
       },
       status: 200,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: toCatalogImageErrorMessage(error) },
-      { status: 502 },
-    );
   }
-}
 
-function readPartNumber(request: Request) {
-  const partNumber = normalizePartNumber(
-    new URL(request.url).searchParams.get("partNumber") ?? "",
+  const partNumberCandidates = createLDrawPartNumberCandidates(
+    catalogPartNumberCandidates,
   );
 
-  return isSafePartNumber(partNumber) ? partNumber : null;
+  if (!(await hasLDrawLibrary())) {
+    return NextResponse.json(
+      {
+        error:
+          "LDraw part geometry library is not available. Run npm run ldraw:build or set LDRAW_LIBRARY_PATH before using local fallback thumbnails.",
+      },
+      { status: 404 },
+    );
+  }
+
+  const svg = await renderCachedLDrawPartSvg({ colorHex, partNumberCandidates });
+
+  if (!svg) {
+    return NextResponse.json(
+      { error: "LDraw part geometry was not found." },
+      { status: 404 },
+    );
+  }
+
+  return new NextResponse(svg, {
+    headers: {
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Type": "image/svg+xml",
+    },
+    status: 200,
+  });
+}
+
+type PartImageRequest = {
+  colorId: string | null;
+  partNumber: string;
+  useRebrickableCache: boolean;
+};
+
+function readPartImageRequest(request: Request): PartImageRequest | null {
+  const searchParams = new URL(request.url).searchParams;
+  const partNumber = normalizePartNumber(searchParams.get("partNumber") ?? "");
+  const colorId = searchParams.get("colorId")?.trim() ?? null;
+  const renderer = searchParams.get("renderer")?.trim() ?? null;
+  const source = searchParams.get("source")?.trim() ?? null;
+
+  if (!isSafePartNumber(partNumber)) {
+    return null;
+  }
+
+  if (colorId !== null && !isSafeColorId(colorId)) {
+    return null;
+  }
+
+  return {
+    colorId,
+    partNumber,
+    useRebrickableCache:
+      renderer !== "ldraw-v1" && source === "rebrickable-cache-v1",
+  };
 }
 
 function isSafePartNumber(partNumber: string) {
   return /^[a-z0-9][a-z0-9._-]{0,79}$/.test(partNumber);
 }
 
-function fetchPartImageUrl(partNumber: string, apiKey: string) {
-  const cachedPartImageUrl = partImageUrlCache.get(partNumber);
+function isSafeColorId(colorId: string) {
+  return /^\d{1,8}$/.test(colorId);
+}
 
-  if (cachedPartImageUrl) {
-    return cachedPartImageUrl;
+function createLDrawPartNumberCandidates(directCandidates: string[]) {
+  return dedupeValues([
+    ...directCandidates,
+    ...directCandidates.flatMap(expandLDrawPartNumberCandidate),
+  ]);
+}
+
+function createCatalogPartNumberCandidates(
+  partNumber: string,
+  catalogCache: RebrickableCatalogCacheIndex | null,
+) {
+  const aliases =
+    catalogCache?.aliases[partNumber]?.map((alias) => alias.partNumber) ?? [];
+  const printBasePartNumber = readPrintBasePartNumber(partNumber);
+
+  return dedupeValues([
+    partNumber,
+    ...aliases,
+    ...(printBasePartNumber ? [printBasePartNumber] : []),
+  ]);
+}
+
+function readPrintBasePartNumber(partNumber: string) {
+  const match = /^(?<basePartNumber>[a-z0-9]+)pr[a-z0-9]+$/.exec(partNumber);
+
+  return match?.groups?.basePartNumber ?? null;
+}
+
+function expandLDrawPartNumberCandidate(partNumber: string): string[] {
+  const baseVariantPartNumber = readLetterVariantBasePartNumber(partNumber);
+  const directSubstitutions = ldrawPartNumberSubstitutions[partNumber] ?? [];
+  const baseSubstitutions = baseVariantPartNumber
+    ? (ldrawPartNumberSubstitutions[baseVariantPartNumber] ?? [])
+    : [];
+
+  return [
+    partNumber,
+    ...(baseVariantPartNumber ? [baseVariantPartNumber] : []),
+    ...directSubstitutions,
+    ...baseSubstitutions,
+  ];
+}
+
+function readLetterVariantBasePartNumber(partNumber: string) {
+  const match = /^(?<basePartNumber>\d{4,7})[a-z]$/.exec(partNumber);
+
+  return match?.groups?.basePartNumber ?? null;
+}
+
+function readColorHex(
+  colorId: string | null,
+  catalogCache: RebrickableCatalogCacheIndex | null,
+) {
+  const colorRgb = colorId ? catalogCache?.colorRgbById[colorId] : null;
+  const normalizedColorRgb = colorRgb?.trim().replace(/^#/, "").toUpperCase();
+
+  return normalizedColorRgb && /^[0-9A-F]{6}$/.test(normalizedColorRgb)
+    ? `#${normalizedColorRgb}`
+    : neutralColorHex;
+}
+
+async function readRebrickableElementImage({
+  catalogCache,
+  colorId,
+  partNumberCandidates,
+}: {
+  catalogCache: RebrickableCatalogCacheIndex | null;
+  colorId: string | null;
+  partNumberCandidates: string[];
+}) {
+  if (!catalogCache || !colorId) {
+    return null;
   }
 
-  const partImageUrlPromise = fetchPartImageUrlUncached(partNumber, apiKey).then(
-    (imageUrl) => {
-      if (imageUrl === null) {
-        partImageUrlCache.delete(partNumber);
-      }
+  const elementIds = dedupeValues(
+    partNumberCandidates.flatMap(
+      (partNumber) => catalogCache.elementIdsByPartColor[partNumber]?.[colorId] ?? [],
+    ),
+  );
 
-      return imageUrl;
-    },
+  return elementIds.length > 0
+    ? readCachedRebrickableElementImage(elementIds)
+    : null;
+}
+
+function dedupeValues(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function toArrayBuffer(bytes: Uint8Array) {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+
+  return copy.buffer;
+}
+
+function renderCachedLDrawPartSvg({
+  colorHex,
+  partNumberCandidates,
+}: {
+  colorHex: string;
+  partNumberCandidates: string[];
+}) {
+  const cacheKey = `${colorHex}:${partNumberCandidates.join("|")}`;
+  const cachedSvg = renderedPartImageCache.get(cacheKey);
+
+  if (cachedSvg) {
+    return cachedSvg;
+  }
+
+  const svgPromise = renderLDrawPartSvg({ colorHex, partNumberCandidates }).catch(
     (error: unknown) => {
-      partImageUrlCache.delete(partNumber);
+      renderedPartImageCache.delete(cacheKey);
       throw error;
     },
   );
 
-  partImageUrlCache.set(partNumber, partImageUrlPromise);
+  renderedPartImageCache.set(cacheKey, svgPromise);
 
-  return partImageUrlPromise;
-}
-
-async function fetchPartImageUrlUncached(partNumber: string, apiKey: string) {
-  const response = await fetch(createPartRequestUrl(partNumber), {
-    cache: "no-store",
-    headers: {
-      Authorization: `key ${apiKey}`,
-    },
-    signal: AbortSignal.timeout(catalogRequestTimeoutMs),
-  });
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`Catalog image lookup failed with HTTP ${response.status}.`);
-  }
-
-  const payload = (await response.json().catch(() => null)) as {
-    part_img_url?: unknown;
-  } | null;
-
-  return parseAllowedCatalogImageUrl(readString(payload?.part_img_url));
-}
-
-function createPartRequestUrl(partNumber: string) {
-  return new URL(`${encodeURIComponent(partNumber)}/`, catalogPartsUrl);
-}
-
-function parseAllowedCatalogImageUrl(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    const url = new URL(value);
-
-    if (
-      url.protocol !== "https:" ||
-      !allowedImageHosts.has(url.hostname) ||
-      !allowedImagePathPrefixes.some((pathPrefix) =>
-        url.pathname.startsWith(pathPrefix),
-      )
-    ) {
-      return null;
-    }
-
-    return url;
-  } catch {
-    return null;
-  }
-}
-
-function readString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function toCatalogImageErrorMessage(error: unknown) {
-  if (error instanceof DOMException && error.name === "TimeoutError") {
-    return "Catalog image request timed out.";
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Catalog image request failed.";
+  return svgPromise;
 }

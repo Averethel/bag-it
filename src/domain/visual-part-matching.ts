@@ -12,6 +12,11 @@ const histogramBinCount = 8;
 const descriptorSampleSize = 192;
 const descriptorCache = new Map<string, Promise<VisualPartDescriptor | null>>();
 
+type CatalogImageDescriptorRequest = {
+  colorId: string | null;
+  partNumber: string;
+};
+
 export function createVisualPartDescriptorFromImageData(
   imageData: ImageData,
   bbox: { x0: number; y0: number; x1: number; y1: number },
@@ -150,7 +155,7 @@ export async function attachCatalogImageDescriptorsToInventory(
     shouldAttach?: (inventoryItem: RebrickableInventoryItem) => boolean;
   } = {},
 ) {
-  const descriptorByPartNumber = new Map<string, VisualPartDescriptor | null>();
+  const descriptorByKey = new Map<string, VisualPartDescriptor | null>();
   const targetItems = inventory.filter((inventoryItem) => {
     const partNumber = inventoryItem.catalogPart?.partNumber;
 
@@ -159,69 +164,97 @@ export async function attachCatalogImageDescriptorsToInventory(
 
   await runWithConcurrency(
     [
-      ...new Set(
+      ...new Map(
         targetItems.flatMap((item) => {
           const partNumber = item.catalogPart?.partNumber;
 
-          return partNumber ? [partNumber] : [];
+          if (!partNumber) {
+            return [];
+          }
+
+          const request = {
+            colorId: readCatalogImageDescriptorColorId(item),
+            partNumber,
+          };
+
+          return [[createDescriptorCacheKey(request), request]];
         }),
-      ),
+      ).values(),
     ],
     4,
-    async (partNumber) => {
-      descriptorByPartNumber.set(
-        partNumber,
-        await fetchCatalogImageDescriptor(partNumber),
+    async (request) => {
+      descriptorByKey.set(
+        createDescriptorCacheKey(request),
+        await fetchCatalogImageDescriptor(request),
       );
     },
   );
 
   return inventory.map((inventoryItem) => {
     const partNumber = inventoryItem.catalogPart?.partNumber;
+    const descriptorKey = partNumber
+      ? createDescriptorCacheKey({
+          colorId: readCatalogImageDescriptorColorId(inventoryItem),
+          partNumber,
+        })
+      : null;
 
-    if (!partNumber || !descriptorByPartNumber.has(partNumber)) {
+    if (!descriptorKey || !descriptorByKey.has(descriptorKey)) {
       return inventoryItem;
     }
 
     return {
       ...inventoryItem,
-      catalogImageDescriptor: descriptorByPartNumber.get(partNumber) ?? null,
+      catalogImageDescriptor: descriptorByKey.get(descriptorKey) ?? null,
     };
   });
 }
 
-async function fetchCatalogImageDescriptor(partNumber: string) {
-  const cachedDescriptor = descriptorCache.get(partNumber);
+async function fetchCatalogImageDescriptor(request: CatalogImageDescriptorRequest) {
+  const cacheKey = createDescriptorCacheKey(request);
+  const cachedDescriptor = descriptorCache.get(cacheKey);
 
   if (cachedDescriptor) {
     return cachedDescriptor;
   }
 
-  const descriptorPromise = fetchCatalogImageDescriptorUncached(partNumber).then(
+  const descriptorPromise = fetchCatalogImageDescriptorUncached(request).then(
     (descriptor) => {
       if (descriptor === null) {
-        descriptorCache.delete(partNumber);
+        descriptorCache.delete(cacheKey);
       }
 
       return descriptor;
     },
     (error: unknown) => {
-      descriptorCache.delete(partNumber);
+      descriptorCache.delete(cacheKey);
       throw error;
     },
   );
-  descriptorCache.set(partNumber, descriptorPromise);
+  descriptorCache.set(cacheKey, descriptorPromise);
 
   return descriptorPromise;
 }
 
-async function fetchCatalogImageDescriptorUncached(partNumber: string) {
+async function fetchCatalogImageDescriptorUncached({
+  colorId,
+  partNumber,
+}: CatalogImageDescriptorRequest) {
   if (typeof document === "undefined") {
     return null;
   }
 
+  const searchParams = new URLSearchParams({
+    partNumber,
+    source: "rebrickable-cache-v1",
+  });
+
+  if (colorId) {
+    searchParams.set("colorId", colorId);
+  }
+
   const response = await fetch(
-    `/api/catalog/part-image?partNumber=${encodeURIComponent(partNumber)}`,
+    `/api/catalog/part-image?${searchParams.toString()}`,
   );
 
   if (!response.ok) {
@@ -264,6 +297,19 @@ async function fetchCatalogImageDescriptorUncached(partNumber: string) {
   canvas.height = 0;
 
   return descriptor;
+}
+
+function readCatalogImageDescriptorColorId(inventoryItem: RebrickableInventoryItem) {
+  const colorId = inventoryItem.color.trim();
+
+  return /^\d{1,8}$/.test(colorId) ? colorId : null;
+}
+
+function createDescriptorCacheKey({
+  colorId,
+  partNumber,
+}: CatalogImageDescriptorRequest) {
+  return `${partNumber}:${colorId ?? ""}`;
 }
 
 async function runWithConcurrency<T>(
