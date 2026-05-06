@@ -1057,9 +1057,9 @@ describe("extractPartListFromOcrPages", () => {
     expect(result.items[0]).toMatchObject({
       partNumber: "69729",
       colorName: "Dark Bluish Gray",
-      ocrColorName: "Gray",
       validationStatus: "csv-exact-match",
     });
+    expect(result.items[0]?.ocrColorName).toBeUndefined();
   });
 
   it("uses generic gray evidence to avoid non-gray same-part CSV colors", () => {
@@ -1135,8 +1135,22 @@ describe("extractPartListFromOcrPages", () => {
 
     expect(result.items[0]).toMatchObject({
       colorName: "Light Bluish Gray",
-      ocrColorName: "Gray",
       validationStatus: "csv-exact-match",
+    });
+    expect(result.items[0]?.ocrColorName).toBeUndefined();
+  });
+
+  it("combines nearby finite color tokens around the part number", () => {
+    const result = extractPartListFromOcrPages([
+      page(8, [
+        "Parts",
+        "Gray, & 43722 Dark Bluish",
+      ]),
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "43722",
+      colorName: "Dark Bluish Gray",
     });
   });
 
@@ -1203,9 +1217,9 @@ describe("extractPartListFromOcrPages", () => {
     expect(result.items[0]).toMatchObject({
       partNumber: "3069b",
       colorName: "Reddish Brown",
-      ocrColorName: "Green",
       validationStatus: "csv-alias-match",
     });
+    expect(result.items[0]?.ocrColorName).toBeUndefined();
   });
 
   it("uses nearby OCR color context when a repeated part row has no readable color", () => {

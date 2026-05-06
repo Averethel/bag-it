@@ -133,6 +133,7 @@ type PageCandidate = {
 type ColorVocabularyEntry = {
   colorName: string;
   matchName: string;
+  tokens: string[];
 };
 
 const partNumberSource = String.raw`(?:\d{4,7}(?:[a-z][a-z0-9]*)?|\d{3}[a-z][a-z0-9]*)`;
@@ -191,6 +192,10 @@ const defaultColorNames = [
   "White",
   "Yellow",
 ];
+const exactColorGrammarScore = 260;
+const beforePartColorGrammarScore = 178;
+const fuzzyColorGrammarScore = 228;
+const genericExactColorPenalty = 62;
 
 export function extractPartListFromOcrPages(
   pages: OcrPageText[],
@@ -403,7 +408,7 @@ function parseOcrCard(
   const quantity = partNumberMatch?.word
     ? extractQuantityFromWords(cardWords, partNumberMatch.word)
     : extractQuantity(rawText, partNumber);
-  const colorName = extractColorName(rawText, colorVocabulary);
+  const colorName = extractColorNameForPart(rawText, partNumber, colorVocabulary);
   const description = extractDescription(rawText, partNumber, colorName);
   const confidence = cardWords.length
     ? averageWordConfidence(cardWords)
@@ -524,7 +529,20 @@ function isSameOcrPartCandidate(
     return true;
   }
 
-  return normalizeColorName(item.colorName) === normalizeColorName(candidate.colorName);
+  return areCompatibleOcrColorNames(item.colorName, candidate.colorName);
+}
+
+function areCompatibleOcrColorNames(leftColorName: string, rightColorName: string) {
+  if (normalizeColorName(leftColorName) === normalizeColorName(rightColorName)) {
+    return true;
+  }
+
+  return (
+    scoreColorNameEvidence(leftColorName, rightColorName) >=
+      genericColorFamilyEvidenceScore ||
+    scoreColorNameEvidence(rightColorName, leftColorName) >=
+      genericColorFamilyEvidenceScore
+  );
 }
 
 function findCardPartNumber(cardWords: NormalizedWord[], rawText: string) {
@@ -916,7 +934,7 @@ function parsePartListItems(
 
   const partNumber = partNumbers[0] ?? null;
   const quantity = extractQuantity(rawText, partNumber);
-  const colorName = extractColorName(rawText, colorVocabulary);
+  const colorName = extractColorNameForPart(rawText, partNumber, colorVocabulary);
   const description = extractDescription(rawText, partNumber, colorName);
   const confidence = averageConfidence(contextLines);
   const notes = [
@@ -976,7 +994,10 @@ function parseGroupedPartListItems(
             )
             .trim();
     const quantity = extractQuantity(localRawText, partNumber);
-    const colorName = colorMatches[index]?.colorName ?? null;
+    const colorName =
+      extractColorNameForPart(localRawText, partNumber, colorVocabulary) ??
+      colorMatches[index]?.colorName ??
+      null;
     const notes = [
       "Grouped OCR row split into individual part-number candidates.",
       quantity === null ? "Missing or unclear quantity." : null,
@@ -1010,7 +1031,7 @@ function parseWordCard(
   const rawText = cardWords.map((word) => word.text).join(" ");
   const partNumber = partNumberWord.text.toLowerCase();
   const quantity = extractQuantityFromWords(cardWords, partNumberWord);
-  const colorName = extractColorName(rawText, colorVocabulary);
+  const colorName = extractColorNameForPart(rawText, partNumber, colorVocabulary);
   const description = extractDescription(rawText, partNumber, colorName);
   const confidence = averageWordConfidence(cardWords);
   const notes = [
@@ -2397,6 +2418,7 @@ function createColorVocabulary(
     createColorNameVariants(colorName).map((matchName) => ({
       colorName,
       matchName,
+      tokens: tokenizeColorText(colorName),
     })),
   );
   const seenMatchNames = new Set<string>();
@@ -2451,6 +2473,44 @@ function extractColorName(
   return extractColorMatches(rawText, colorVocabulary)[0]?.colorName ?? null;
 }
 
+function extractColorNameForPart(
+  rawText: string,
+  partNumber: string | null,
+  colorVocabulary: ColorVocabularyEntry[] = createColorVocabulary(),
+) {
+  if (!partNumber) {
+    return extractColorName(rawText, colorVocabulary);
+  }
+
+  const partNumberMatch = rawText.match(
+    new RegExp(`\\b${escapeRegExp(partNumber)}\\b`, "i"),
+  );
+
+  if (partNumberMatch?.index === undefined) {
+    return extractColorName(rawText, colorVocabulary);
+  }
+
+  const partNumberStart = partNumberMatch.index;
+  const partNumberEnd = partNumberStart + partNumberMatch[0].length;
+  const exactCandidates = extractColorMatches(rawText, colorVocabulary).map(
+    (match) => ({
+      colorName: match.colorName,
+      score: scoreExactGrammarColorMatch(match, partNumberStart, partNumberEnd),
+    }),
+  );
+  const fuzzyCandidates = scoreFuzzyGrammarColorMatches(
+    rawText,
+    partNumberStart,
+    partNumberEnd,
+    colorVocabulary,
+  );
+  const candidates = [...exactCandidates, ...fuzzyCandidates]
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  return candidates[0]?.colorName ?? null;
+}
+
 function extractColorMatches(
   rawText: string,
   colorVocabulary: ColorVocabularyEntry[] = createColorVocabulary(),
@@ -2463,6 +2523,8 @@ function extractColorMatches(
         colorName: colorName.colorName,
         matchName: colorName.matchName,
         index: match.index ?? Number.MAX_SAFE_INTEGER,
+        length: match[0].length,
+        tokens: colorName.tokens,
       })),
     )
     .sort((left, right) => left.index - right.index)
@@ -2477,6 +2539,104 @@ function extractColorMatches(
                 match.index + match.matchName.length,
           ),
     );
+}
+
+function scoreExactGrammarColorMatch(
+  match: ReturnType<typeof extractColorMatches>[number],
+  partNumberStart: number,
+  partNumberEnd: number,
+) {
+  const colorEnd = match.index + match.length;
+  const isGenericOnly = match.tokens.every((token) => genericColorTokens.has(token));
+  const genericPenalty = isGenericOnly ? genericExactColorPenalty : 0;
+
+  if (match.index >= partNumberEnd) {
+    const distance = match.index - partNumberEnd;
+
+    return (
+      exactColorGrammarScore -
+      Math.min(120, distance * 2) +
+      Math.min(24, match.length) -
+      genericPenalty
+    );
+  }
+
+  if (colorEnd <= partNumberStart) {
+    const distance = partNumberStart - colorEnd;
+
+    return (
+      beforePartColorGrammarScore -
+      Math.min(80, distance * 2) +
+      Math.min(18, match.length) -
+      genericPenalty
+    );
+  }
+
+  return 0;
+}
+
+function scoreFuzzyGrammarColorMatches(
+  rawText: string,
+  partNumberStart: number,
+  partNumberEnd: number,
+  colorVocabulary: ColorVocabularyEntry[],
+) {
+  const contextText = [
+    rawText.slice(Math.max(0, partNumberStart - 36), partNumberStart),
+    rawText.slice(partNumberEnd, Math.min(rawText.length, partNumberEnd + 54)),
+  ].join(" ");
+  const contextTokens = new Set(tokenizeColorText(contextText));
+
+  if (contextTokens.size === 0) {
+    return [];
+  }
+
+  return dedupeColorVocabularyByName(colorVocabulary).flatMap((entry) => {
+    const uniqueTokens = [...new Set(entry.tokens)];
+
+    if (uniqueTokens.length === 0) {
+      return [];
+    }
+
+    const matchedTokenCount = uniqueTokens.filter((token) =>
+      contextTokens.has(token),
+    ).length;
+    const descriptorTokens = uniqueTokens.filter(
+      (token) => !genericColorTokens.has(token),
+    );
+    const hasAllTokens = matchedTokenCount === uniqueTokens.length;
+    const hasAllDescriptorTokens =
+      descriptorTokens.length > 0 &&
+      descriptorTokens.every((token) => contextTokens.has(token));
+
+    if (!hasAllTokens && !hasAllDescriptorTokens) {
+      return [];
+    }
+
+    const score =
+      fuzzyColorGrammarScore +
+      matchedTokenCount * 6 +
+      (hasAllTokens ? 20 : 0) +
+      (descriptorTokens.length === 0 ? -genericExactColorPenalty : 0);
+
+    return [{ colorName: entry.colorName, score }];
+  });
+}
+
+function dedupeColorVocabularyByName(colorVocabulary: ColorVocabularyEntry[]) {
+  const seenColorNames = new Set<string>();
+  const dedupedEntries: ColorVocabularyEntry[] = [];
+
+  colorVocabulary.forEach((entry) => {
+    if (seenColorNames.has(entry.colorName)) {
+      return;
+    }
+
+    seenColorNames.add(entry.colorName);
+    dedupedEntries.push(entry);
+  });
+
+  return dedupedEntries;
 }
 
 function createColorMatchPattern(colorName: string) {
