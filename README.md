@@ -7,16 +7,20 @@ parts bags.
 
 ```sh
 npm install
-npm run ldraw:build
 npm run dev
 ```
 
-`npm run ldraw:build` downloads the official LDraw `complete.zip` library into
-the OS temp directory for local part thumbnail rendering. Set
-`BAG_IT_LDRAW_CACHE_DIR` to override the cache location, or
-`LDRAW_LIBRARY_PATH` to point the runtime at an existing extracted library.
-When `LDRAW_LIBRARY_PATH` is set, `npm run ldraw:build` validates that library
-but does not modify it.
+Part thumbnails use cached Rebrickable element images first. When that misses,
+the server renders an LDraw fallback by fetching only the needed official LDraw
+`.dat` files on demand. Set `BLOB_READ_WRITE_TOKEN` to persist rendered fallback
+SVGs in Vercel Blob. Without Blob, rendered fallbacks are cached only for the
+current server instance.
+
+`npm run ldraw:build` is optional for local offline fallback work. It downloads
+the official LDraw `complete.zip` library into the OS temp directory. Set
+`BAG_IT_LDRAW_CACHE_DIR` to override the cache location, or `LDRAW_LIBRARY_PATH`
+to point the runtime at an existing extracted library. When `LDRAW_LIBRARY_PATH`
+is set, `npm run ldraw:build` validates that library but does not modify it.
 
 ## Workflows
 

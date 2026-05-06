@@ -39,14 +39,17 @@ export async function hasLDrawLibrary() {
 
 function createLDrawSearchPaths(fileName: string) {
   const rootPaths = createLDrawRootPaths();
-  const relativePaths =
-    fileName.startsWith("parts/") || fileName.startsWith("p/")
-      ? [fileName]
-      : [`parts/${fileName}`, `p/${fileName}`];
+  const relativePaths = createLDrawRelativeFilePaths(fileName);
 
   return rootPaths.flatMap((rootPath) =>
     relativePaths.map((relativePath) => path.join(rootPath, relativePath)),
   );
+}
+
+export function createLDrawRelativeFilePaths(fileName: string) {
+  return fileName.startsWith("parts/") || fileName.startsWith("p/")
+    ? [fileName]
+    : [`parts/${fileName}`, `p/${fileName}`];
 }
 
 function createLDrawRootPaths() {
@@ -75,7 +78,7 @@ function readOptionalEnvPath(name: string) {
   return value ? value : null;
 }
 
-function normalizeLDrawFileName(fileName: string) {
+export function normalizeLDrawFileName(fileName: string) {
   const normalizedFileName = fileName
     .replaceAll("\\", "/")
     .replace(/^\/+/, "")

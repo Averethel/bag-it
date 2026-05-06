@@ -413,6 +413,7 @@ function renderGeometrySvg({
       partNumber,
     )}" data-base-color="${baseColorHex}">`,
     `<title>${escapeText(partNumber)}</title>`,
+    "<metadata>Rendered from LDraw.org Parts Library geometry licensed under CC BY 4.0.</metadata>",
     '<rect width="100%" height="100%" fill="none" />',
     polygons,
     edges,

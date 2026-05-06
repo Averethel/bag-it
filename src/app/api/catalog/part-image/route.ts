@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 
 import type { RebrickableCatalogCacheIndex } from "@/domain/rebrickable-catalog";
 import { normalizePartNumber } from "@/domain/rebrickable-csv";
-import { hasLDrawLibrary } from "@/server/ldraw-library";
+import { readLDrawFileWithRemoteFallback } from "@/server/ldraw-remote-library";
+import {
+  createLDrawPartSvgCachePath,
+  readCachedLDrawPartSvg,
+  writeCachedLDrawPartSvg,
+} from "@/server/ldraw-render-cache";
 import { readGeneratedRebrickableCatalogCache } from "@/server/rebrickable-catalog-cache";
 import { readCachedRebrickableElementImage } from "@/server/rebrickable-image-cache";
 import { renderLDrawPartSvg } from "@/server/ldraw-thumbnail";
@@ -58,16 +63,6 @@ export async function GET(request: Request) {
   const partNumberCandidates = createLDrawPartNumberCandidates(
     catalogPartNumberCandidates,
   );
-
-  if (!(await hasLDrawLibrary())) {
-    return NextResponse.json(
-      {
-        error:
-          "LDraw part geometry library is not available. Run npm run ldraw:build or set LDRAW_LIBRARY_PATH before using local fallback thumbnails.",
-      },
-      { status: 404 },
-    );
-  }
 
   const svg = await renderCachedLDrawPartSvg({ colorHex, partNumberCandidates });
 
@@ -227,14 +222,25 @@ function renderCachedLDrawPartSvg({
   colorHex: string;
   partNumberCandidates: string[];
 }) {
-  const cacheKey = `${colorHex}:${partNumberCandidates.join("|")}`;
+  const cacheKey = createLDrawPartSvgCachePath({ colorHex, partNumberCandidates });
   const cachedSvg = renderedPartImageCache.get(cacheKey);
 
   if (cachedSvg) {
     return cachedSvg;
   }
 
-  const svgPromise = renderLDrawPartSvg({ colorHex, partNumberCandidates }).catch(
+  const svgPromise = readOrRenderLDrawPartSvg({
+    cachePath: cacheKey,
+    colorHex,
+    partNumberCandidates,
+  }).then(
+    (svg) => {
+      if (!svg) {
+        renderedPartImageCache.delete(cacheKey);
+      }
+
+      return svg;
+    },
     (error: unknown) => {
       renderedPartImageCache.delete(cacheKey);
       throw error;
@@ -244,4 +250,32 @@ function renderCachedLDrawPartSvg({
   renderedPartImageCache.set(cacheKey, svgPromise);
 
   return svgPromise;
+}
+
+async function readOrRenderLDrawPartSvg({
+  cachePath,
+  colorHex,
+  partNumberCandidates,
+}: {
+  cachePath: string;
+  colorHex: string;
+  partNumberCandidates: string[];
+}) {
+  const cachedSvg = await readCachedLDrawPartSvg(cachePath);
+
+  if (cachedSvg) {
+    return cachedSvg;
+  }
+
+  const svg = await renderLDrawPartSvg({
+    colorHex,
+    partNumberCandidates,
+    readLDrawFile: readLDrawFileWithRemoteFallback,
+  });
+
+  if (svg) {
+    await writeCachedLDrawPartSvg(cachePath, svg);
+  }
+
+  return svg;
 }
