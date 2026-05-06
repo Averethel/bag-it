@@ -1,11 +1,13 @@
 # dependencies
 node_modules/
+.npm-cache/
 
 # next.js
 .next/
 out/
 tsconfig.tsbuildinfo
 .vercel/
+.cache/
 .mock-fixture-cache/
 /artefacts/
 
