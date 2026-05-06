@@ -281,9 +281,10 @@ function parsePageCandidates(
     );
   });
 
-  const baseItems = selectBestPageCandidateItems(
-    [cardItems, wordItems, items],
-    options,
+  const candidateSets = [cardItems, wordItems, items];
+  const baseItems = repairMissingQuantitiesFromAlternativeOcrCandidates(
+    selectBestPageCandidateItems(candidateSets, options),
+    candidateSets,
   );
 
   return {
@@ -418,6 +419,84 @@ function scoreCandidateItems(items: ExtractedPartListItem[]) {
 
     return score + 1 + quantityScore + colorScore + descriptionScore;
   }, 0);
+}
+
+function repairMissingQuantitiesFromAlternativeOcrCandidates(
+  selectedItems: ExtractedPartListItem[],
+  candidateSets: ExtractedPartListItem[][],
+) {
+  const alternativeItems = candidateSets
+    .flat()
+    .filter((candidate) => !selectedItems.includes(candidate));
+
+  if (alternativeItems.length === 0) {
+    return selectedItems;
+  }
+
+  return selectedItems.map((item) => {
+    if (item.quantity !== null || !item.partNumber) {
+      return item;
+    }
+
+    const quantity = findUniqueAlternativeOcrQuantity(item, alternativeItems);
+
+    if (quantity === null) {
+      return item;
+    }
+
+    const notes = item.notes
+      .filter((note) => note !== "Missing or unclear quantity.")
+      .concat("Quantity recovered from alternate OCR row.");
+
+    return {
+      ...item,
+      quantity,
+      notes,
+      status:
+        item.colorName === null || item.partNumber === null
+          ? ("needs-review" as const)
+          : ("complete" as const),
+    };
+  });
+}
+
+function findUniqueAlternativeOcrQuantity(
+  item: ExtractedPartListItem,
+  alternativeItems: ExtractedPartListItem[],
+) {
+  const matchingQuantities = alternativeItems
+    .filter((candidate) => isSameOcrPartCandidate(item, candidate))
+    .map((candidate) => candidate.quantity)
+    .filter((quantity): quantity is number => quantity !== null);
+  const uniqueQuantities = [...new Set(matchingQuantities)];
+
+  return uniqueQuantities.length === 1 ? uniqueQuantities[0] ?? null : null;
+}
+
+function isSameOcrPartCandidate(
+  item: ExtractedPartListItem,
+  candidate: ExtractedPartListItem,
+) {
+  if (!item.partNumber || !candidate.partNumber) {
+    return false;
+  }
+
+  if (item.pageNumber !== candidate.pageNumber) {
+    return false;
+  }
+
+  if (
+    normalizePartNumberAlias(item.partNumber) !==
+    normalizePartNumberAlias(candidate.partNumber)
+  ) {
+    return false;
+  }
+
+  if (!item.colorName || !candidate.colorName) {
+    return true;
+  }
+
+  return normalizeColorName(item.colorName) === normalizeColorName(candidate.colorName);
 }
 
 function findCardPartNumber(cardWords: NormalizedWord[], rawText: string) {
@@ -1766,14 +1845,52 @@ function extractQuantityFromWords(
     return nearestWordToPartNumber(quantityCandidates, partNumberWord).quantity;
   }
 
+  const standaloneQuantityCandidates = cardWords
+    .map((word, index) => ({
+      index,
+      quantity: readSmallPositiveInteger(word.text),
+      word,
+    }))
+    .filter(
+      (candidate): candidate is {
+        index: number;
+        quantity: number;
+        word: NormalizedWord;
+      } =>
+        candidate.quantity !== null &&
+        candidate.word !== partNumberWord &&
+        isLikelyStandaloneQuantityWord(
+          candidate.word,
+          partNumberWord,
+          cardWords[candidate.index + 1] ?? null,
+        ),
+    );
+
+  if (standaloneQuantityCandidates.length > 0) {
+    return nearestWordToPartNumber(
+      standaloneQuantityCandidates,
+      partNumberWord,
+    ).quantity;
+  }
+
   const standaloneXIndex = cardWords.findIndex((word) => /^x$/i.test(word.text));
 
   if (standaloneXIndex >= 0) {
+    const xWord = cardWords[standaloneXIndex];
+
+    if (!xWord || !isLikelyQuantityMarkerWord(xWord, partNumberWord)) {
+      return null;
+    }
+
     const neighboringQuantity = [
       cardWords[standaloneXIndex - 1],
       cardWords[standaloneXIndex + 1],
     ]
-      .map((word) => readSmallPositiveInteger(word?.text))
+      .filter((word): word is NormalizedWord => Boolean(word))
+      .filter((word) =>
+        isLikelyStandaloneQuantityWord(word, partNumberWord, null),
+      )
+      .map((word) => readSmallPositiveInteger(word.text))
       .find((quantity): quantity is number => quantity !== null);
 
     if (neighboringQuantity !== undefined) {
@@ -1781,7 +1898,122 @@ function extractQuantityFromWords(
     }
   }
 
+  const oneQuantitySymbol = cardWords
+    .filter((word) => readLikelyOneQuantitySymbol(word.text) !== null)
+    .filter((word) => isLikelyQuantitySlotWord(word, partNumberWord))
+    .sort(
+      (left, right) =>
+        scoreQuantitySlotWord(left, partNumberWord) -
+        scoreQuantitySlotWord(right, partNumberWord),
+    )[0];
+
+  if (oneQuantitySymbol) {
+    return 1;
+  }
+
   return null;
+}
+
+function isLikelyStandaloneQuantityWord(
+  quantityWord: NormalizedWord,
+  partNumberWord: NormalizedWord,
+  nextWord: NormalizedWord | null,
+) {
+  const quantityText = quantityWord.text.trim();
+
+  if (!/^\d{1,3}$/.test(quantityText)) {
+    return false;
+  }
+
+  const partHeight = Math.max(1, partNumberWord.bbox.y1 - partNumberWord.bbox.y0);
+  const sameRow = Math.abs(centerY(quantityWord) - centerY(partNumberWord)) <=
+    Math.max(22, partHeight * 1.8);
+  const abovePartNumber =
+    centerY(quantityWord) < centerY(partNumberWord) &&
+    centerY(partNumberWord) - centerY(quantityWord) <=
+      Math.max(180, partHeight * 8) &&
+    Math.abs(centerX(quantityWord) - centerX(partNumberWord)) <=
+      Math.max(180, (partNumberWord.bbox.x1 - partNumberWord.bbox.x0) * 2.5);
+  const afterPartNumber =
+    Math.abs(centerY(quantityWord) - centerY(partNumberWord)) <=
+      Math.max(22, partHeight * 1.8) &&
+    quantityWord.bbox.x0 >= partNumberWord.bbox.x1 &&
+    quantityWord.bbox.x0 <= partNumberWord.bbox.x1 + partHeight * 4 &&
+    !nextWordLooksLikeDimensionSeparator(nextWord);
+
+  if (!sameRow && !abovePartNumber && !afterPartNumber) {
+    return false;
+  }
+
+  if (afterPartNumber) {
+    return true;
+  }
+
+  return abovePartNumber
+    ? true
+    : quantityWord.bbox.x1 <= partNumberWord.bbox.x0 + partHeight * 3;
+}
+
+function isLikelyQuantityMarkerWord(
+  markerWord: NormalizedWord,
+  partNumberWord: NormalizedWord,
+) {
+  const partHeight = Math.max(1, partNumberWord.bbox.y1 - partNumberWord.bbox.y0);
+  const sameRow = Math.abs(centerY(markerWord) - centerY(partNumberWord)) <=
+    Math.max(22, partHeight * 1.8);
+
+  if (!sameRow) {
+    return false;
+  }
+
+  return markerWord.bbox.x0 <= partNumberWord.bbox.x1 + partHeight * 5;
+}
+
+function readLikelyOneQuantitySymbol(text: string) {
+  const normalizedText = text
+    .trim()
+    .replace(/[×✕]/g, "x")
+    .replace(/[^@&#.x]/gi, "")
+    .toLowerCase();
+
+  return /^(?:[.@&#]+|x)$/.test(normalizedText) ? 1 : null;
+}
+
+function nextWordLooksLikeDimensionSeparator(word: NormalizedWord | null) {
+  return Boolean(word && /^[xX]$/.test(word.text.trim()));
+}
+
+function isLikelyQuantitySlotWord(
+  quantityWord: NormalizedWord,
+  partNumberWord: NormalizedWord,
+) {
+  if (quantityWord === partNumberWord) {
+    return false;
+  }
+
+  const partHeight = Math.max(1, partNumberWord.bbox.y1 - partNumberWord.bbox.y0);
+  const sameRowBeforePart =
+    Math.abs(centerY(quantityWord) - centerY(partNumberWord)) <=
+      Math.max(28, partHeight * 2.2) &&
+    centerX(quantityWord) <= centerX(partNumberWord);
+  const abovePart =
+    centerY(quantityWord) < centerY(partNumberWord) &&
+    centerY(partNumberWord) - centerY(quantityWord) <=
+      Math.max(160, partHeight * 7) &&
+    Math.abs(centerX(quantityWord) - centerX(partNumberWord)) <=
+      Math.max(160, (partNumberWord.bbox.x1 - partNumberWord.bbox.x0) * 2.2);
+
+  return sameRowBeforePart || abovePart;
+}
+
+function scoreQuantitySlotWord(
+  quantityWord: NormalizedWord,
+  partNumberWord: NormalizedWord,
+) {
+  return (
+    Math.abs(centerX(quantityWord) - centerX(partNumberWord)) +
+    Math.abs(centerY(quantityWord) - centerY(partNumberWord)) * 1.4
+  );
 }
 
 function nearestWordToPartNumber<T extends { word: NormalizedWord }>(
@@ -1927,9 +2159,16 @@ function extractQuantity(rawText: string, partNumber: string | null) {
     const afterPartNumber = rawText.match(
       new RegExp(`\\b${escapedPartNumber}\\b\\s+(\\d{1,4})\\s*[xX]\\b`, "i"),
     );
+    const standaloneAfterPartNumber = rawText.match(
+      new RegExp(
+        `\\b${escapedPartNumber}\\b\\s+(\\d{1,3})\\b(?!\\s*[xX]\\s*\\d)`,
+        "i",
+      ),
+    );
     const quantity =
       readPositiveInteger(beforePartNumber?.[1]) ??
-      readPositiveInteger(afterPartNumber?.[1]);
+      readPositiveInteger(afterPartNumber?.[1]) ??
+      readPositiveInteger(standaloneAfterPartNumber?.[1]);
 
     if (quantity !== null) {
       return quantity;
@@ -1937,7 +2176,7 @@ function extractQuantity(rawText: string, partNumber: string | null) {
   }
 
   const quantityTokens = Array.from(
-    rawText.matchAll(/\b(\d{1,4})\s*[xX]\b/gi),
+    rawText.matchAll(/\b(\d{1,4})\s*[xX]\b(?!\s*\d)/gi),
     (match) => readSmallPositiveInteger(match[1]),
   ).filter((quantity): quantity is number => quantity !== null);
 

@@ -167,6 +167,324 @@ describe("extractPartListFromOcrPages", () => {
     });
   });
 
+  it("reads standalone quantity words immediately before the part number", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "4 73825 Light Bluish Gray",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 120 },
+          },
+        ],
+        words: [
+          word("4", 100, 120, 8),
+          word("73825", 140, 120, 8),
+          word("Light", 210, 120, 8),
+          word("Bluish", 270, 120, 8),
+          word("Gray", 340, 120, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "73825",
+      quantity: 4,
+      colorName: "Light Bluish Gray",
+      status: "complete",
+    });
+  });
+
+  it("reads standalone quantity words above the part number", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "4 73825 Light Bluish Gray",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 180 },
+          },
+        ],
+        words: [
+          word("4", 150, 70, 8),
+          word("73825", 120, 160, 8),
+          word("Light", 200, 160, 8),
+          word("Bluish", 260, 160, 8),
+          word("Gray", 330, 160, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "73825",
+      quantity: 4,
+      colorName: "Light Bluish Gray",
+      status: "complete",
+    });
+  });
+
+  it("repairs common one-count quantity symbol OCR in the quantity slot", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "@ 6134 Light Bluish Gray",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 120 },
+          },
+        ],
+        words: [
+          word("@", 100, 120, 8),
+          word("6134", 140, 120, 8),
+          word("Light", 210, 120, 8),
+          word("Bluish", 270, 120, 8),
+          word("Gray", 340, 120, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "6134",
+      quantity: 1,
+      colorName: "Light Bluish Gray",
+      status: "complete",
+    });
+  });
+
+  it("repairs hash quantity symbol OCR in the quantity slot", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "# 32932 Green",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 120 },
+          },
+        ],
+        words: [
+          word("#", 100, 120, 8),
+          word("32932", 140, 120, 8),
+          word("Green", 220, 120, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "32932",
+      quantity: 1,
+      colorName: "Green",
+      status: "complete",
+    });
+  });
+
+  it("reads a standalone quantity immediately after the part number", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "2454 1 Tan",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 120 },
+          },
+        ],
+        words: [
+          word("2454", 100, 120, 8),
+          word("1", 160, 120, 8),
+          word("Tan", 200, 120, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "2454",
+      quantity: 1,
+      colorName: "Tan",
+      status: "complete",
+    });
+  });
+
+  it("does not repair one-count symbols after the part number", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "6134 @ Light Bluish Gray",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 120 },
+          },
+        ],
+        words: [
+          word("6134", 100, 120, 8),
+          word("@", 170, 120, 8),
+          word("Light", 210, 120, 8),
+          word("Bluish", 270, 120, 8),
+          word("Gray", 340, 120, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "6134",
+      quantity: null,
+      colorName: "Light Bluish Gray",
+      status: "needs-review",
+    });
+  });
+
+  it("does not treat split description dimensions as quantities", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 900,
+        height: 900,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "3001 Black Brick 2 x 4",
+            confidence: 90,
+            bbox: { x0: 80, y0: 100, x1: 420, y1: 120 },
+          },
+        ],
+        words: [
+          word("3001", 100, 120, 8),
+          word("Black", 170, 120, 8),
+          word("Brick", 240, 120, 8),
+          word("2", 310, 120, 8),
+          word("x", 340, 120, 8),
+          word("4", 370, 120, 8),
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "3001",
+      quantity: null,
+      colorName: "Black",
+      status: "needs-review",
+    });
+  });
+
+  it("reads a raw standalone quantity immediately after the part number", () => {
+    const result = extractPartListFromOcrPages([
+      page(8, [
+        "Parts",
+        "Tan 2454 1 noisy text",
+      ]),
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "2454",
+      quantity: 1,
+      colorName: "Tan",
+      status: "complete",
+    });
+  });
+
+  it("repairs a missing card quantity from a unique alternate OCR row", () => {
+    const result = extractPartListFromOcrPages([
+      {
+        pageNumber: 8,
+        width: 1200,
+        height: 1200,
+        lines: [
+          {
+            pageNumber: 8,
+            text: "Parts",
+            confidence: 90,
+            bbox: { x0: 20, y0: 20, x1: 100, y1: 40 },
+          },
+          {
+            pageNumber: 8,
+            text: "1x 3009 Dark Bluish Gray",
+            confidence: 90,
+            bbox: { x0: 40, y0: 80, x1: 360, y1: 110 },
+          },
+        ],
+        cards: [
+          {
+            pageNumber: 8,
+            bbox: { x0: 20, y0: 60, x1: 280, y1: 240 },
+            lines: [],
+            words: [
+              word("3009", 80, 120, 8),
+              word("Dark", 80, 170, 8),
+              word("Bluish", 130, 170, 8),
+              word("Gray", 200, 170, 8),
+            ],
+          },
+          {
+            pageNumber: 8,
+            bbox: { x0: 300, y0: 60, x1: 560, y1: 240 },
+            lines: [],
+            words: [
+              word("1x", 330, 100, 8),
+              word("85861", 360, 120, 8),
+              word("Black", 360, 170, 8),
+            ],
+          },
+          {
+            pageNumber: 8,
+            bbox: { x0: 580, y0: 60, x1: 840, y1: 240 },
+            lines: [],
+            words: [
+              word("1x", 610, 100, 8),
+              word("4740", 640, 120, 8),
+              word("Dark", 640, 170, 8),
+              word("Bluish", 690, 170, 8),
+              word("Gray", 760, 170, 8),
+            ],
+          },
+          {
+            pageNumber: 8,
+            bbox: { x0: 860, y0: 60, x1: 1120, y1: 240 },
+            lines: [],
+            words: [
+              word("1x", 890, 100, 8),
+              word("43722", 920, 120, 8),
+              word("Dark", 920, 170, 8),
+              word("Bluish", 970, 170, 8),
+              word("Gray", 1040, 170, 8),
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "3009",
+      quantity: 1,
+      colorName: "Dark Bluish Gray",
+      status: "complete",
+    });
+    expect(result.items[0]?.notes).toContain(
+      "Quantity recovered from alternate OCR row.",
+    );
+  });
+
   it("keeps suffixed Rebrickable part numbers intact", () => {
     const result = extractPartListFromOcrPages([
       page(12, [
