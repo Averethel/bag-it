@@ -291,7 +291,12 @@ function createCatalogPartsFromCache(
   const aliasTargetCatalogParts = collectCacheLookupRoots(normalizedPartNumber)
     .flatMap((rootPartNumber) =>
       readCachedAliases(rootPartNumber, catalogCache).flatMap((alias) =>
-        createAliasTargetCatalogPartFromCache(rootPartNumber, alias, catalogCache),
+        createAliasTargetCatalogPartFromCache(
+          normalizedPartNumber,
+          rootPartNumber,
+          alias,
+          catalogCache,
+        ),
       ),
     );
 
@@ -324,6 +329,7 @@ function createDirectCatalogPartFromCache(
 
 function createAliasTargetCatalogPartFromCache(
   requestedPartNumber: string,
+  lookupRootPartNumber: string,
   alias: RebrickableCatalogAlias,
   catalogCache: RebrickableCatalogCacheIndex,
 ) {
@@ -347,6 +353,15 @@ function createAliasTargetCatalogPartFromCache(
           kind: alias.kind,
           source: alias.source,
         },
+        ...(lookupRootPartNumber !== requestedPartNumber
+          ? [
+              {
+                partNumber: lookupRootPartNumber,
+                kind: alias.kind,
+                source: alias.source,
+              },
+            ]
+          : []),
         ...readCachedAliases(targetPartNumber, catalogCache),
       ]),
     },

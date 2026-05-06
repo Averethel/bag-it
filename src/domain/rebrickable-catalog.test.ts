@@ -293,12 +293,19 @@ describe("normalizeRebrickablePartsResponse", () => {
       }),
     );
 
+    expect(result.missingPartNumbers).toEqual([]);
     expect(result.parts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          requestedPartNumber: "4589b",
           partNumber: "59900",
           name: "Cone 1 x 1 with Top Groove",
           aliases: expect.arrayContaining([
+            {
+              partNumber: "4589b",
+              kind: "relationship",
+              source: "M",
+            },
             {
               partNumber: "4589",
               kind: "relationship",

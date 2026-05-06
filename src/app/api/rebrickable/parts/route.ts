@@ -15,31 +15,38 @@ const maxRequestedPartNumbers = 1_000;
 const requestTimeoutMs = 15_000;
 
 export async function POST(request: Request) {
-  const apiKey = process.env.REBRICKABLE_API_KEY?.trim();
+  const { isOverLimit, partNumbers } = await readPartNumbers(request);
 
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "REBRICKABLE_API_KEY is not configured." },
-      { status: 503 },
-    );
-  }
-
-  const partNumbers = await readPartNumbers(request);
-
-  if (partNumbers.length === 0) {
-    return NextResponse.json({
-      parts: [],
-      missingPartNumbers: [],
-      warnings: [],
-      colorNamesById: {},
-      colorRgbById: {},
-    });
-  }
-
-  if (partNumbers.length > maxRequestedPartNumbers) {
+  if (isOverLimit) {
     return NextResponse.json(
       { error: `Cannot fetch more than ${maxRequestedPartNumbers} parts at once.` },
       { status: 400 },
+    );
+  }
+
+  if (partNumbers.length === 0) {
+    return NextResponse.json(createEmptyCatalogFetchResult());
+  }
+
+  const catalogCachePromise = readGeneratedRebrickableCatalogCache();
+  const apiKey = process.env.REBRICKABLE_API_KEY?.trim();
+
+  if (!apiKey) {
+    const catalogCache = await catalogCachePromise;
+
+    if (catalogCache) {
+      return NextResponse.json(
+        enrichRebrickablePartsWithCatalogCache(
+          createEmptyCatalogFetchResult(),
+          partNumbers,
+          catalogCache,
+        ),
+      );
+    }
+
+    return NextResponse.json(
+      { error: "REBRICKABLE_API_KEY is not configured." },
+      { status: 503 },
     );
   }
 
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
 
     const [payload, catalogCache] = await Promise.all([
       response.json() as Promise<unknown>,
-      readGeneratedRebrickableCatalogCache(),
+      catalogCachePromise,
     ]);
     const normalizedResult = normalizeRebrickablePartsResponse(partNumbers, payload);
 
@@ -88,12 +95,17 @@ async function readPartNumbers(request: Request) {
   } | null;
 
   if (!Array.isArray(body?.partNumbers)) {
-    return [];
+    return { isOverLimit: false, partNumbers: [] };
   }
 
-  return [...new Set(body.partNumbers.flatMap(readPartNumberValue))]
-    .slice(0, maxRequestedPartNumbers)
-    .sort();
+  const partNumbers = [
+    ...new Set(body.partNumbers.flatMap(readPartNumberValue)),
+  ].sort();
+
+  return {
+    isOverLimit: partNumbers.length > maxRequestedPartNumbers,
+    partNumbers,
+  };
 }
 
 function readPartNumberValue(value: unknown) {
@@ -115,6 +127,16 @@ function createPartsRequestUrl(partNumbers: string[]) {
   url.searchParams.set("page_size", String(Math.max(100, partNumbers.length)));
 
   return url;
+}
+
+function createEmptyCatalogFetchResult() {
+  return {
+    parts: [],
+    missingPartNumbers: [],
+    warnings: [],
+    colorNamesById: {},
+    colorRgbById: {},
+  };
 }
 
 function toCatalogErrorMessage(error: unknown) {

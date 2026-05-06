@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectCatalogImageDescriptorTargetRowIds,
   collectCatalogCandidatePartNumbers,
+  fetchOptionalOcrCatalogPartsForExtraction,
 } from "./browser-pdf-ocr";
 import type { PartListExtractionResult } from "./part-list-extraction";
 import type { RebrickableInventoryItem } from "./rebrickable-csv";
@@ -178,5 +179,23 @@ describe("collectCatalogCandidatePartNumbers", () => {
     );
 
     expect(partNumbers).toEqual(["9999"]);
+  });
+});
+
+describe("fetchOptionalOcrCatalogPartsForExtraction", () => {
+  it("keeps OCR extraction usable when catalog lookup fails", async () => {
+    const result = await fetchOptionalOcrCatalogPartsForExtraction(
+      extractionResult(item({ partNumber: "3001" })),
+      {
+        fetchCatalogParts: async () => {
+          throw new Error("Rebrickable catalog request timed out.");
+        },
+      },
+    );
+
+    expect(result.catalogResult).toBeNull();
+    expect(result.warnings).toEqual([
+      "Rebrickable catalog validation skipped: Rebrickable catalog request timed out.",
+    ]);
   });
 });

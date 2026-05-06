@@ -926,7 +926,13 @@ export function HomeShell({
     resetAnalysisOutput();
 
     try {
-      const parseResult = parseRebrickablePartsCsv(await file.text());
+      const csvText = await file.text();
+
+      if (csvSelectionId.current !== currentCsvSelectionId) {
+        return;
+      }
+
+      const parseResult = parseRebrickablePartsCsv(csvText);
 
       if (parseResult.items.length === 0) {
         setCsvInventory(null);
@@ -984,6 +990,10 @@ export function HomeShell({
         });
       }
     } catch (error) {
+      if (csvSelectionId.current !== currentCsvSelectionId) {
+        return;
+      }
+
       setCsvInventory(null);
       setCsvError(toErrorMessage(error));
       clearCsvInput();

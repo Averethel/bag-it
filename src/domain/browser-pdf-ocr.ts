@@ -257,7 +257,10 @@ export async function extractPartListFromPdfSession(
       extractionOptions,
     );
 
-    const catalogResult = await fetchOcrCatalogPartsForExtraction(
+    const {
+      catalogResult,
+      warnings: catalogWarnings,
+    } = await fetchOptionalOcrCatalogPartsForExtraction(
       initialExtractionResult,
       options,
     );
@@ -293,13 +296,39 @@ export async function extractPartListFromPdfSession(
 
     return {
       ...extractionResult,
-      warnings: [...extractionResult.warnings, ...discoveryResult.warnings],
+      warnings: [
+        ...extractionResult.warnings,
+        ...catalogWarnings,
+        ...discoveryResult.warnings,
+      ],
     };
   } finally {
     await Promise.all(
       workerEntries.map((workerEntry) => workerEntry.worker.terminate()),
     );
     await pdfDocument?.destroy();
+  }
+}
+
+export async function fetchOptionalOcrCatalogPartsForExtraction(
+  extractionResult: PartListExtractionResult,
+  options: ExtractPartListOptions,
+) {
+  try {
+    return {
+      catalogResult: await fetchOcrCatalogPartsForExtraction(
+        extractionResult,
+        options,
+      ),
+      warnings: [],
+    };
+  } catch (error) {
+    return {
+      catalogResult: null,
+      warnings: [
+        `Rebrickable catalog validation skipped: ${toErrorMessage(error)}`,
+      ],
+    };
   }
 }
 
@@ -331,6 +360,10 @@ async function fetchOcrCatalogPartsForExtraction(
   });
 
   return options.fetchCatalogParts(candidatePartNumbers);
+}
+
+function toErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown catalog lookup error.";
 }
 
 export function collectCatalogCandidatePartNumbers(

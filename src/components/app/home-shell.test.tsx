@@ -83,6 +83,17 @@ function createCatalogFetchResult(
   };
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 describe("HomeShell", () => {
   it("renders the intake workflow state by default", () => {
     renderHomeShell();
@@ -510,6 +521,51 @@ describe("HomeShell", () => {
           catalogPart: expect.anything(),
         }),
       ],
+    });
+  });
+
+  it("ignores stale CSV reads when a newer CSV is selected first", async () => {
+    const staleCsv = createDeferred<string>();
+    const freshCsv = createDeferred<string>();
+    const fetchCatalogParts = vi.fn(async () => createCatalogFetchResult());
+
+    renderHomeShell(
+      createMemoryProjectStore(),
+      undefined,
+      fetchCatalogParts,
+    );
+
+    fireEvent.change(screen.getByLabelText("Rebrickable parts CSV"), {
+      target: {
+        files: [
+          {
+            name: "stale.csv",
+            text: () => staleCsv.promise,
+          } as unknown as File,
+        ],
+      },
+    });
+    fireEvent.change(screen.getByLabelText("Rebrickable parts CSV"), {
+      target: {
+        files: [
+          {
+            name: "fresh.csv",
+            text: () => freshCsv.promise,
+          } as unknown as File,
+        ],
+      },
+    });
+
+    freshCsv.resolve("Part,Color,Quantity\n2431,1,7");
+
+    await screen.findByText("fresh.csv (1 rows)");
+
+    staleCsv.resolve("Part,Color,Quantity\n2420,0,2");
+
+    await waitFor(() => {
+      expect(screen.queryByText("stale.csv (1 rows)")).not.toBeInTheDocument();
+      expect(fetchCatalogParts).toHaveBeenCalledTimes(1);
+      expect(fetchCatalogParts).toHaveBeenCalledWith(["2431"]);
     });
   });
 
