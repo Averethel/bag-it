@@ -762,6 +762,134 @@ describe("extractPartListFromOcrPages", () => {
     });
   });
 
+  it("validates OCR rows against the Rebrickable catalog when no CSV is loaded", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(8, [
+          "Parts",
+          "1x 3001 Black Brick",
+          "2x 3040 Light Bluish Gray Slope",
+          "3x 9999 Red Unknown",
+        ]),
+      ],
+      {
+        candidateCatalogParts: [
+          {
+            requestedPartNumber: "3001",
+            partNumber: "3001",
+            name: "Brick 2 x 4",
+            partImageUrl: null,
+            partUrl: null,
+            aliases: [],
+          },
+          {
+            requestedPartNumber: "3040b",
+            partNumber: "3040b",
+            name: "Slope 45 2 x 1",
+            partImageUrl: null,
+            partUrl: null,
+            aliases: [
+              {
+                partNumber: "3040",
+                kind: "canonical",
+                source: "Rebrickable",
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(result.items.map((item) => item.partNumber)).toEqual([
+      "3001",
+      "3040b",
+      "9999",
+    ]);
+    expect(result.items.map((item) => item.validationStatus)).toEqual([
+      "catalog-exact-match",
+      "catalog-alias-match",
+      "catalog-no-match",
+    ]);
+    expect(result.items[1]).toMatchObject({
+      colorName: "Light Bluish Gray",
+      ocrPartNumber: "3040",
+    });
+    expect(result.items[1]?.notes).toContain(
+      "Rebrickable catalog suggests 3040b for OCR part 3040.",
+    );
+    expect(result.validationSummary).toMatchObject({
+      source: "catalog",
+      csvRows: 0,
+      catalogRows: 2,
+      exactMatches: 1,
+      aliasMatches: 1,
+      unmatchedRows: 1,
+      quantityDifferences: 0,
+      unusedCsvRows: 0,
+    });
+  });
+
+  it("reports catalog misses after a catalog lookup returns no candidate parts", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(8, [
+          "Parts",
+          "1x 9999 Black Unknown",
+        ]),
+      ],
+      {
+        catalogValidationEnabled: true,
+        candidateCatalogParts: [],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "9999",
+      status: "needs-review",
+      validationStatus: "catalog-no-match",
+    });
+    expect(result.validationSummary).toMatchObject({
+      source: "catalog",
+      catalogRows: 0,
+      unmatchedRows: 1,
+    });
+  });
+
+  it("uses catalog alias bases for OCR suffix variants when CSV is missing", () => {
+    const result = extractPartListFromOcrPages(
+      [
+        page(8, [
+          "Parts",
+          "4x 4589b Light Bluish Gray Cone",
+        ]),
+      ],
+      {
+        candidateCatalogParts: [
+          {
+            requestedPartNumber: "4589",
+            partNumber: "59900",
+            name: "Cone 1 x 1 with Top Groove",
+            partImageUrl: null,
+            partUrl: null,
+            aliases: [
+              {
+                partNumber: "4589",
+                kind: "relationship",
+                source: "M",
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      partNumber: "59900",
+      ocrPartNumber: "4589b",
+      validationStatus: "catalog-alias-match",
+    });
+  });
+
   it("uses manual color to choose between alias CSV rows", () => {
     const result = extractPartListFromOcrPages(
       [

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   collectCatalogImageDescriptorTargetRowIds,
+  collectCatalogCandidatePartNumbers,
 } from "./browser-pdf-ocr";
 import type { PartListExtractionResult } from "./part-list-extraction";
 import type { RebrickableInventoryItem } from "./rebrickable-csv";
@@ -129,5 +130,53 @@ describe("collectCatalogImageDescriptorTargetRowIds", () => {
     );
 
     expect([...targetRowIds]).toEqual([]);
+  });
+});
+
+describe("collectCatalogCandidatePartNumbers", () => {
+  it("uses all OCR part numbers when no CSV inventory is present", () => {
+    const partNumbers = collectCatalogCandidatePartNumbers(
+      {
+        candidatePageNumbers: [1],
+        items: [
+          item({ partNumber: "3001" }),
+          item({
+            ocrPartNumber: "3040",
+            partNumber: "3040b",
+            validationStatus: "catalog-alias-match",
+          }),
+        ],
+        pagesAnalyzed: 1,
+        selectedPageNumbers: [1],
+        warnings: [],
+      },
+      false,
+    );
+
+    expect(partNumbers).toEqual(["3001", "3040"]);
+  });
+
+  it("uses only CSV misses when CSV inventory is present", () => {
+    const partNumbers = collectCatalogCandidatePartNumbers(
+      {
+        candidatePageNumbers: [1],
+        items: [
+          item({
+            partNumber: "3001",
+            validationStatus: "csv-exact-match",
+          }),
+          item({
+            partNumber: "9999",
+            validationStatus: "csv-no-match",
+          }),
+        ],
+        pagesAnalyzed: 1,
+        selectedPageNumbers: [1],
+        warnings: [],
+      },
+      true,
+    );
+
+    expect(partNumbers).toEqual(["9999"]);
   });
 });

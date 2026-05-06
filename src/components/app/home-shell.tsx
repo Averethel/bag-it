@@ -37,6 +37,7 @@ import {
 import type {
   ExtractedPartListItem,
   PartListExtractionResult,
+  PartListValidationSummary,
 } from "@/domain/part-list-extraction";
 import {
   createPdfSessionFromFile,
@@ -208,7 +209,7 @@ function buildStageView(
       summary: `${pdfSession.metadata.fileName} is ready for local analysis.`,
       detail: csvInventory
         ? `${csvInventory.items.length} CSV rows will be used as validation candidates.`
-        : "Page rendering and OCR have not run yet. Uploading a Rebrickable CSV enables validation.",
+        : "Page rendering and OCR have not run yet. Rebrickable catalog validation will run without a CSV.",
     };
   }
 
@@ -538,7 +539,7 @@ function AnalysisPanel({
         <Text color="gray.600" fontSize="sm">
           {csvInventory
             ? `${csvInventory.items.length} CSV rows will validate the manual OCR result. ${formatCsvCatalogStatus(csvInventory)}`
-            : "No CSV validation loaded; OCR will run without catalog-list validation."}
+            : "No CSV loaded; OCR part numbers will be checked against the Rebrickable catalog."}
         </Text>
 
         {analysisProgress ? (
@@ -593,10 +594,7 @@ function PartListSummary({ result }: { result: PartListExtractionResult }) {
         </Text>
         {result.validationSummary ? (
           <Text color="gray.700" fontSize="sm">
-            CSV validation matched{" "}
-            {result.validationSummary.exactMatches +
-              result.validationSummary.aliasMatches}{" "}
-            rows and suggested {result.validationSummary.aliasMatches} aliases.
+            {formatValidationSummary(result.validationSummary)}
           </Text>
         ) : null}
       </Stack>
@@ -621,15 +619,15 @@ function PartListOutput({ result }: { result: PartListExtractionResult }) {
           <Badge colorPalette="purple" variant="subtle">
             {result.validationSummary.exactMatches +
               result.validationSummary.aliasMatches}{" "}
-            CSV matches
+            {result.validationSummary.source === "csv"
+              ? "CSV matches"
+              : "catalog matches"}
           </Badge>
         ) : null}
       </HStack>
       {result.validationSummary ? (
         <Text color="gray.700" fontSize="sm">
-          {result.validationSummary.unmatchedRows} OCR rows had no CSV match;{" "}
-          {result.validationSummary.unusedCsvRows} CSV rows were not seen in this
-          manual scan.
+          {formatValidationDetail(result.validationSummary)}
         </Text>
       ) : null}
 
@@ -1197,6 +1195,18 @@ function formatConfidence(confidence: number | null) {
 function formatValidationStatus(
   validationStatus: ExtractedPartListItem["validationStatus"],
 ) {
+  if (validationStatus === "catalog-exact-match") {
+    return "Catalog exact";
+  }
+
+  if (validationStatus === "catalog-alias-match") {
+    return "Catalog alias";
+  }
+
+  if (validationStatus === "catalog-no-match") {
+    return "No catalog match";
+  }
+
   if (validationStatus === "csv-exact-match") {
     return "CSV exact";
   }
@@ -1210,6 +1220,24 @@ function formatValidationStatus(
   }
 
   return "Not checked";
+}
+
+function formatValidationSummary(summary: PartListValidationSummary) {
+  const matchedRows = summary.exactMatches + summary.aliasMatches;
+
+  if (summary.source === "catalog") {
+    return `Rebrickable catalog validation matched ${matchedRows} rows and suggested ${summary.aliasMatches} aliases.`;
+  }
+
+  return `CSV validation matched ${matchedRows} rows and suggested ${summary.aliasMatches} aliases.`;
+}
+
+function formatValidationDetail(summary: PartListValidationSummary) {
+  if (summary.source === "catalog") {
+    return `${summary.unmatchedRows} OCR rows had no Rebrickable catalog match. CSV upload remains optional for stronger color and quantity validation.`;
+  }
+
+  return `${summary.unmatchedRows} OCR rows had no CSV match; ${summary.unusedCsvRows} CSV rows were not seen in this manual scan.`;
 }
 
 function formatCsvCatalogStatus(csvInventory: CsvInventoryState) {

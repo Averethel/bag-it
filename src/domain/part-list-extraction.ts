@@ -65,6 +65,9 @@ export type ExtractedPartListItem = {
   notes: string[];
   validationStatus?:
     | "not-validated"
+    | "catalog-exact-match"
+    | "catalog-alias-match"
+    | "catalog-no-match"
     | "csv-exact-match"
     | "csv-alias-match"
     | "csv-no-match";
@@ -80,7 +83,9 @@ export type PartListExtractionResult = {
 };
 
 export type PartListValidationSummary = {
+  source: "catalog" | "csv";
   csvRows: number;
+  catalogRows: number;
   exactMatches: number;
   aliasMatches: number;
   unmatchedRows: number;
@@ -89,7 +94,9 @@ export type PartListValidationSummary = {
 };
 
 export type PartListExtractionOptions = {
+  catalogValidationEnabled?: boolean;
   candidateCatalogParts?: RebrickableCatalogPart[];
+  catalogColorNames?: string[];
   validationInventory?: RebrickableInventoryItem[];
 };
 
@@ -189,7 +196,10 @@ export function extractPartListFromOcrPages(
   pages: OcrPageText[],
   options: PartListExtractionOptions = {},
 ): PartListExtractionResult {
-  const colorVocabulary = createColorVocabulary(options.validationInventory);
+  const colorVocabulary = createColorVocabulary(
+    options.validationInventory,
+    options.catalogColorNames,
+  );
   const pageCandidates = pages
     .map((page) => parsePageCandidates(page, colorVocabulary, options))
     .filter((candidate) => candidate.items.length > 0)
@@ -209,7 +219,12 @@ export function extractPartListFromOcrPages(
     ? validateItemsAgainstCsvInventory(extractedItems, options.validationInventory, {
         candidateCatalogParts: options.candidateCatalogParts ?? [],
       })
-    : null;
+    : options.catalogValidationEnabled || options.candidateCatalogParts?.length
+      ? validateItemsAgainstCatalog(
+          extractedItems,
+          options.candidateCatalogParts ?? [],
+        )
+      : null;
   const items = validationResult?.items ?? extractedItems;
   const warnings: string[] = [];
 
@@ -329,6 +344,19 @@ function scorePageCandidateItems(
     score += validation.summary.exactMatches * 24;
     score += validation.summary.aliasMatches * 20;
     score -= validation.summary.unmatchedRows * 70;
+  } else if (options.candidateCatalogParts?.length) {
+    const validation = validateItemsAgainstCatalog(
+      items.map((item, index) => ({
+        ...item,
+        id: `candidate-${item.pageNumber}-${index}`,
+        sequence: index + 1,
+      })),
+      options.candidateCatalogParts,
+    );
+
+    score += validation.summary.exactMatches * 18;
+    score += validation.summary.aliasMatches * 14;
+    score -= validation.summary.unmatchedRows * 40;
   }
 
   score -= items.filter((item) => item.quantity === null).length * 4;
@@ -1104,7 +1132,9 @@ function validateItemsAgainstCsvInventory(
   return {
     items: validatedItems,
     summary: {
+      source: "csv" as const,
       csvRows: inventory.length,
+      catalogRows: options.candidateCatalogParts.length,
       exactMatches,
       aliasMatches,
       unmatchedRows,
@@ -1112,6 +1142,157 @@ function validateItemsAgainstCsvInventory(
       quantityDifferences,
     },
   };
+}
+
+function validateItemsAgainstCatalog(
+  items: ExtractedPartListItem[],
+  catalogParts: RebrickableCatalogPart[],
+) {
+  let exactMatches = 0;
+  let aliasMatches = 0;
+  let unmatchedRows = 0;
+
+  const validatedItems = items.map((item) => {
+    const match = findCatalogPartMatch(item, catalogParts);
+
+    if (!match) {
+      unmatchedRows += 1;
+
+      return {
+        ...item,
+        status: "needs-review" as const,
+        validationStatus: "catalog-no-match" as const,
+        notes: [
+          ...item.notes,
+          "No matching part was found in the Rebrickable catalog.",
+        ],
+      };
+    }
+
+    if (match.kind === "exact") {
+      exactMatches += 1;
+    } else {
+      aliasMatches += 1;
+    }
+
+    const validatedPartNumber =
+      match.kind === "alias" ? match.catalogPart.partNumber : item.partNumber;
+    const notes = [
+      ...item.notes,
+      match.kind === "alias" && item.partNumber
+        ? `Rebrickable catalog suggests ${match.catalogPart.partNumber} for OCR part ${item.partNumber}.`
+        : null,
+    ].filter((note): note is string => note !== null);
+
+    return {
+      ...item,
+      partNumber: validatedPartNumber ?? match.catalogPart.partNumber,
+      ...(validatedPartNumber !== item.partNumber
+        ? { ocrPartNumber: item.partNumber }
+        : {}),
+      description: item.description ?? match.catalogPart.name,
+      notes,
+      status:
+        item.quantity === null || item.colorName === null
+          ? ("needs-review" as const)
+          : ("complete" as const),
+      validationStatus:
+        match.kind === "exact"
+          ? ("catalog-exact-match" as const)
+          : ("catalog-alias-match" as const),
+    };
+  });
+
+  return {
+    items: validatedItems,
+    summary: {
+      source: "catalog" as const,
+      csvRows: 0,
+      catalogRows: catalogParts.length,
+      exactMatches,
+      aliasMatches,
+      unmatchedRows,
+      unusedCsvRows: 0,
+      quantityDifferences: 0,
+    },
+  };
+}
+
+function findCatalogPartMatch(
+  item: ExtractedPartListItem,
+  catalogParts: RebrickableCatalogPart[],
+) {
+  if (!item.partNumber) {
+    return null;
+  }
+
+  const normalizedPartNumber = normalizePartNumberAlias(item.partNumber);
+  const matches = catalogParts
+    .flatMap((catalogPart) => {
+      const match = scoreCatalogPartMatch(normalizedPartNumber, catalogPart);
+
+      return match ? [{ ...match, catalogPart }] : [];
+    })
+    .sort((left, right) => right.score - left.score);
+  const [bestMatch, nextMatch] = matches;
+
+  if (!bestMatch) {
+    return null;
+  }
+
+  if (
+    bestMatch.kind !== "exact" &&
+    nextMatch &&
+    nextMatch.score === bestMatch.score
+  ) {
+    return null;
+  }
+
+  return bestMatch;
+}
+
+function scoreCatalogPartMatch(
+  normalizedOcrPartNumber: string,
+  catalogPart: RebrickableCatalogPart,
+) {
+  const exactCandidates = [catalogPart.partNumber, catalogPart.requestedPartNumber];
+
+  if (
+    exactCandidates.some(
+      (partNumber) => normalizePartNumberAlias(partNumber) === normalizedOcrPartNumber,
+    )
+  ) {
+    return { kind: "exact" as const, score: exactPartNumberScore };
+  }
+
+  const aliasMatch = catalogPart.aliases.find(
+    (alias) => normalizePartNumberAlias(alias.partNumber) === normalizedOcrPartNumber,
+  );
+
+  if (aliasMatch) {
+    return {
+      kind: "alias" as const,
+      score: scoreCatalogAlias(aliasMatch),
+    };
+  }
+
+  const ocrBase = extractPartNumberBase(normalizedOcrPartNumber);
+  const baseAliasMatch = catalogPart.aliases.find((alias) => {
+    const aliasBase = extractPartNumberBase(
+      normalizePartNumberAlias(alias.partNumber),
+    );
+
+    return ocrBase && aliasBase && ocrBase === aliasBase;
+  });
+
+  if (baseAliasMatch) {
+    return {
+      kind: "alias" as const,
+      score: Math.min(scoreCatalogAlias(baseAliasMatch) - 40, basePartNumberAliasScore),
+    };
+  }
+
+  return null;
 }
 
 function findBestInventoryMatch(
@@ -2191,8 +2372,17 @@ function extractQuantity(rawText: string, partNumber: string | null) {
   return readPositiveInteger(standaloneNumber?.[1]);
 }
 
-function createColorVocabulary(inventory: RebrickableInventoryItem[] = []) {
+function createColorVocabulary(
+  inventory: RebrickableInventoryItem[] = [],
+  catalogColorNames: string[] = [],
+) {
   const colorNames = new Set(defaultColorNames);
+
+  catalogColorNames.forEach((colorName) => {
+    if (colorName.trim()) {
+      colorNames.add(colorName);
+    }
+  });
 
   inventory.forEach((inventoryItem) => {
     const inventoryColorName =

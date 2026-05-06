@@ -168,9 +168,7 @@ export function enrichRebrickablePartsWithCatalogCache(
       return [];
     }
 
-    const catalogPart = createCatalogPartFromCache(partNumber, catalogCache);
-
-    return catalogPart ? [catalogPart] : [];
+    return createCatalogPartsFromCache(partNumber, catalogCache);
   });
   const parts = mergeDuplicateCatalogParts([...enrichedParts, ...cacheOnlyParts]);
   const returnedWithCachePartNumberSet = createReturnedPartNumberSet(parts);
@@ -281,26 +279,89 @@ function collectCachedAliases(
   );
 }
 
-function createCatalogPartFromCache(
+function createCatalogPartsFromCache(
   requestedPartNumber: string,
   catalogCache: RebrickableCatalogCacheIndex,
 ) {
   const normalizedPartNumber = normalizePartNumber(requestedPartNumber);
-  const cachedPart = catalogCache.parts[normalizedPartNumber];
-  const aliases = readCachedAliases(normalizedPartNumber, catalogCache);
+  const directCatalogPart = createDirectCatalogPartFromCache(
+    normalizedPartNumber,
+    catalogCache,
+  );
+  const aliasTargetCatalogParts = collectCacheLookupRoots(normalizedPartNumber)
+    .flatMap((rootPartNumber) =>
+      readCachedAliases(rootPartNumber, catalogCache).flatMap((alias) =>
+        createAliasTargetCatalogPartFromCache(rootPartNumber, alias, catalogCache),
+      ),
+    );
+
+  return mergeDuplicateCatalogParts([
+    ...(directCatalogPart ? [directCatalogPart] : []),
+    ...aliasTargetCatalogParts,
+  ]);
+}
+
+function createDirectCatalogPartFromCache(
+  requestedPartNumber: string,
+  catalogCache: RebrickableCatalogCacheIndex,
+) {
+  const cachedPart = catalogCache.parts[requestedPartNumber];
+  const aliases = readCachedAliases(requestedPartNumber, catalogCache);
 
   if (!cachedPart && aliases.length === 0) {
     return null;
   }
 
   return {
-    requestedPartNumber: normalizedPartNumber,
-    partNumber: normalizedPartNumber,
+    requestedPartNumber,
+    partNumber: requestedPartNumber,
     name: cachedPart?.name ?? null,
     partUrl: null,
     partImageUrl: null,
     aliases,
   };
+}
+
+function createAliasTargetCatalogPartFromCache(
+  requestedPartNumber: string,
+  alias: RebrickableCatalogAlias,
+  catalogCache: RebrickableCatalogCacheIndex,
+) {
+  const targetPartNumber = normalizePartNumber(alias.partNumber);
+  const cachedPart = catalogCache.parts[targetPartNumber];
+
+  if (!cachedPart) {
+    return [];
+  }
+
+  return [
+    {
+      requestedPartNumber,
+      partNumber: targetPartNumber,
+      name: cachedPart.name,
+      partUrl: null,
+      partImageUrl: null,
+      aliases: dedupeCatalogAliases([
+        {
+          partNumber: requestedPartNumber,
+          kind: alias.kind,
+          source: alias.source,
+        },
+        ...readCachedAliases(targetPartNumber, catalogCache),
+      ]),
+    },
+  ];
+}
+
+function collectCacheLookupRoots(partNumber: string) {
+  const roots = new Set([partNumber]);
+  const basePartNumber = partNumber.match(/^\d+/)?.[0] ?? null;
+
+  if (basePartNumber && basePartNumber !== partNumber) {
+    roots.add(basePartNumber);
+  }
+
+  return [...roots];
 }
 
 function readCachedAliases(

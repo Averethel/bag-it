@@ -257,18 +257,24 @@ export async function extractPartListFromPdfSession(
       extractionOptions,
     );
 
-    const candidateCatalogParts = await fetchUnmatchedOcrCatalogParts(
+    const catalogResult = await fetchOcrCatalogPartsForExtraction(
       initialExtractionResult,
       options,
     );
+    const candidateCatalogParts = catalogResult?.parts ?? [];
+    const catalogColorNames = Object.values(catalogResult?.colorNamesById ?? {});
     const descriptorEnrichedInventory = await enrichRelevantCatalogImageDescriptors(
       initialExtractionResult,
       options,
     );
     const extractionResult =
-      candidateCatalogParts.length > 0 || descriptorEnrichedInventory !== null
+      catalogResult !== null || descriptorEnrichedInventory !== null
         ? extractPartListFromOcrPages(discoveryResult.pages, {
+            ...(catalogResult !== null && !options.validationInventory?.length
+              ? { catalogValidationEnabled: true }
+              : {}),
             candidateCatalogParts,
+            catalogColorNames,
             ...(descriptorEnrichedInventory !== null
               ? { validationInventory: descriptorEnrichedInventory }
               : options.validationInventory !== undefined
@@ -297,25 +303,21 @@ export async function extractPartListFromPdfSession(
   }
 }
 
-async function fetchUnmatchedOcrCatalogParts(
+async function fetchOcrCatalogPartsForExtraction(
   extractionResult: PartListExtractionResult,
   options: ExtractPartListOptions,
 ) {
-  if (!options.fetchCatalogParts || !options.validationInventory?.length) {
-    return [];
+  if (!options.fetchCatalogParts) {
+    return null;
   }
 
-  const unmatchedPartNumbers = [
-    ...new Set(
-      extractionResult.items
-        .filter((item) => item.validationStatus === "csv-no-match")
-        .map((item) => item.ocrPartNumber ?? item.partNumber)
-        .filter((partNumber): partNumber is string => Boolean(partNumber)),
-    ),
-  ];
+  const candidatePartNumbers = collectCatalogCandidatePartNumbers(
+    extractionResult,
+    Boolean(options.validationInventory?.length),
+  );
 
-  if (unmatchedPartNumbers.length === 0) {
-    return [];
+  if (candidatePartNumbers.length === 0) {
+    return null;
   }
 
   options.onProgress?.({
@@ -323,12 +325,28 @@ async function fetchUnmatchedOcrCatalogParts(
     pageNumber: null,
     pageCount: null,
     progress: null,
-    message: "Checking unmatched OCR part numbers",
+    message: options.validationInventory?.length
+      ? "Checking unmatched OCR part numbers"
+      : "Checking OCR part numbers against Rebrickable catalog",
   });
 
-  const catalogResult = await options.fetchCatalogParts(unmatchedPartNumbers);
+  return options.fetchCatalogParts(candidatePartNumbers);
+}
 
-  return catalogResult.parts;
+export function collectCatalogCandidatePartNumbers(
+  extractionResult: PartListExtractionResult,
+  hasValidationInventory: boolean,
+) {
+  return [
+    ...new Set(
+      extractionResult.items
+        .filter((item) =>
+          hasValidationInventory ? item.validationStatus === "csv-no-match" : true,
+        )
+        .map((item) => item.ocrPartNumber ?? item.partNumber)
+        .filter((partNumber): partNumber is string => Boolean(partNumber)),
+    ),
+  ];
 }
 
 async function enrichRelevantCatalogImageDescriptors(

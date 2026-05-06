@@ -262,6 +262,53 @@ describe("normalizeRebrickablePartsResponse", () => {
       ],
     });
   });
+
+  it("uses generated catalogue base aliases for suffixed OCR part numbers", () => {
+    const result = enrichRebrickablePartsWithCatalogCache(
+      {
+        parts: [],
+        missingPartNumbers: ["4589b"],
+        warnings: [],
+        colorNamesById: {},
+        colorRgbById: {},
+      },
+      ["4589b"],
+      createCatalogCache({
+        aliases: {
+          "4589": [
+            {
+              partNumber: "59900",
+              kind: "relationship",
+              source: "M",
+            },
+          ],
+        },
+        parts: {
+          "59900": {
+            name: "Cone 1 x 1 with Top Groove",
+            categoryId: "20",
+            material: "Plastic",
+          },
+        },
+      }),
+    );
+
+    expect(result.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          partNumber: "59900",
+          name: "Cone 1 x 1 with Top Groove",
+          aliases: expect.arrayContaining([
+            {
+              partNumber: "4589",
+              kind: "relationship",
+              source: "M",
+            },
+          ]),
+        }),
+      ]),
+    );
+  });
 });
 
 function createCatalogCache(
