@@ -16,6 +16,10 @@ the server renders an LDraw fallback by fetching only the needed official LDraw
 SVGs in Vercel Blob. Without Blob, rendered fallbacks are cached only for the
 current server instance.
 
+Production builds require a fresh generated Rebrickable catalog cache. If the
+public Rebrickable bulk catalog CSVs cannot be downloaded and indexed,
+`npm run build` fails instead of deploying degraded catalog matching.
+
 `npm run ldraw:build` is optional for local offline fallback work. It downloads
 the official LDraw `complete.zip` library into the OS temp directory. Set
 `BAG_IT_LDRAW_CACHE_DIR` to override the cache location, or `LDRAW_LIBRARY_PATH`
