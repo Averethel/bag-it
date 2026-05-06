@@ -158,7 +158,15 @@ export async function attachCatalogImageDescriptorsToInventory(
   });
 
   await runWithConcurrency(
-    [...new Set(targetItems.flatMap((item) => item.catalogPart?.partImageUrl ?? []))],
+    [
+      ...new Set(
+        targetItems.flatMap((item) => {
+          const imageUrl = item.catalogPart?.partImageUrl;
+
+          return imageUrl ? [imageUrl] : [];
+        }),
+      ),
+    ],
     4,
     async (imageUrl) => {
       descriptorByUrl.set(imageUrl, await fetchCatalogImageDescriptor(imageUrl));
@@ -186,7 +194,19 @@ async function fetchCatalogImageDescriptor(imageUrl: string) {
     return cachedDescriptor;
   }
 
-  const descriptorPromise = fetchCatalogImageDescriptorUncached(imageUrl);
+  const descriptorPromise = fetchCatalogImageDescriptorUncached(imageUrl).then(
+    (descriptor) => {
+      if (descriptor === null) {
+        descriptorCache.delete(imageUrl);
+      }
+
+      return descriptor;
+    },
+    (error: unknown) => {
+      descriptorCache.delete(imageUrl);
+      throw error;
+    },
+  );
   descriptorCache.set(imageUrl, descriptorPromise);
 
   return descriptorPromise;

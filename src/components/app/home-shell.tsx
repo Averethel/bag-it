@@ -954,7 +954,7 @@ export function HomeShell({
 
       try {
         const catalogResult = await fetchCatalogParts(
-          parseResult.items.map((item) => item.partNumber),
+          collectDistinctPartNumbers(parseResult.items),
         );
 
         if (csvSelectionId.current !== currentCsvSelectionId) {
@@ -1268,6 +1268,10 @@ function formatCsvCatalogStatus(csvInventory: CsvInventoryState) {
 
 function countInventoryRowsWithCatalog(items: RebrickableInventoryItem[]) {
   return items.filter((item) => item.catalogPart).length;
+}
+
+function collectDistinctPartNumbers(items: RebrickableInventoryItem[]) {
+  return [...new Set(items.map((item) => item.partNumber))].sort();
 }
 
 function buildCatalogWarnings(result: RebrickableCatalogFetchResult) {

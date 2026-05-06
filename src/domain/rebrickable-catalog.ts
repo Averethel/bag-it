@@ -79,13 +79,10 @@ export function normalizeRebrickablePartsResponse(
     }
 
     const normalizedPartNumber = normalizePartNumber(partNumber);
-    const requestedPartNumber = requestedPartNumberSet.has(normalizedPartNumber)
-      ? normalizedPartNumber
-      : normalizedPartNumber;
 
     return [
       {
-        requestedPartNumber,
+        requestedPartNumber: normalizedPartNumber,
         partNumber: normalizedPartNumber,
         name: readString(rawPart.name),
         partUrl: readString(rawPart.part_url),

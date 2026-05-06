@@ -13,7 +13,19 @@ const catalogCachePath = path.join(
 let cachePromise: Promise<RebrickableCatalogCacheIndex | null> | null = null;
 
 export function readGeneratedRebrickableCatalogCache() {
-  cachePromise ??= readCatalogCache();
+  cachePromise ??= readCatalogCache().then(
+    (catalogCache) => {
+      if (catalogCache === null) {
+        cachePromise = null;
+      }
+
+      return catalogCache;
+    },
+    (error: unknown) => {
+      cachePromise = null;
+      throw error;
+    },
+  );
 
   return cachePromise;
 }
@@ -48,5 +60,5 @@ function isRebrickableCatalogCacheIndex(
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

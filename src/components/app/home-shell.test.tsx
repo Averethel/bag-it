@@ -415,9 +415,13 @@ describe("HomeShell", () => {
     fireEvent.change(screen.getByLabelText("Rebrickable parts CSV"), {
       target: {
         files: [
-          new File(["Part,Color,Quantity\n2420,0,2\n2431,1,7"], "parts.csv", {
-            type: "text/csv",
-          }),
+          new File(
+            ["Part,Color,Quantity\n2420,0,2\n2431,1,7\n2420,0,1"],
+            "parts.csv",
+            {
+              type: "text/csv",
+            },
+          ),
         ],
       },
     });
@@ -425,8 +429,9 @@ describe("HomeShell", () => {
     await screen.findByText(
       "analysis.pdf is selected for this browser session.",
     );
-    await screen.findByText("parts.csv (2 rows)");
-    await screen.findByText("2 CSV rows have Rebrickable catalog details.");
+    await screen.findByText("parts.csv (3 rows)");
+    await screen.findByText("3 CSV rows have Rebrickable catalog details.");
+    expect(fetchCatalogParts).toHaveBeenCalledWith(["2420", "2431"]);
 
     fireEvent.click(screen.getByRole("button", { name: /Analysis/ }));
     fireEvent.click(screen.getByRole("button", { name: "Run OCR" }));
@@ -448,6 +453,12 @@ describe("HomeShell", () => {
           colorName: "Blue",
           partNumber: "2431",
           quantity: 7,
+        }),
+        expect.objectContaining({
+          catalogPart: expect.objectContaining({ partNumber: "2420" }),
+          colorName: "Black",
+          partNumber: "2420",
+          quantity: 1,
         }),
       ],
     });
