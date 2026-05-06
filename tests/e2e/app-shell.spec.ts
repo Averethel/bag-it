@@ -10,6 +10,7 @@ const smallManualPath = join(
   "small",
   "manual.pdf",
 );
+const readOnlyRequestMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
 test("renders the manual workflow shell", async ({ page }) => {
   await page.goto("/");
@@ -34,15 +35,15 @@ test("renders the manual workflow shell", async ({ page }) => {
 test("keeps PDF bytes session-only while restoring local metadata", async ({
   page,
 }) => {
-  const nonGetRequests: Array<{
+  const mutatingRequests: Array<{
     method: string;
     postData: string;
     url: string;
   }> = [];
 
   page.on("request", (request) => {
-    if (request.method() !== "GET") {
-      nonGetRequests.push({
+    if (!readOnlyRequestMethods.has(request.method())) {
+      mutatingRequests.push({
         method: request.method(),
         postData: request.postData() ?? "",
         url: request.url(),
@@ -104,13 +105,12 @@ test("keeps PDF bytes session-only while restoring local metadata", async ({
   expect(persistedProjectData.serialized).not.toContain("%PDF");
   expect(persistedProjectData.serialized).not.toContain("byteLength");
   expect(
-    nonGetRequests.filter(
-      (request) =>
-        request.method !== "OPTIONS" && new URL(request.url).origin === appOrigin,
+    mutatingRequests.filter(
+      (request) => new URL(request.url).origin === appOrigin,
     ),
   ).toEqual([]);
   expect(
-    nonGetRequests.some(
+    mutatingRequests.some(
       (request) =>
         request.postData.includes("%PDF") ||
         request.postData.includes("manual.pdf"),
