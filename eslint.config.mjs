@@ -1,15 +1,12 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import nextVitals from "eslint-config-next/core-web-vitals"
+import nextTypescript from "eslint-config-next/typescript"
 
-export default defineConfig([
+const eslintConfig = [
   ...nextVitals,
-  ...nextTs,
-  globalIgnores([
-    ".next/**",
-    "coverage/**",
-    "node_modules/**",
-    "playwright-report/**",
-    "test-results/**",
-  ]),
-]);
+  ...nextTypescript,
+  {
+    ignores: [".next/**", "node_modules/**", ".data/**"],
+  },
+]
+
+export default eslintConfig

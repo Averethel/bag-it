@@ -1,5 +1,5 @@
-import { HomeShell } from "@/components/app/home-shell";
+import { BaggingPage } from "./bagging-page"
 
 export default function Home() {
-  return <HomeShell />;
+  return <BaggingPage />
 }

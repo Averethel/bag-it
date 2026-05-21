@@ -6,16 +6,10 @@
   box-sizing: border-box;
 }
 
-html {
-  min-height: 100%;
-}
-
 body {
-  min-height: 100vh;
   margin: 0;
-  background: #f8fafc;
-  color: #172033;
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  min-width: 320px;
+  background: var(--chakra-colors-bagging-page-bg);
 }
 
 button,
@@ -23,4 +17,14 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+@keyframes bagging-progress-activity {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(390%);
+  }
 }
