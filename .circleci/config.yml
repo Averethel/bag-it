@@ -54,7 +54,7 @@ commands:
       - run:
           name: Deploy Vercel project
           command: |
-            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --build-env REBRICKABLE_API_KEY="$REBRICKABLE_API_KEY" --env REBRICKABLE_API_KEY="$REBRICKABLE_API_KEY" << parameters.production_flag >> --token="$VERCEL_TOKEN")"
             deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1 || true)"
 
             if [ -z "${deployment_url}" ]; then
