@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { loadEnvFile } from "node:process"
 import { gunzipSync, inflateRawSync } from "node:zlib"
@@ -17,6 +17,10 @@ const catalogueDir = dryRun ? activeCatalogueDir : `${activeCatalogueDir}.tmp-${
 const snapshotsDir = `${activeCatalogueDir}.snapshots`
 const snapshotSchemaVersion = 1
 const snapshotFileName = "snapshot.json"
+const activeCataloguePromotion = (process.env.BAG_IT_CATALOGUE_PROMOTION ?? "symlink").trim().toLowerCase()
+if (!["copy", "symlink"].includes(activeCataloguePromotion)) {
+  throw new Error("BAG_IT_CATALOGUE_PROMOTION must be either copy or symlink.")
+}
 const downloads = [
   {
     fileName: "colors.csv",
@@ -63,7 +67,7 @@ const tableRequirements = new Map([
 ])
 
 if (dryRun) {
-  console.log(JSON.stringify({ catalogueDir: activeCatalogueDir, downloads, dryRun: true }, null, 2))
+  console.log(JSON.stringify({ catalogueDir: activeCatalogueDir, downloads, dryRun: true, promotion: activeCataloguePromotion }, null, 2))
   process.exit(0)
 }
 
@@ -206,7 +210,7 @@ function validateCatalogueTable(tableName, headers, rowCount) {
 
 function promoteCatalogueDirectory(workingDirectory, targetDirectory, snapshotId) {
   const previousDirectory = `${targetDirectory}.previous`
-  const nextLink = `${targetDirectory}.next`
+  const nextPath = `${targetDirectory}.next`
   const snapshotDirectory = join(snapshotsDir, snapshotId)
   mkdirSync(snapshotsDir, { recursive: true })
   if (existsSync(snapshotDirectory)) {
@@ -214,7 +218,13 @@ function promoteCatalogueDirectory(workingDirectory, targetDirectory, snapshotId
   } else {
     renameSync(workingDirectory, snapshotDirectory)
   }
-  rmSync(nextLink, { force: true, recursive: true })
+
+  if (activeCataloguePromotion === "copy") {
+    promoteCatalogueDirectoryCopy(snapshotDirectory, targetDirectory, previousDirectory, nextPath)
+    return
+  }
+
+  rmSync(nextPath, { force: true, recursive: true })
 
   if (
     existsSync(targetDirectory) &&
@@ -224,15 +234,15 @@ function promoteCatalogueDirectory(workingDirectory, targetDirectory, snapshotId
     return
   }
 
-  symlinkSync(snapshotDirectory, nextLink, "dir")
+  symlinkSync(snapshotDirectory, nextPath, "dir")
 
   if (!existsSync(targetDirectory)) {
-    renameSync(nextLink, targetDirectory)
+    renameSync(nextPath, targetDirectory)
     return
   }
 
   if (lstatSync(targetDirectory).isSymbolicLink()) {
-    renameSync(nextLink, targetDirectory)
+    renameSync(nextPath, targetDirectory)
     return
   }
 
@@ -242,9 +252,32 @@ function promoteCatalogueDirectory(workingDirectory, targetDirectory, snapshotId
   }
 
   try {
-    renameSync(nextLink, targetDirectory)
+    renameSync(nextPath, targetDirectory)
   } catch (error) {
     if (existsSync(previousDirectory) && !existsSync(targetDirectory)) {
+      renameSync(previousDirectory, targetDirectory)
+    }
+
+    throw error
+  }
+}
+
+function promoteCatalogueDirectoryCopy(snapshotDirectory, targetDirectory, previousDirectory, nextDirectory) {
+  rmSync(nextDirectory, { force: true, recursive: true })
+  cpSync(snapshotDirectory, nextDirectory, { recursive: true })
+  rmSync(previousDirectory, { force: true, recursive: true })
+
+  if (!existsSync(targetDirectory)) {
+    renameSync(nextDirectory, targetDirectory)
+    return
+  }
+
+  renameSync(targetDirectory, previousDirectory)
+  try {
+    renameSync(nextDirectory, targetDirectory)
+    rmSync(previousDirectory, { force: true, recursive: true })
+  } catch (error) {
+    if (!existsSync(targetDirectory) && existsSync(previousDirectory)) {
       renameSync(previousDirectory, targetDirectory)
     }
 

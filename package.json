@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "build:vercel": "npm run catalogue:download && npm run build",
+    "build:vercel": "BAG_IT_CATALOGUE_PROMOTION=copy npm run catalogue:download && npm run build",
     "postinstall": "npm run typegen",
     "typegen": "chakra typegen ./src/components/ui/theme.ts --strict --clean --tsconfig ./tsconfig.json",
     "lint": "eslint .",
