@@ -19,7 +19,7 @@ commands:
           command: |
             missing=0
 
-            for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID REBRICKABLE_API_KEY; do
+            for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
               if [ -z "${!name:-}" ]; then
                 echo "Missing required environment variable: ${name}"
                 missing=1
@@ -54,7 +54,7 @@ commands:
       - run:
           name: Deploy Vercel project
           command: |
-            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --build-env REBRICKABLE_API_KEY="$REBRICKABLE_API_KEY" --env REBRICKABLE_API_KEY="$REBRICKABLE_API_KEY" << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy << parameters.production_flag >> --token="$VERCEL_TOKEN")"
             deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1 || true)"
 
             if [ -z "${deployment_url}" ]; then
