@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
+    "start": "next start",
     "build": "next build --webpack",
     "build:vercel": "BAG_IT_CATALOGUE_PROMOTION=copy npm run catalogue:download && npm run build",
     "postinstall": "npm run typegen",
     "typegen": "chakra typegen ./src/components/ui/theme.ts --strict --clean --tsconfig ./tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:deployed": "playwright test",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typegen && npm run typecheck && npm run lint && npm run test && npm run build",
     "analyze:examples": "node scripts/analyze-local-examples.mjs",
@@ -34,6 +37,7 @@
   "devDependencies": {
     "@chakra-ui/cli": "3.35.0",
     "@eslint/eslintrc": "3.3.5",
+    "@playwright/test": "1.59.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.5.2",

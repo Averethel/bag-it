@@ -5,6 +5,10 @@ executors:
     docker:
       - image: cimg/node:24.14.1
     working_directory: ~/project
+  playwright:
+    docker:
+      - image: mcr.microsoft.com/playwright:v1.59.1-noble
+    working_directory: ~/project
 
 commands:
   attach_project_workspace:
@@ -27,6 +31,19 @@ commands:
             done
 
             exit "${missing}"
+
+  require_vercel_automation_bypass:
+    steps:
+      - run:
+          name: Check Vercel automation bypass secret
+          command: |
+            trimmed_secret="$(printf "%s" "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" | tr -d '[:space:]')"
+
+            if [ -z "${trimmed_secret}" ]; then
+              echo "Missing required environment variable: VERCEL_AUTOMATION_BYPASS_SECRET"
+              echo "Create a Vercel Protection Bypass for Automation secret and add it to CircleCI for deployed E2E tests."
+              exit 1
+            fi
 
   deploy_to_vercel:
     parameters:
@@ -60,7 +77,12 @@ commands:
               exit 1
             fi
 
+            printf "%s\n" "${deployment_url}" > vercel-deployment-url
             echo "Deployed to ${deployment_url}"
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - project/vercel-deployment-url
 
 jobs:
   install_dependencies:
@@ -132,6 +154,27 @@ jobs:
           environment: production
           production_flag: --prod
 
+  e2e:
+    executor: playwright
+    steps:
+      - attach_project_workspace
+      - require_vercel_automation_bypass
+      - run:
+          name: Read deployment URL
+          command: |
+            deployment_url="$(cat vercel-deployment-url)"
+            printf "export PLAYWRIGHT_BASE_URL=%q\n" "${deployment_url}" >> "$BASH_ENV"
+            echo "Testing ${deployment_url}"
+      - run:
+          name: End-to-end tests
+          command: npm run test:e2e:deployed
+      - store_artifacts:
+          path: playwright-report
+      - store_artifacts:
+          path: test-results
+      - store_test_results:
+          path: test-results
+
 workflows:
   ci_cd:
     jobs:
@@ -157,12 +200,26 @@ workflows:
           filters:
             branches:
               ignore: main
+      - e2e:
+          name: e2e_preview
+          requires:
+            - deploy_preview
+          filters:
+            branches:
+              ignore: main
       - deploy_production:
           requires:
             - lint
             - typecheck
             - unit_tests
             - build
+          filters:
+            branches:
+              only: main
+      - e2e:
+          name: e2e_production
+          requires:
+            - deploy_production
           filters:
             branches:
               only: main
