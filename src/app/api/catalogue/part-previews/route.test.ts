@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NextRequest } from "next/server"
 import { readPinnedCatalogueSnapshot } from "@/server/catalogue-snapshot"
 
@@ -38,6 +38,10 @@ const readPinnedCatalogueSnapshotMock = vi.mocked(readPinnedCatalogueSnapshot)
 
 describe("/api/catalogue/part-previews", () => {
   const originalApiKey = process.env.REBRICKABLE_API_KEY
+
+  beforeEach(() => {
+    delete process.env.REBRICKABLE_API_KEY
+  })
 
   afterEach(() => {
     vi.resetModules()
