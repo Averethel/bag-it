@@ -57,7 +57,7 @@ commands:
       - run:
           name: Deploy Vercel output
           command: |
-            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt --archive=tgz << parameters.production_flag >> --token="$VERCEL_TOKEN")"
+            deploy_output="$(npx --yes "vercel@${VERCEL_CLI_VERSION}" deploy --prebuilt << parameters.production_flag >> --token="$VERCEL_TOKEN")"
             deployment_url="$(printf "%s\n" "${deploy_output}" | grep -Eo 'https://[^[:space:]]+' | tail -n 1 || true)"
 
             if [ -z "${deployment_url}" ]; then
