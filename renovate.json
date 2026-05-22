@@ -36,18 +36,21 @@
       "matchPackageNames": ["next", "eslint-config-next", "react", "react-dom"]
     },
     {
-      "description": "Group Chakra UI runtime packages together.",
+      "description": "Group Chakra UI packages together.",
       "groupName": "chakra ui",
-      "matchPackageNames": ["@chakra-ui/react", "@emotion/react", "next-themes"]
+      "matchPackageNames": ["@chakra-ui/react", "@chakra-ui/cli", "@emotion/react"]
+    },
+    {
+      "description": "Group recognition and PDF runtime packages together.",
+      "groupName": "manual analysis runtime",
+      "matchPackageNames": ["@paddleocr/paddleocr-js", "pdfjs-dist"]
     },
     {
       "description": "Group unit and browser test tooling together.",
       "groupName": "test tooling",
       "matchPackageNames": [
-        "mcr.microsoft.com/playwright",
-        "@playwright/test",
+        "playwright",
         "@testing-library/**",
-        "@vitejs/plugin-react",
         "jsdom",
         "vitest"
       ]

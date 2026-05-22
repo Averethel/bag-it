@@ -1,97 +1,86 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test"
 
-const isCi = Boolean(process.env.CI);
-const defaultBaseURL = "http://127.0.0.1:3000";
-const baseURL = resolveBaseURL(process.env.PLAYWRIGHT_BASE_URL);
-const vercelAutomationBypassSecret =
-  process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+const isCi = Boolean(process.env.CI)
+const defaultBaseURL = "http://localhost:3000"
+const baseURL = resolveBaseURL(process.env.PLAYWRIGHT_BASE_URL)
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim()
+const vercelAutomationBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
 const vercelAutomationBypassHeaders = vercelAutomationBypassSecret
   ? {
       "x-vercel-protection-bypass": vercelAutomationBypassSecret,
       "x-vercel-set-bypass-cookie": "true",
     }
-  : undefined;
-const shouldStartLocalServer = isEquivalentLocalServerUrl(
-  baseURL,
-  defaultBaseURL,
-);
-const localServerHostname = getLocalServerHostname(baseURL);
-const localServerURL = getLocalServerURL(baseURL);
+  : undefined
+const shouldStartLocalServer = isEquivalentLocalServerUrl(baseURL, defaultBaseURL)
+const localServerHostname = getLocalServerHostname(baseURL)
+const localServerURL = getLocalServerURL(baseURL)
 
 function resolveBaseURL(configuredBaseURL: string | undefined) {
-  const resolvedBaseURL = configuredBaseURL?.trim() || defaultBaseURL;
+  const resolvedBaseURL = configuredBaseURL?.trim() || defaultBaseURL
 
-  return validateAbsoluteHttpURL(resolvedBaseURL, "PLAYWRIGHT_BASE_URL");
+  return validateAbsoluteHttpURL(resolvedBaseURL, "PLAYWRIGHT_BASE_URL")
 }
 
 function validateAbsoluteHttpURL(value: string, sourceName: string) {
-  let parsedURL: URL;
+  let parsedURL: URL
 
   try {
-    parsedURL = new URL(value);
+    parsedURL = new URL(value)
   } catch {
-    throw new Error(
-      `${sourceName} must be a valid absolute http(s) URL, but received: ${JSON.stringify(value)}`,
-    );
+    throw new Error(`${sourceName} must be a valid absolute http(s) URL, but received: ${JSON.stringify(value)}`)
   }
 
   if (parsedURL.protocol !== "http:" && parsedURL.protocol !== "https:") {
-    throw new Error(
-      `${sourceName} must use the http or https protocol, but received: ${JSON.stringify(value)}`,
-    );
+    throw new Error(`${sourceName} must use the http or https protocol, but received: ${JSON.stringify(value)}`)
   }
 
   if (parsedURL.pathname === "/" && !parsedURL.search && !parsedURL.hash) {
-    return parsedURL.origin;
+    return parsedURL.origin
   }
 
-  return parsedURL.toString();
+  return parsedURL.toString()
 }
 
 function isEquivalentLocalServerUrl(candidate: string, expected: string) {
   try {
-    const candidateUrl = new URL(candidate);
-    const expectedUrl = new URL(expected);
+    const candidateUrl = new URL(candidate)
+    const expectedUrl = new URL(expected)
 
     return (
       candidateUrl.protocol === expectedUrl.protocol &&
       candidateUrl.port === expectedUrl.port &&
       isLoopbackHost(candidateUrl.hostname) &&
       isLoopbackHost(expectedUrl.hostname)
-    );
+    )
   } catch {
-    return candidate === expected;
+    return candidate === expected
   }
 }
 
 function isLoopbackHost(hostname: string) {
-  const normalizedHostname = stripIpv6Brackets(hostname);
+  const normalizedHostname = stripIpv6Brackets(hostname)
 
-  return (
-    normalizedHostname === "127.0.0.1" ||
-    normalizedHostname === "localhost" ||
-    normalizedHostname === "::1"
-  );
+  return normalizedHostname === "127.0.0.1" || normalizedHostname === "localhost" || normalizedHostname === "::1"
 }
 
 function getLocalServerHostname(candidate: string) {
   try {
-    return stripIpv6Brackets(new URL(candidate).hostname);
+    return stripIpv6Brackets(new URL(candidate).hostname)
   } catch {
-    return stripIpv6Brackets(new URL(defaultBaseURL).hostname);
+    return stripIpv6Brackets(new URL(defaultBaseURL).hostname)
   }
 }
 
 function getLocalServerURL(candidate: string) {
   try {
-    return new URL(candidate).origin;
+    return new URL(candidate).origin
   } catch {
-    return new URL(defaultBaseURL).origin;
+    return new URL(defaultBaseURL).origin
   }
 }
 
 function stripIpv6Brackets(hostname: string) {
-  return hostname.replace(/^\[(.*)]$/, "$1");
+  return hostname.replace(/^\[(.*)]$/, "$1")
 }
 
 export default defineConfig({
@@ -109,10 +98,16 @@ export default defineConfig({
     : "html",
   use: {
     baseURL,
-    trace: vercelAutomationBypassHeaders ? "off" : "on-first-retry",
-    ...(vercelAutomationBypassHeaders
-      ? { extraHTTPHeaders: vercelAutomationBypassHeaders }
+    ...(chromiumExecutablePath
+      ? {
+          launchOptions: {
+            executablePath: chromiumExecutablePath,
+            args: ["--disable-features=MachPortRendezvous"],
+          },
+        }
       : {}),
+    trace: vercelAutomationBypassHeaders ? "off" : "on-first-retry",
+    ...(vercelAutomationBypassHeaders ? { extraHTTPHeaders: vercelAutomationBypassHeaders } : {}),
   },
   ...(shouldStartLocalServer
     ? {
@@ -130,4 +125,4 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-});
+})
