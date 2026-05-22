@@ -789,7 +789,7 @@ function createRegionCandidate(
   const minWidth = Math.max(48, imageData.width * 0.08)
   const minHeight = Math.max(36, imageData.height * 0.05)
   const maxWidth = imageData.width * 0.92
-  const maxHeight = imageData.height * 0.45
+  const maxHeight = imageData.height * 0.58
   const rawArea = component.width * component.height
 
   if (
@@ -4833,7 +4833,7 @@ function isLikelyQuantityMarkerRegion(imageData: DetectionImageData, region: Pix
   }
 
   const aspectRatio = textRegion.width / Math.max(1, textRegion.height)
-  if (aspectRatio < 0.45 || aspectRatio > 1.4) {
+  if (aspectRatio < 0.45 || aspectRatio > 1.8) {
     return false
   }
 
@@ -4850,8 +4850,8 @@ function isLikelyQuantityMarkerRegion(imageData: DetectionImageData, region: Pix
   const featureClassification = classifyQuantityGlyphByFeatures(densities, aspectRatio)
 
   return (
-    (featureClassification?.char === "x" && xTemplateScore >= Math.max(0.52, bestDigitScore - 0.08)) ||
-    (xTemplateScore >= 0.52 && xTemplateScore >= bestDigitScore - 0.12)
+    (featureClassification?.char === "x" && xTemplateScore >= Math.max(0.42, bestDigitScore - 0.08)) ||
+    (xTemplateScore >= 0.46 && xTemplateScore >= bestDigitScore - 0.12)
   )
 }
 
@@ -4876,7 +4876,7 @@ function splitWideQuantityGlyphs(imageData: DetectionImageData, components: read
   const splitGlyphs: DarkComponent[] = []
 
   for (const glyph of glyphs) {
-    if (glyph.width <= glyph.height * 0.78) {
+    if (glyph.width <= glyph.height * 0.78 || isLikelyQuantityMarkerRegion(imageData, glyph)) {
       splitGlyphs.push(glyph)
       continue
     }
@@ -5351,6 +5351,18 @@ function classifyQuantityGlyphByFeatures(
     bottom < 0.36
   ) {
     return { char: "4", confidence: 0.79 }
+  }
+
+  if (
+    aspectRatio >= 0.45 &&
+    upperLeft > 0.28 &&
+    upperRight > 0.12 &&
+    middle > 0.12 &&
+    lowerRight > 0.08 &&
+    lowerLeft < upperLeft * 0.48 &&
+    bottom < 0.38
+  ) {
+    return { char: "4", confidence: 0.8 }
   }
 
   if (
@@ -6598,7 +6610,7 @@ function createQuantityLabelAnchorCandidate(
     return null
   }
   const digitCount = quantity.text?.length ?? 0
-  if (digitCount <= 1 && aspectRatio > 1.92) {
+  if (digitCount <= 1 && aspectRatio > 2.6) {
     return null
   }
 
@@ -6687,6 +6699,19 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
     }
 
     const verticalGap = anchor.region.y - (candidate.region.y + candidate.region.height)
+    const candidateAspectRatio = candidate.region.width / Math.max(1, candidate.region.height)
+    const lowerAnchorRight = anchor.region.x + anchor.region.width
+    if (
+      candidate.quantity.value === 1 &&
+      candidateAspectRatio > 1.85 &&
+      verticalGap >= -Math.max(2, candidate.region.height * 0.12) &&
+      verticalGap <= candidate.region.height * 1.1 &&
+      getRegionCenterX(candidate.region) > getRegionCenterX(anchor.region) &&
+      candidate.region.x <= lowerAnchorRight + candidate.region.height
+    ) {
+      return true
+    }
+
     const horizontalOverlap = Math.max(
       0,
       Math.min(candidate.region.x + candidate.region.width, anchor.region.x + anchor.region.width) -
@@ -6828,7 +6853,7 @@ function findPartRegionForQuantityAnchor(
   const interiorRegion = getCalloutInteriorRegion(imageData)
   const partSearchBottom = Math.min(
     zone.region.y + zone.region.height,
-    Math.ceil(labelRegion.y + labelRegion.height * 0.32),
+    Math.ceil(labelRegion.y + labelRegion.height * 1.25),
   )
   const baseSearchRegion = normalizeRegion({
     height: partSearchBottom - zone.region.y,
@@ -7009,10 +7034,21 @@ function clipPartRegionAwayFromNeighboringQuantityAnchors(
     }
 
     const neighborCenterX = getRegionCenterX(neighbor.region)
+    const boundaryGap = Math.max(2, Math.round(Math.min(anchor.region.height, neighbor.region.height) * 0.25))
     if (neighborCenterX < anchorCenterX) {
-      left = Math.max(left, Math.floor((neighborCenterX + anchorCenterX) / 2))
+      left = Math.max(
+        left,
+        region.x < neighbor.region.x + neighbor.region.width + boundaryGap
+          ? Math.floor((neighborCenterX + anchorCenterX) / 2)
+          : neighbor.region.x + neighbor.region.width + boundaryGap,
+      )
     } else if (neighborCenterX > anchorCenterX) {
-      right = Math.min(right, Math.ceil((neighborCenterX + anchorCenterX) / 2))
+      right = Math.min(
+        right,
+        region.x + region.width > neighbor.region.x - boundaryGap
+          ? Math.ceil((neighborCenterX + anchorCenterX) / 2)
+          : neighbor.region.x - boundaryGap,
+      )
     }
   }
 
@@ -7318,7 +7354,7 @@ function isLikelyPartComponentNearQuantityLabel(
 ) {
   const area = component.width * component.height
   const componentBottom = component.y + component.height
-  const maxBottom = labelRegion.y + Math.max(2, labelRegion.height * 0.36)
+  const maxBottom = labelRegion.y + Math.max(2, labelRegion.height * 1.25)
 
   return (
     area >= imageData.width * imageData.height * 0.00035 &&
@@ -7484,6 +7520,38 @@ function collectDarkComponent(
     addDarkNeighbor(imageData, visited, stack, pixelIndex + 1, x < bounds.x + bounds.width - 1, isMatchingPixel)
     addDarkNeighbor(imageData, visited, stack, pixelIndex - imageData.width, y > bounds.y, isMatchingPixel)
     addDarkNeighbor(imageData, visited, stack, pixelIndex + imageData.width, y < bounds.y + bounds.height - 1, isMatchingPixel)
+    addDarkNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex - imageData.width - 1,
+      x > bounds.x && y > bounds.y,
+      isMatchingPixel,
+    )
+    addDarkNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex - imageData.width + 1,
+      x < bounds.x + bounds.width - 1 && y > bounds.y,
+      isMatchingPixel,
+    )
+    addDarkNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex + imageData.width - 1,
+      x > bounds.x && y < bounds.y + bounds.height - 1,
+      isMatchingPixel,
+    )
+    addDarkNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex + imageData.width + 1,
+      x < bounds.x + bounds.width - 1 && y < bounds.y + bounds.height - 1,
+      isMatchingPixel,
+    )
   }
 
   return {

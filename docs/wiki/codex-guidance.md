@@ -70,6 +70,23 @@ This page is guidance for future Codex sessions working in this repository.
 - Prefer common types such as `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, and `build`.
 - Example: `feat: add increment 0 bagging shell`.
 
+## Local Unit Test Bindings
+
+Vitest loads Rolldown through a native optional binding. On macOS, Homebrew
+Node can reject `@rolldown/binding-darwin-arm64` with a library-validation
+error even after an ad-hoc signature. If `npm test` fails before tests start
+with `Cannot find native binding`, use the local WASI fallback without changing
+project dependencies:
+
+```bash
+npm install --no-save --force --cache /private/tmp/bag-it-npm-cache @rolldown/binding-wasm32-wasi@1.0.0-rc.18
+NAPI_RS_FORCE_WASI=1 npm test
+```
+
+CircleCI Linux uses the native Linux binding installed by `npm ci`; do not set
+`NAPI_RS_FORCE_WASI` in committed scripts unless the WASI package becomes a
+supported project dependency.
+
 ## UI Direction
 
 - Use Next.js, React, and Chakra UI.

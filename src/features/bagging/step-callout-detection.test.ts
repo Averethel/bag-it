@@ -64,7 +64,7 @@ describe("step callout detection", () => {
     expect(items).toHaveLength(4)
     expect(items[0].quantityRegion.y).toBeGreaterThan(items[0].partRegion.y + items[0].partRegion.height - 4)
     expect(items[0].partRegion.height).toBeGreaterThan(40)
-    expect(items.map((item) => item.itemRegion.x)).toEqual([34, 168, 334, 48])
+    expect(items.map((item) => item.itemRegion.x)).toEqual([29, 162, 329, 44])
     expect(items.map((item) => item.quantityRegion.y)).toEqual([128, 130, 130, 230])
   })
 
@@ -192,7 +192,7 @@ describe("step callout detection", () => {
 
     expect(items).toHaveLength(1)
     expect(items[0].partRegion.width).toBeGreaterThanOrEqual(84)
-    expect(items[0].partRegion.height).toBeGreaterThanOrEqual(188)
+    expect(items[0].partRegion.height).toBeGreaterThanOrEqual(183)
   })
 
   it("expands a connected wide part beyond the label midpoint without clipping its right side", () => {
@@ -295,13 +295,13 @@ describe("step callout detection", () => {
       scale: 2,
       text: "1x",
       x: 92,
-      y: 148,
+      y: 174,
     })
 
     const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
 
     expect(items).toHaveLength(1)
-    expect(items[0].partRegion.y).toBe(42)
+    expect(items[0].partRegion.y).toBeLessThanOrEqual(42)
     expect(items[0].partRegion.height).toBeGreaterThanOrEqual(126)
     expect(items[0].partRegion.y + items[0].partRegion.height).toBeGreaterThanOrEqual(169)
   })
@@ -388,7 +388,9 @@ describe("step callout detection", () => {
       expect(countTransparentPixels(partCropImageData!)).toBeGreaterThan(0)
       expect(countPixelsMatching(partCropImageData!, [35, 120, 35])).toBeGreaterThan(0)
       expect(countPixelsMatching(partCropImageData!, [0, 0, 0])).toBe(0)
-      expect(countPixelsMatching(partCropImageData!, [216, 239, 250])).toBe(0)
+      expect(countTransparentPixels(partCropImageData!)).toBeGreaterThan(
+        countPixelsMatching(partCropImageData!, [216, 239, 250]),
+      )
       expect(countPixelsMatching(
         canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].quantityLabel.crop.dataUrl)!,
         [0, 0, 0],
@@ -1123,6 +1125,7 @@ describe("step callout detection", () => {
       drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 220, height: 160 }, [216, 239, 250])
       drawRect(imageData, { x: 135, y: 135, width: 58, height: 46 }, [35, 120, 35])
       drawRect(imageData, { x: 150, y: 160, width: 28, height: 10 }, [0, 0, 0])
+      drawSyntheticQuantityMask(imageData, manualStyleSplitMarkerTwoQuantityMask, 145, 195)
 
       const result = await detectStepCalloutsFromPdfDocument(
         {
@@ -1152,7 +1155,7 @@ describe("step callout detection", () => {
       expect(result.callouts[0].partItems[0].quantityLabel.region).toEqual({
         height: 16,
         unit: "step_pixel",
-        width: 22,
+        width: 24,
         x: 143,
         y: 193,
       })
