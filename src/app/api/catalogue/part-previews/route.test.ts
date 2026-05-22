@@ -224,6 +224,64 @@ describe("/api/catalogue/part-previews", () => {
     expect(readFileMock).toHaveBeenCalledWith("/catalogue/.snapshots/snapshot-1/elements.csv", "utf8")
   })
 
+  it("synthesizes a generic fallback when local parts metadata has no image URL", async () => {
+    readFileMock.mockImplementation(async (path) => {
+      const pathText = String(path)
+      if (pathText.endsWith("parts.csv")) {
+        return [
+          "part_num,name,part_cat_id,part_material",
+          "3005,Brick 1 x 1,11,Plastic",
+        ].join("\n")
+      }
+
+      if (pathText.endsWith("elements.csv")) {
+        return [
+          "element_id,part_num,color_id,design_id",
+          "4211398,3005,0,3005",
+        ].join("\n")
+      }
+
+      if (pathText.endsWith("ldraw_part_aliases.csv")) {
+        return "alias,canonical\n"
+      }
+
+      return ""
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { POST } = await import("./route")
+    const response = await POST(
+      new Request("http://localhost/api/catalogue/part-previews", {
+        body: JSON.stringify({
+          parts: [{ colorId: "0", partNumber: "3005" }, { partNumber: "3005" }],
+          snapshotId: "snapshot-1",
+        }),
+        method: "POST",
+      }) as NextRequest,
+    )
+    const payload = (await response.json()) as { previews: unknown[]; status: string }
+
+    expect(payload.status).toBe("available")
+    expect(payload.previews).toEqual([
+      {
+        colorId: "0",
+        fallbackImageUrl: "https://cdn.rebrickable.com/media/parts/ldraw/3005.png",
+        imageUrl: "https://cdn.rebrickable.com/media/parts/elements/4211398.jpg",
+        key: "3005:0",
+        name: "Brick 1 x 1",
+        partNumber: "3005",
+      },
+      {
+        imageUrl: "https://cdn.rebrickable.com/media/parts/ldraw/3005.png",
+        key: "3005:any",
+        name: "Brick 1 x 1",
+        partNumber: "3005",
+      },
+    ])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it("reads local preview metadata from a pinned catalogue snapshot", async () => {
     readFileMock.mockImplementation(async (path) => {
       const pathText = String(path)
