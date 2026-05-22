@@ -1,6 +1,6 @@
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v65"
+export const stepCalloutDetectorVersion = "step-callout-detection-v82"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -296,7 +296,7 @@ type PixelRegion = {
   y: number
 }
 
-type DarkComponent = PixelRegion & { count: number }
+type DarkComponent = PixelRegion & { count: number; pixels?: number[] }
 
 type RegionCandidate = PixelRegion & {
   borderScore: number
@@ -308,6 +308,7 @@ type StepCalloutPartItemRegion = {
   confidence: number
   itemRegion: PixelRegion
   partRegion: PixelRegion
+  quantity: QuantityEstimate
   quantityRegion: PixelRegion
 }
 
@@ -316,6 +317,12 @@ type StepCalloutPartItemFeatureEntry = {
   feature: StepPartImageFeature | null
   itemId: string
   stepIndex: number
+}
+
+type OwnedPartContentForeground = {
+  componentRegions: PixelRegion[]
+  foregroundMask: Uint8Array
+  region: PixelRegion
 }
 
 type StepCalloutInventoryFeatureEntry = StepCalloutInventoryMatchRow & {
@@ -336,6 +343,22 @@ type QuantityGlyphClassification = {
 }
 
 type PixelMatcher = (imageData: DetectionImageData, x: number, y: number) => boolean
+
+type QuantityLabelCandidate = {
+  componentCount: number
+  region: PixelRegion
+}
+
+type QuantityLabelAnchor = QuantityLabelCandidate & {
+  maxBackgroundForegroundRatio: number
+  quantity: QuantityEstimate
+  score: number
+}
+
+type QuantityLabelAnchorZone = {
+  anchor: QuantityLabelAnchor
+  region: PixelRegion
+}
 
 export async function detectStepCalloutsFromPdfDocument(
   document: PdfReadableDocument,
@@ -507,63 +530,100 @@ export function detectStepCalloutRegionsFromImageData(imageData: DetectionImageD
 }
 
 export function detectStepCalloutPartItemRegionsFromImageData(imageData: DetectionImageData): StepCalloutPartItemRegion[] {
+  return sortPartItemRegions(suppressOverlappingPartItemRegions(createStepCalloutPartItemRegionCandidates(imageData).regions))
+}
+
+export function debugDetectStepCalloutPartItemRegionsFromImageData(imageData: DetectionImageData) {
+  const debugState = createStepCalloutPartItemRegionCandidates(imageData)
+
+  return {
+    anchorCandidates: debugState.quantityAnchorCandidates.map((anchor) => ({
+      componentCount: anchor.componentCount,
+      quantity: anchor.quantity,
+      region: anchor.region,
+      score: anchor.score,
+    })),
+    anchors: debugState.quantityAnchors.map((anchor) => ({
+      componentCount: anchor.componentCount,
+      quantity: anchor.quantity,
+      region: anchor.region,
+      score: anchor.score,
+    })),
+    components: debugState.quantityComponents,
+    likelyComponents: debugState.likelyQuantityComponents,
+    regions: sortPartItemRegions(suppressOverlappingPartItemRegions(debugState.regions)),
+    zones: debugState.zones.map((zone) => ({
+      anchor: {
+        componentCount: zone.anchor.componentCount,
+        quantity: zone.anchor.quantity,
+        region: zone.anchor.region,
+        score: zone.anchor.score,
+      },
+      region: zone.region,
+    })),
+  }
+}
+
+export function debugReadStepCalloutQuantityFromImageData(imageData: DetectionImageData, region: PixelRegion) {
+  return readQuantityFromImageData(imageData, region)
+}
+
+function createStepCalloutPartItemRegionCandidates(imageData: DetectionImageData) {
   const background = sampleCalloutBackground(imageData)
   const foregroundMask = createCalloutItemForegroundMask(imageData, background)
-  const interiorMargin = getCalloutInteriorMargin(imageData)
-  clearMaskOutsideInterior(foregroundMask, imageData.width, imageData.height, interiorMargin)
-
-  const rowBands = getProjectionBands(getVerticalProjection(foregroundMask, imageData.width, imageData.height), {
-    gapTolerance: Math.max(8, Math.round(imageData.height * 0.035)),
-    minCount: Math.max(3, Math.round(imageData.width * 0.014)),
-    minSize: Math.max(22, Math.round(imageData.height * 0.08)),
-  })
-  const regions: StepCalloutPartItemRegion[] = []
-
-  for (const rowBand of rowBands) {
-    const xBands = getProjectionBands(getHorizontalProjection(foregroundMask, imageData.width, rowBand), {
-      gapTolerance: Math.max(8, Math.round(imageData.width * 0.025)),
-      minCount: Math.max(2, Math.round((rowBand.end - rowBand.start + 1) * 0.025)),
-      minSize: Math.max(16, Math.round(imageData.width * 0.035)),
-    })
-
-    for (const xBand of xBands) {
-      const itemRegion = trimRegionToForeground(
-        foregroundMask,
-        imageData.width,
-        imageData.height,
-        {
-          height: rowBand.end - rowBand.start + 1,
-          width: xBand.end - xBand.start + 1,
-          x: xBand.start,
-          y: rowBand.start,
-        },
-      )
-      if (!itemRegion || !isLikelyCalloutPartItemRegion(imageData, itemRegion)) {
-        continue
-      }
-
-      const quantityRegion = detectQuantityLabelRegion(imageData, itemRegion)
-      const fullItemRegion = normalizeRegion(
-        unionRegions([itemRegion, quantityRegion]) ?? itemRegion,
-        imageData.width,
-        imageData.height,
-      )
-      const partRegion = getPartImageRegionForItem(
-        imageData,
-        foregroundMask,
-        fullItemRegion,
-        quantityRegion,
-      )
-      regions.push({
-        confidence: scorePartItemRegion(imageData, fullItemRegion, quantityRegion, partRegion),
-        itemRegion: fullItemRegion,
-        partRegion,
-        quantityRegion,
-      })
+  const interiorRegion = getCalloutInteriorRegion(imageData)
+  clearMaskOutsideRegion(foregroundMask, imageData.width, imageData.height, interiorRegion)
+  const quantityComponents = collectDarkComponents(imageData, interiorRegion, isQuantityTextPixel)
+  const likelyQuantityComponents = quantityComponents
+    .filter((component) => isLikelyQuantityLabelComponent(imageData, component))
+  const quantityAnchorCandidates = likelyQuantityComponents.length === 0
+    ? []
+    : createQuantityLabelAnchorCandidates(imageData, likelyQuantityComponents, interiorRegion, foregroundMask)
+  const quantityAnchors = suppressOverlappingQuantityLabelAnchors(quantityAnchorCandidates)
+  if (quantityAnchors.length === 0) {
+    return {
+      likelyQuantityComponents,
+      quantityAnchorCandidates,
+      quantityAnchors,
+      quantityComponents,
+      regions: [],
+      zones: [],
     }
   }
 
-  return sortPartItemRegions(suppressOverlappingPartItemRegions(regions))
+  const regions: StepCalloutPartItemRegion[] = []
+  const zones = createQuantityLabelAnchorZones(quantityAnchors, interiorRegion)
+
+  for (const zone of zones) {
+    const partMask = createQuantityAnchorPartForegroundMask(imageData, foregroundMask, quantityAnchors)
+    const partRegion = findPartRegionForQuantityAnchor(imageData, partMask, zone, quantityAnchors)
+    if (!partRegion) {
+      continue
+    }
+
+    const quantityRegion = zone.anchor.region
+    const itemRegion = normalizeRegion(
+      unionRegions([partRegion, quantityRegion]) ?? partRegion,
+      imageData.width,
+      imageData.height,
+    )
+    regions.push({
+      confidence: scoreAnchoredPartItemRegion(imageData, zone.anchor, itemRegion, partRegion),
+      itemRegion,
+      partRegion,
+      quantity: zone.anchor.quantity,
+      quantityRegion,
+    })
+  }
+
+  return {
+    likelyQuantityComponents,
+    quantityAnchorCandidates,
+    quantityAnchors,
+    quantityComponents,
+    regions,
+    zones,
+  }
 }
 
 function createStepCalloutDetectionResult({
@@ -1006,22 +1066,18 @@ function detectStepCalloutPartItemsFromCanvas(
 
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
   const background = sampleCalloutBackground(imageData)
+  const interiorRegion = getCalloutInteriorRegion(imageData)
 
-  return detectStepCalloutPartItemRegionsFromImageData(imageData).map((region, index) => {
-    const itemRegion = padRegion(region.itemRegion, canvas.width, canvas.height, itemCropPaddingPixels)
-    const partRegion = padPartRegion(
-      region.partRegion,
-      canvas.width,
-      canvas.height,
-      itemCropPaddingPixels,
-    )
+  const detectedRegions = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+  return detectedRegions.map((region, index) => {
+    const itemRegion = padRegionWithin(region.itemRegion, canvas.width, canvas.height, itemCropPaddingPixels, interiorRegion)
     const detectedQuantityRegion = padRegion(region.quantityRegion, canvas.width, canvas.height, 2)
     const itemSourceRegion = toPageSourceRegion(itemRegion, pageOffsetX, pageOffsetY)
-    const partSourceRegion = toPageSourceRegion(partRegion, pageOffsetX, pageOffsetY)
     const detectedQuantitySourceRegion = toPageSourceRegion(detectedQuantityRegion, pageOffsetX, pageOffsetY)
     const quantityRead = readQuantityFromNativeTextItems(nativeTextItems ?? [], detectedQuantitySourceRegion) ??
       readQuantityFromNativeTextItems(nativeTextItems ?? [], itemSourceRegion) ?? {
-        quantity: readQuantityFromImageData(imageData, detectedQuantityRegion),
+        quantity: region.quantity,
         sourceRegion: detectedQuantitySourceRegion,
       }
     const quantity = quantityRead.quantity
@@ -1034,14 +1090,36 @@ function detectStepCalloutPartItemsFromCanvas(
     )
     const quantityRegion = getQuantityDisplayRegion(imageData, rawQuantityRegion, quantity) ?? rawQuantityRegion
     const quantitySourceRegion = toPageSourceRegion(quantityRegion, pageOffsetX, pageOffsetY)
-    const quantityExclusionRegions = getTrustedQuantityTextExclusionRegions(imageData, quantityRegion, quantity)
+    const quantityGlyphExclusionRegions = getPartPreviewQuantityGlyphExclusionRegions(imageData, quantityRegion, quantity)
+    const partContentRegion = getPartPreviewContentSearchRegion(
+      region,
+      detectedRegions,
+      canvas.width,
+      canvas.height,
+      interiorRegion,
+    )
+    const ownedPartContent = getOwnedPartContentForeground(
+      imageData,
+      partContentRegion,
+      background,
+      quantityGlyphExclusionRegions,
+      region,
+      detectedRegions,
+    )
+    const partDisplayRegion = padPartRegion(
+      ownedPartContent.region,
+      canvas.width,
+      canvas.height,
+      itemCropPaddingPixels,
+      interiorRegion,
+    )
     const detectedColor = detectPartColorFromImageData(
       imageData,
-      partRegion,
+      ownedPartContent.region,
       background,
-      quantityExclusionRegions,
+      quantityGlyphExclusionRegions,
     )
-    const feature = createStepPartImageFeature(imageData, partRegion, quantityExclusionRegions)
+    const feature = createStepPartImageFeature(imageData, ownedPartContent.region, quantityGlyphExclusionRegions)
     const itemId = `${calloutIdPrefix}:item${index + 1}:x${itemSourceRegion.x}:y${itemSourceRegion.y}:w${itemSourceRegion.width}:h${itemSourceRegion.height}`
     partFeatureEntries.push({
       calloutIndex,
@@ -1059,8 +1137,14 @@ function detectStepCalloutPartItemsFromCanvas(
       indexOnCallout: index + 1,
       localImageMatch: null,
       localImageRejectedMatches: [],
-      partCrop: cropCanvasRegionRemovingBackground(canvas, imageData, itemRegion, background),
-      partRegion: partSourceRegion,
+      partCrop: cropCanvasRegionRemovingBackground(
+        canvas,
+        imageData,
+        partDisplayRegion,
+        background,
+        ownedPartContent.foregroundMask,
+      ),
+      partRegion: toPageSourceRegion(ownedPartContent.region, pageOffsetX, pageOffsetY),
       quantityLabel: {
         crop: cropCanvasRegion(canvas, quantityRegion),
         region: quantitySourceRegion,
@@ -4331,16 +4415,19 @@ function readQuantityFromImageData(imageData: DetectionImageData, quantityRegion
   }
 
   const digitRunRegion = getQuantityDigitRunRegion(imageData, quantityRegion)
+  if (!digitRunRegion) {
+    return {
+      confidence: 0,
+      text: null,
+      value: null,
+    }
+  }
+
   const glyphs = getQuantityGlyphRegions(imageData, digitRunRegion)
   const glyphQuantity = readQuantityFromGlyphRegions(imageData, glyphs)
   const selectedQuantity = glyphQuantity
 
   if (!selectedQuantity.value) {
-    const fallbackQuantity = readFallbackFourQuantityFromTextRegion(imageData, textRegion)
-    if (fallbackQuantity) {
-      return fallbackQuantity
-    }
-
     return {
       confidence: 0,
       text: null,
@@ -4350,30 +4437,19 @@ function readQuantityFromImageData(imageData: DetectionImageData, quantityRegion
 
   const { confidence, text, value } = selectedQuantity
 
-  if (
-    value === 4 &&
-    confidence < 0.68 &&
-    textRegion
-  ) {
-    const mergedOneQuantity = readMergedOneQuantityFromTextRegion(imageData, textRegion, confidence)
-    if (mergedOneQuantity) {
-      return mergedOneQuantity
-    }
-
-    if (textRegion.width <= textRegion.height * 1.42) {
-      return {
-        confidence: Math.max(confidence, 0.78),
-        text: "1",
-        value: 1,
-      }
-    }
-  }
-
   return {
     confidence,
     text,
-    value: Number.isInteger(value) && value > 0 ? value : null,
+    value: isPlausibleCalloutQuantityText(text, value) ? value : null,
   }
+}
+
+function isPlausibleCalloutQuantityText(text: string | null, value: number | null) {
+  if (!Number.isInteger(value) || value == null || value <= 0) {
+    return false
+  }
+
+  return value <= 24
 }
 
 function readQuantityFromGlyphRegions(
@@ -4418,45 +4494,6 @@ function readQuantityFromGlyphRegions(
   }
 }
 
-function readMergedOneQuantityFromTextRegion(
-  imageData: DetectionImageData,
-  textRegion: PixelRegion,
-  confidence: number,
-): QuantityEstimate | null {
-  const components = collectDarkComponents(imageData, textRegion, isQuantityTextPixel)
-    .filter((component) =>
-      component.height >= Math.max(6, textRegion.height * 0.45) &&
-      component.width >= 1 &&
-      component.count >= 4
-    )
-    .sort((left, right) => left.x - right.x || left.y - right.y)
-  const first = components[0]
-  const markerComponents = components.slice(1)
-  const markerRegion = markerComponents.length > 0 ? unionRegions(markerComponents) : null
-  const markerCount = markerComponents.reduce((sum, component) => sum + component.count, 0)
-  if (!first || !markerRegion) {
-    return null
-  }
-
-  const gap = markerRegion.x - (first.x + first.width)
-  const firstAspectRatio = first.width / Math.max(1, first.height)
-  const markerAspectRatio = markerRegion.width / Math.max(1, markerRegion.height)
-  if (
-    gap >= 1 &&
-    firstAspectRatio <= 0.42 &&
-    markerAspectRatio >= 0.48 &&
-    first.count <= markerCount * 0.82
-  ) {
-    return {
-      confidence: Math.max(confidence, 0.8),
-      text: "1",
-      value: 1,
-    }
-  }
-
-  return null
-}
-
 function isLikelyQuantityLabelSurface(imageData: DetectionImageData, region: PixelRegion) {
   const boundedRegion = normalizeRegion(region, imageData.width, imageData.height)
   let coloredSurfacePixels = 0
@@ -4486,51 +4523,37 @@ function isLikelyQuantityLabelSurface(imageData: DetectionImageData, region: Pix
   return sampledPixels === 0 || coloredSurfacePixels / sampledPixels <= 0.18
 }
 
-function readFallbackFourQuantityFromTextRegion(
-  imageData: DetectionImageData,
-  textRegion: PixelRegion | null,
-): QuantityEstimate | null {
-  if (!textRegion || textRegion.width < textRegion.height * 1.12) {
-    return null
-  }
-
-  const digitRegion = trimRegionToQuantityText(imageData, {
-    height: textRegion.height,
-    width: Math.ceil(textRegion.width * 0.56),
-    x: textRegion.x,
-    y: textRegion.y,
-  })
-  if (!digitRegion || !isLikelyFourQuantityGlyph(imageData, digitRegion)) {
-    return null
-  }
-
-  return {
-    confidence: 0.78,
-    text: "4",
-    value: 4,
-  }
-}
-
 function isLikelyFourQuantityGlyph(imageData: DetectionImageData, glyphRegion: PixelRegion) {
   const densities = getQuantityGlyphDensities(imageData, glyphRegion)
+  const middleLeft = getQuantityGridAreaDensity(densities, 0, 3, 2, 1)
+  const middleCenter = getQuantityGridAreaDensity(densities, 1, 3, 3, 1)
+  const middleRight = getQuantityGridAreaDensity(densities, 3, 3, 2, 1)
   const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
   const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
   const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
   const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
   const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
   const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
-
-  return (
-    upperLeft > 0.06 &&
+  const hasCrossbar = middle > 0.12 && middleLeft > 0.08 && middleCenter > 0.12 && middleRight > 0.08
+  const hasClassicOpenFourShape = (
+    upperLeft > 0.08 &&
     upperRight > 0.06 &&
-    middle > 0.09 &&
     lowerRight > 0.06 &&
     lowerLeft < Math.max(0.1, upperLeft * 0.9) &&
-    bottom < 0.28
+    bottom < 0.36
   )
+  const hasSlantedFourShape = (
+    upperRight > 0.16 &&
+    lowerLeft > 0.16 &&
+    lowerRight > 0.16 &&
+    middleLeft > 0.16 &&
+    bottom < 0.48
+  )
+
+  return hasCrossbar && (hasClassicOpenFourShape || hasSlantedFourShape)
 }
 
-function getTrustedQuantityTextExclusionRegions(
+function getPartPreviewQuantityGlyphExclusionRegions(
   imageData: DetectionImageData,
   quantityRegion: PixelRegion,
   quantity: QuantityEstimate,
@@ -4541,51 +4564,130 @@ function getTrustedQuantityTextExclusionRegions(
 
   const textRegion = trimRegionToQuantityText(imageData, quantityRegion)
   if (!textRegion) {
-    return [expandRegion(quantityRegion, imageData, 1)]
+    return []
   }
 
   const glyphs = getQuantityGlyphRegions(imageData, textRegion)
-  const textPadding = Math.max(2, Math.round(textRegion.height * 0.12))
-  const textExclusion = expandRegion(textRegion, imageData, textPadding)
 
   return glyphs.length > 0
-    ? [
-        textExclusion,
-        ...glyphs.map((glyph) => expandRegion(glyph, imageData, 1)),
-      ]
-    : [textExclusion]
+    ? glyphs.map((glyph) => expandRegion(glyph, imageData, 1))
+    : [expandRegion(textRegion, imageData, 1)]
 }
 
 function getQuantityDigitRunRegion(imageData: DetectionImageData, quantityRegion: PixelRegion) {
   const textRegion = trimRegionToQuantityText(imageData, quantityRegion)
   if (!textRegion) {
-    return normalizeRegion(quantityRegion, imageData.width, imageData.height)
+    return null
   }
 
   const glyphs = getQuantityGlyphRegions(imageData, textRegion)
-  const digitGlyphs = glyphs.length >= 2 ? glyphs.slice(0, -1) : []
-  const markerGlyph = glyphs.length >= 2 ? glyphs.at(-1) : null
-  const digitGlyphRegion = digitGlyphs.length > 0 ? unionRegions(digitGlyphs) : null
-  if (
-    markerGlyph &&
-    digitGlyphRegion &&
-    markerGlyph.x >= digitGlyphRegion.x + digitGlyphRegion.width &&
-    markerGlyph.width <= Math.max(4, textRegion.height * 1.2)
-  ) {
-    return trimRegionToQuantityText(imageData, digitGlyphRegion) ?? digitGlyphRegion
+  const markerStartIndex = getQuantityMarkerSuffixStartIndex(imageData, glyphs)
+  if (markerStartIndex != null) {
+    const markerGlyph = unionRegions(glyphs.slice(markerStartIndex))
+    return markerGlyph
+      ? getTrailingQuantityDigitRunRegion(imageData, glyphs.slice(0, markerStartIndex), markerGlyph, textRegion)
+      : null
   }
 
   const separatorX = findQuantityMarkerSeparatorX(imageData, textRegion)
   if (!separatorX) {
-    return textRegion
+    return null
   }
 
-  return trimRegionToQuantityText(imageData, {
+  const leftRegion = trimRegionToQuantityText(imageData, {
     height: textRegion.height,
     width: separatorX - textRegion.x,
     x: textRegion.x,
     y: textRegion.y,
-  }) ?? textRegion
+  })
+  const markerRegion = trimRegionToQuantityText(imageData, {
+    height: textRegion.height,
+    width: textRegion.x + textRegion.width - separatorX,
+    x: separatorX,
+    y: textRegion.y,
+  })
+
+  return leftRegion && markerRegion
+    ? getTrailingQuantityDigitRunRegion(imageData, getQuantityGlyphRegions(imageData, leftRegion), markerRegion, textRegion)
+    : null
+}
+
+function getTrailingQuantityDigitRunRegion(
+  imageData: DetectionImageData,
+  glyphs: readonly PixelRegion[],
+  markerRegion: PixelRegion,
+  textRegion: PixelRegion,
+) {
+  const digitGlyphs: PixelRegion[] = []
+  const maxInitialGap = Math.max(4, Math.round(textRegion.height * 0.78))
+  const maxDigitGap = Math.max(4, Math.round(textRegion.height * 0.72))
+  let nextLeftEdge = markerRegion.x
+
+  for (let index = glyphs.length - 1; index >= 0; index -= 1) {
+    const glyph = glyphs[index]
+    if (!glyph) {
+      continue
+    }
+
+    const gap = nextLeftEdge - (glyph.x + glyph.width)
+    const comparisonRegion = digitGlyphs[0] ?? markerRegion
+    const verticalOverlap = getVerticalOverlapRatio(glyph, comparisonRegion)
+    const centerDelta = Math.abs(getRegionCenterY(glyph) - getRegionCenterY(comparisonRegion))
+    const maxGap = digitGlyphs.length === 0 ? maxInitialGap : maxDigitGap
+    if (
+      gap > maxGap ||
+      (
+        verticalOverlap < 0.28 &&
+        centerDelta > Math.max(4, textRegion.height * 0.42)
+      )
+    ) {
+      if (digitGlyphs.length > 0) {
+        break
+      }
+      continue
+    }
+
+    const classification = classifyQuantityGlyph(imageData, glyph)
+    if (!classification || classification.char === "x") {
+      if (digitGlyphs.length > 0) {
+        break
+      }
+      continue
+    }
+
+    digitGlyphs.unshift(glyph)
+    nextLeftEdge = glyph.x
+    if (digitGlyphs.length >= 3) {
+      break
+    }
+  }
+
+  const digitRegion = digitGlyphs.length > 0 ? unionRegions(digitGlyphs) : null
+  if (!digitRegion || markerRegion.x < digitRegion.x + digitRegion.width) {
+    return null
+  }
+
+  return trimRegionToQuantityText(imageData, digitRegion) ?? digitRegion
+}
+
+function getQuantityMarkerSuffixStartIndex(
+  imageData: DetectionImageData,
+  glyphs: readonly PixelRegion[],
+) {
+  if (glyphs.length < 2) {
+    return null
+  }
+
+  const maxMarkerGlyphs = glyphs.length - 1
+  for (let markerGlyphCount = 1; markerGlyphCount <= maxMarkerGlyphs; markerGlyphCount += 1) {
+    const startIndex = glyphs.length - markerGlyphCount
+    const markerRegion = unionRegions(glyphs.slice(startIndex))
+    if (markerRegion && isLikelyQuantityMarkerRegion(imageData, markerRegion)) {
+      return startIndex
+    }
+  }
+
+  return null
 }
 
 function findQuantityMarkerSeparatorX(imageData: DetectionImageData, textRegion: PixelRegion) {
@@ -4641,6 +4743,16 @@ function findQuantityMarkerSeparatorX(imageData: DetectionImageData, textRegion:
       continue
     }
 
+    const rightRegion = trimRegionToQuantityText(imageData, {
+      height: boundedRegion.height,
+      width: boundedRegion.width - index,
+      x: boundedRegion.x + index,
+      y: boundedRegion.y,
+    })
+    if (!rightRegion || !isLikelyQuantityMarkerRegion(imageData, rightRegion)) {
+      continue
+    }
+
     const windowInk = (columns[index - 1] ?? 0) + (columns[index] ?? 0) + (columns[index + 1] ?? 0)
     const score = windowInk + Math.abs(rightInkRatio - 0.38) * 4
     if (score < bestScore) {
@@ -4681,14 +4793,18 @@ function findQuantityMarkerSeparatorFromComponents(imageData: DetectionImageData
     const rightInk = totalInk - leftInk
     const leftInkRatio = leftInk / Math.max(1, totalInk)
     const rightInkRatio = rightInk / Math.max(1, totalInk)
-    const rightComponentCount = components.length - index
+
+    const trailingMarkerRegion = unionRegions(components.slice(index))
+    const hasLikelyTrailingMarker = trailingMarkerRegion
+      ? isLikelyQuantityMarkerRegion(imageData, trailingMarkerRegion)
+      : false
 
     if (
       gap >= 1 &&
       leftInkRatio >= 0.18 &&
       rightInkRatio >= 0.15 &&
       rightInkRatio <= 0.72 &&
-      !(leftInkRatio < 0.35 && rightComponentCount > 1)
+      hasLikelyTrailingMarker
     ) {
       const targetRightInkRatio = leftInkRatio < 0.35 ? 0.58 : 0.38
       const score = Math.abs(rightInkRatio - targetRightInkRatio) - gap * 0.02
@@ -4702,6 +4818,35 @@ function findQuantityMarkerSeparatorFromComponents(imageData: DetectionImageData
   }
 
   return bestSeparatorX
+}
+
+function isLikelyQuantityMarkerRegion(imageData: DetectionImageData, region: PixelRegion) {
+  const textRegion = trimRegionToQuantityText(imageData, region)
+  if (!textRegion) {
+    return false
+  }
+
+  const aspectRatio = textRegion.width / Math.max(1, textRegion.height)
+  if (aspectRatio < 0.45 || aspectRatio > 1.4) {
+    return false
+  }
+
+  const densities = getQuantityGlyphDensities(imageData, textRegion)
+  const xTemplateScore = scoreQuantityGlyphTemplate(
+    densities,
+    quantityGlyphTemplates.find((template) => template.char === "x")?.pattern ?? "",
+  )
+  const bestDigitScore = Math.max(
+    ...quantityGlyphTemplates
+      .filter((template) => template.char !== "x")
+      .map((template) => scoreQuantityGlyphTemplate(densities, template.pattern)),
+  )
+  const featureClassification = classifyQuantityGlyphByFeatures(densities, aspectRatio)
+
+  return (
+    (featureClassification?.char === "x" && xTemplateScore >= Math.max(0.52, bestDigitScore - 0.08)) ||
+    (xTemplateScore >= 0.52 && xTemplateScore >= bestDigitScore - 0.12)
+  )
 }
 
 function getQuantityGlyphRegions(imageData: DetectionImageData, quantityRegion: PixelRegion) {
@@ -4912,6 +5057,137 @@ function classifyQuantityGlyph(
   }
 
   const featureClassification = classifyQuantityGlyphByFeatures(densities, aspectRatio)
+  const oneTemplate = templateScores.find((template) => template.char === "1")
+  const oneFeatureClassification = classifyOneQuantityGlyphByFeatures(densities, aspectRatio)
+  const nineFeatureClassification = classifyNineQuantityGlyphByFeatures(densities, aspectRatio)
+  const sixFeatureClassification = classifySixQuantityGlyphByFeatures(densities, aspectRatio)
+  const fourFeatureClassification = featureClassification?.char === "4" ? featureClassification : null
+  if (aspectRatio < 0.48 && bestTemplate.char !== "x") {
+    return {
+      char: "1",
+      confidence: Math.max(oneFeatureClassification?.confidence ?? 0, 0.78),
+    }
+  }
+
+  if (
+    aspectRatio < 0.5 &&
+    bestTemplate.char !== "x" &&
+    featureClassification?.char === "4" &&
+    bestTemplate.confidence < 0.72
+  ) {
+    return {
+      char: "1",
+      confidence: Math.max(oneFeatureClassification?.confidence ?? 0, 0.76),
+    }
+  }
+
+  if (
+    nineFeatureClassification &&
+    (bestTemplate.char === "9" || bestTemplate.char === "6") &&
+    nineFeatureClassification.confidence >= bestTemplate.confidence - 0.18
+  ) {
+    return nineFeatureClassification
+  }
+
+  if (
+    sixFeatureClassification &&
+    sixFeatureClassification.confidence >= bestTemplate.confidence - 0.08
+  ) {
+    return sixFeatureClassification
+  }
+
+  if (
+    bestTemplate.char === "4" &&
+    bestTemplate.confidence >= 0.58 &&
+    isLikelyFourQuantityGlyph(imageData, glyphRegion)
+  ) {
+    return {
+      char: "4",
+      confidence: bestTemplate.confidence,
+    }
+  }
+
+  if (
+    bestTemplate.char === "9" &&
+    bestTemplate.confidence < 0.72 &&
+    featureClassification?.char === "3" &&
+    featureClassification.confidence >= bestTemplate.confidence - 0.12
+  ) {
+    return featureClassification
+  }
+
+  if ((bestTemplate.char === "0" || bestTemplate.char === "9") && bestTemplate.confidence >= 0.58) {
+    return {
+      char: bestTemplate.char,
+      confidence: bestTemplate.confidence,
+    }
+  }
+
+  if (
+    oneFeatureClassification &&
+    oneTemplate &&
+    oneTemplate.confidence >= bestTemplate.confidence - 0.18 &&
+    !fourFeatureClassification
+  ) {
+    return {
+      char: "1",
+      confidence: Math.max(oneTemplate.confidence, oneFeatureClassification.confidence, 0.78),
+    }
+  }
+
+  if (oneFeatureClassification && aspectRatio < 0.5) {
+    return {
+      char: "1",
+      confidence: Math.max(oneFeatureClassification.confidence, oneTemplate?.confidence ?? 0, 0.8),
+    }
+  }
+
+  if (
+    featureClassification &&
+    ["2", "3", "4"].includes(featureClassification.char) &&
+    featureClassification.confidence >= bestTemplate.confidence - 0.18 &&
+    !(
+      oneFeatureClassification &&
+      oneTemplate &&
+      oneTemplate.confidence >= bestTemplate.confidence - 0.18
+    )
+  ) {
+    return featureClassification
+  }
+
+  if (
+    ["0", "2", "3", "4", "9"].includes(bestTemplate.char) &&
+    bestTemplate.confidence >= 0.58
+  ) {
+    return {
+      char: bestTemplate.char,
+      confidence: bestTemplate.confidence,
+    }
+  }
+
+  if (oneFeatureClassification && aspectRatio < 0.42) {
+    return {
+      char: "1",
+      confidence: Math.max(oneFeatureClassification.confidence, 0.8),
+    }
+  }
+
+  if (
+    aspectRatio < 0.64 &&
+    bestTemplate.char !== "x" &&
+    oneTemplate &&
+    oneTemplate.confidence >= bestTemplate.confidence - 0.22 &&
+    oneFeatureClassification &&
+    featureClassification?.char !== "2" &&
+    featureClassification?.char !== "3" &&
+    featureClassification?.char !== "4"
+  ) {
+    return {
+      char: "1",
+      confidence: Math.max(oneTemplate.confidence, oneFeatureClassification.confidence, 0.76),
+    }
+  }
+
   if (
     featureClassification &&
     featureClassification.char !== "1" &&
@@ -4924,23 +5200,23 @@ function classifyQuantityGlyph(
   if (aspectRatio < 0.38 && bestTemplate.char !== "x" && featureClassification?.char !== "x") {
     return {
       char: "1",
-      confidence: Math.max(bestTemplate.confidence, 0.78),
+      confidence: Math.max(bestTemplate.confidence, oneFeatureClassification?.confidence ?? 0, 0.78),
     }
   }
 
-  const oneTemplate = templateScores.find((template) => template.char === "1")
   if (
     aspectRatio < 0.52 &&
     bestTemplate.char !== "x" &&
     oneTemplate &&
     oneTemplate.confidence >= bestTemplate.confidence - 0.12 &&
+    oneFeatureClassification &&
     featureClassification?.char !== "2" &&
     featureClassification?.char !== "3" &&
     featureClassification?.char !== "4"
   ) {
     return {
       char: "1",
-      confidence: Math.max(oneTemplate.confidence, 0.78),
+      confidence: Math.max(oneTemplate.confidence, oneFeatureClassification.confidence, 0.78),
     }
   }
 
@@ -4974,6 +5250,50 @@ function classifyQuantityGlyph(
   }
 }
 
+function classifyOneQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const center = getQuantityGridAreaDensity(densities, 2, 0, 1, 7)
+  const left = getQuantityGridAreaDensity(densities, 0, 0, 2, 7)
+  const right = getQuantityGridAreaDensity(densities, 3, 0, 2, 7)
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 2, 5, 3)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const middleLeft = getQuantityGridAreaDensity(densities, 0, 3, 2, 1)
+  const middleRight = getQuantityGridAreaDensity(densities, 3, 3, 2, 1)
+  const hasFourCrossbar = middleLeft > 0.08 && middleRight > 0.08
+
+  if (aspectRatio < 0.42) {
+    return { char: "1", confidence: 0.8 }
+  }
+
+  if (
+    aspectRatio < 0.72 &&
+    center > Math.max(left, right) + 0.03 &&
+    middle > 0.08 &&
+    top < 0.46 &&
+    bottom < 0.56 &&
+    !hasFourCrossbar
+  ) {
+    return { char: "1", confidence: 0.76 }
+  }
+
+  if (
+    aspectRatio < 0.72 &&
+    center > 0.12 &&
+    left < 0.22 &&
+    right < 0.22 &&
+    middleLeft < 0.08 &&
+    middleRight < 0.18 &&
+    bottom < 0.58
+  ) {
+    return { char: "1", confidence: 0.74 }
+  }
+
+  return null
+}
+
 function classifyQuantityGlyphByFeatures(
   densities: readonly number[],
   aspectRatio: number,
@@ -4986,9 +5306,23 @@ function classifyQuantityGlyphByFeatures(
   const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
   const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
   const center = getQuantityGridAreaDensity(densities, 2, 2, 1, 3)
+  const middleLeft = getQuantityGridAreaDensity(densities, 0, 3, 2, 1)
+  const middleCenter = getQuantityGridAreaDensity(densities, 1, 3, 3, 1)
+  const middleRight = getQuantityGridAreaDensity(densities, 3, 3, 2, 1)
+  const hasFourCrossbar = middleLeft > 0.08 && middleCenter > 0.12 && middleRight > 0.08
 
-  if (aspectRatio < 0.42) {
-    return { char: "1", confidence: 0.78 }
+  if (
+    aspectRatio >= 0.56 &&
+    aspectRatio <= 0.86 &&
+    hasFourCrossbar &&
+    upperRight > 0.16 &&
+    lowerLeft > 0.16 &&
+    lowerRight > 0.16 &&
+    middleLeft > 0.16 &&
+    bottom < 0.5 &&
+    top < 0.52
+  ) {
+    return { char: "4", confidence: 0.8 }
   }
 
   if (
@@ -5001,6 +5335,77 @@ function classifyQuantityGlyphByFeatures(
   }
 
   if (
+    aspectRatio >= 0.48 &&
+    upperLeft > 0.18 &&
+    upperRight > 0.08 &&
+    middle > 0.12 &&
+    hasFourCrossbar &&
+    lowerRight > 0.08 &&
+    lowerLeft < 0.08 &&
+    bottom < 0.36
+  ) {
+    return { char: "4", confidence: 0.79 }
+  }
+
+  if (
+    aspectRatio >= 0.5 &&
+    top > 0.16 &&
+    middle > 0.12 &&
+    bottom > 0.16 &&
+    bottom >= 0.24 &&
+    upperRight > upperLeft + 0.03 &&
+    lowerRight > lowerLeft + 0.04 &&
+    upperLeft < 0.24
+  ) {
+    return { char: "3", confidence: 0.78 }
+  }
+
+  if (
+    aspectRatio >= 0.52 &&
+    upperLeft > 0.08 &&
+    upperRight > 0.08 &&
+    middle > 0.12 &&
+    hasFourCrossbar &&
+    lowerRight > 0.08 &&
+    lowerLeft < Math.max(0.09, upperLeft * 0.85) &&
+    (upperLeft > 0.18 || bottom < 0.24) &&
+    bottom < 0.32 &&
+    top < 0.65
+  ) {
+    return { char: "4", confidence: 0.78 }
+  }
+
+  if (
+    aspectRatio >= 0.45 &&
+    upperLeft > lowerLeft + 0.03 &&
+    upperRight > 0.05 &&
+    middle > 0.12 &&
+    hasFourCrossbar &&
+    lowerRight > 0.07 &&
+    lowerLeft < lowerRight - 0.03 &&
+    (upperLeft > 0.18 || bottom < 0.24) &&
+    bottom < 0.34 &&
+    top < 0.62
+  ) {
+    return { char: "4", confidence: 0.76 }
+  }
+
+  if (
+    aspectRatio >= 0.5 &&
+    top > 0.16 &&
+    middle > 0.12 &&
+    bottom > 0.16 &&
+    upperRight > upperLeft + 0.03
+  ) {
+    if (lowerLeft > lowerRight + 0.04) {
+      return { char: "2", confidence: 0.76 }
+    }
+    if (lowerRight > lowerLeft + 0.04) {
+      return { char: "3", confidence: 0.76 }
+    }
+  }
+
+  if (
     aspectRatio >= 0.45 &&
     top > 0.16 &&
     middle > 0.12 &&
@@ -5010,35 +5415,69 @@ function classifyQuantityGlyphByFeatures(
     lowerRight > 0.08 &&
     upperRight < upperLeft + 0.04
   ) {
-    return { char: "6", confidence: 0.75 }
+    return { char: "6", confidence: 0.72 }
   }
+
+  return null
+}
+
+function classifyNineQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperLeftBody = getQuantityGridAreaDensity(densities, 0, 2, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
 
   if (
     aspectRatio >= 0.45 &&
-    top > 0.16 &&
-    middle > 0.12 &&
-    bottom > 0.16 &&
-    upperRight > upperLeft + 0.03
+    top > 0.14 &&
+    middle > 0.1 &&
+    bottom > 0.14 &&
+    upperLeft > 0.12 &&
+    upperLeftBody > 0.1 &&
+    upperRight > 0.08 &&
+    lowerRight > 0.08 &&
+    upperLeft >= upperRight * 0.58 &&
+    upperLeft >= lowerLeft * 1.45 &&
+    lowerLeft < Math.max(0.14, lowerRight * 0.72)
   ) {
-    if (lowerLeft > lowerRight + 0.04) {
-      return { char: "2", confidence: 0.74 }
-    }
-    if (lowerRight > lowerLeft + 0.04) {
-      return { char: "3", confidence: 0.74 }
-    }
+    return { char: "9", confidence: 0.78 }
   }
 
+  return null
+}
+
+function classifySixQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+
   if (
-    aspectRatio >= 0.58 &&
+    aspectRatio >= 0.45 &&
+    top > 0.14 &&
+    middle > 0.1 &&
+    bottom > 0.14 &&
     upperLeft > 0.08 &&
-    upperRight > 0.08 &&
-    middle > 0.11 &&
+    lowerLeft > 0.08 &&
     lowerRight > 0.08 &&
-    lowerLeft < Math.max(0.09, upperLeft * 0.85) &&
-    bottom < 0.22 &&
-    top < 0.3
+    upperLeft >= upperRight * 0.85 &&
+    lowerLeft >= lowerRight * 0.55 &&
+    lowerRight >= lowerLeft * 0.55
   ) {
-    return { char: "4", confidence: 0.78 }
+    return { char: "6", confidence: 0.78 }
   }
 
   return null
@@ -5619,12 +6058,12 @@ function getStepPageTextItem(
 }
 
 function sampleCalloutBackground(imageData: DetectionImageData): ColorSample {
-  const margin = getCalloutInteriorMargin(imageData)
+  const interiorRegion = getCalloutInteriorRegion(imageData)
   const samples: ColorSample[] = []
   const step = Math.max(3, Math.round(Math.min(imageData.width, imageData.height) * 0.025))
 
-  for (let y = margin; y < imageData.height - margin; y += step) {
-    for (let x = margin; x < imageData.width - margin; x += step) {
+  for (let y = interiorRegion.y; y < interiorRegion.y + interiorRegion.height; y += step) {
+    for (let x = interiorRegion.x; x < interiorRegion.x + interiorRegion.width; x += step) {
       const dataIndex = ((y * imageData.width) + x) * 4
       const r = imageData.data[dataIndex] ?? 255
       const g = imageData.data[dataIndex + 1] ?? 255
@@ -5652,87 +6091,1289 @@ function getCalloutInteriorMargin(imageData: DetectionImageData) {
   return Math.max(8, Math.round(Math.min(imageData.width, imageData.height) * 0.03))
 }
 
-function clearMaskOutsideInterior(mask: Uint8Array, width: number, height: number, margin: number) {
+function clearMaskOutsideRegion(mask: Uint8Array, width: number, height: number, region: PixelRegion) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if (x < margin || y < margin || x >= width - margin || y >= height - margin) {
+      if (
+        x < region.x ||
+        y < region.y ||
+        x >= region.x + region.width ||
+        y >= region.y + region.height
+      ) {
         mask[(y * width) + x] = 0
       }
     }
   }
 }
 
-type ProjectionBand = {
-  end: number
-  start: number
-}
-
-function getVerticalProjection(mask: Uint8Array, width: number, height: number) {
-  const projection = new Array<number>(height).fill(0)
-  for (let y = 0; y < height; y += 1) {
-    let count = 0
-    for (let x = 0; x < width; x += 1) {
-      count += mask[(y * width) + x] ?? 0
-    }
-    projection[y] = count
+function getCalloutInteriorRegion(imageData: DetectionImageData, margin = getCalloutInteriorMargin(imageData)) {
+  const borderInterior = detectCalloutBorderInteriorRegion(imageData)
+  if (borderInterior) {
+    return borderInterior
   }
 
-  return projection
+  return normalizeRegion({
+    height: imageData.height - margin * 2,
+    width: imageData.width - margin * 2,
+    x: margin,
+    y: margin,
+  }, imageData.width, imageData.height)
 }
 
-function getHorizontalProjection(mask: Uint8Array, width: number, yBand: ProjectionBand) {
-  const projection = new Array<number>(width).fill(0)
-  for (let x = 0; x < width; x += 1) {
-    let count = 0
-    for (let y = yBand.start; y <= yBand.end; y += 1) {
-      count += mask[(y * width) + x] ?? 0
-    }
-    projection[x] = count
+function detectCalloutBorderInteriorRegion(imageData: DetectionImageData): PixelRegion | null {
+  const maxHorizontalScan = Math.max(10, Math.round(imageData.width * 0.16))
+  const maxVerticalScan = Math.max(10, Math.round(imageData.height * 0.16))
+  const left = findCalloutVerticalBorderLine(imageData, 0, maxHorizontalScan, "left")
+  const right = findCalloutVerticalBorderLine(
+    imageData,
+    Math.max(0, imageData.width - maxHorizontalScan),
+    imageData.width - 1,
+    "right",
+  )
+  const top = findCalloutHorizontalBorderLine(imageData, 0, maxVerticalScan, "top")
+  const bottom = findCalloutHorizontalBorderLine(
+    imageData,
+    Math.max(0, imageData.height - maxVerticalScan),
+    imageData.height - 1,
+    "bottom",
+  )
+  if (left === null || right === null || top === null || bottom === null) {
+    return null
+  }
+  if (
+    right - left < imageData.width * 0.35 ||
+    bottom - top < imageData.height * 0.35
+  ) {
+    return null
   }
 
-  return projection
+  const inset = Math.max(3, Math.round(Math.min(imageData.width, imageData.height) * 0.012))
+
+  return normalizeRegion({
+    height: bottom - top - inset * 2,
+    width: right - left - inset * 2,
+    x: left + inset,
+    y: top + inset,
+  }, imageData.width, imageData.height)
 }
 
-function getProjectionBands(
-  projection: readonly number[],
+function findCalloutVerticalBorderLine(
+  imageData: DetectionImageData,
+  startX: number,
+  endX: number,
+  edge: "left" | "right",
+) {
+  let bestX: number | null = null
+  let bestScore = 0
+  const fromX = Math.max(0, Math.min(startX, endX))
+  const toX = Math.min(imageData.width - 1, Math.max(startX, endX))
+
+  for (let x = fromX; x <= toX; x += 1) {
+    const score = getCalloutVerticalBorderScore(imageData, x)
+    if (score > bestScore || (score === bestScore && bestX !== null && isBetterBorderEdge(x, bestX, edge))) {
+      bestScore = score
+      bestX = x
+    }
+  }
+
+  return bestScore >= 0.48 ? bestX : null
+}
+
+function findCalloutHorizontalBorderLine(
+  imageData: DetectionImageData,
+  startY: number,
+  endY: number,
+  edge: "top" | "bottom",
+) {
+  let bestY: number | null = null
+  let bestScore = 0
+  const fromY = Math.max(0, Math.min(startY, endY))
+  const toY = Math.min(imageData.height - 1, Math.max(startY, endY))
+
+  for (let y = fromY; y <= toY; y += 1) {
+    const score = getCalloutHorizontalBorderScore(imageData, y)
+    if (score > bestScore || (score === bestScore && bestY !== null && isBetterBorderEdge(y, bestY, edge))) {
+      bestScore = score
+      bestY = y
+    }
+  }
+
+  return bestScore >= 0.48 ? bestY : null
+}
+
+function isBetterBorderEdge(candidate: number, current: number, edge: "left" | "right" | "top" | "bottom") {
+  return edge === "left" || edge === "top" ? candidate < current : candidate > current
+}
+
+function getCalloutVerticalBorderScore(imageData: DetectionImageData, x: number) {
+  let darkPixels = 0
+  let sampledPixels = 0
+  const yInset = Math.max(2, Math.round(imageData.height * 0.04))
+
+  for (let y = yInset; y < imageData.height - yInset; y += 1) {
+    sampledPixels += 1
+    if (isCalloutBorderPixel(imageData, x, y)) {
+      darkPixels += 1
+    }
+  }
+
+  return darkPixels / Math.max(1, sampledPixels)
+}
+
+function getCalloutHorizontalBorderScore(imageData: DetectionImageData, y: number) {
+  let darkPixels = 0
+  let sampledPixels = 0
+  const xInset = Math.max(2, Math.round(imageData.width * 0.04))
+
+  for (let x = xInset; x < imageData.width - xInset; x += 1) {
+    sampledPixels += 1
+    if (isCalloutBorderPixel(imageData, x, y)) {
+      darkPixels += 1
+    }
+  }
+
+  return darkPixels / Math.max(1, sampledPixels)
+}
+
+function isCalloutBorderPixel(imageData: DetectionImageData, x: number, y: number) {
+  const dataIndex = ((y * imageData.width) + x) * 4
+  const alpha = imageData.data[dataIndex + 3] ?? 255
+  if (alpha < 32) {
+    return false
+  }
+
+  const r = imageData.data[dataIndex] ?? 0
+  const g = imageData.data[dataIndex + 1] ?? 0
+  const b = imageData.data[dataIndex + 2] ?? 0
+  const brightness = (r + g + b) / 3
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b)
+
+  return brightness < 92 && chroma < 42
+}
+
+function detectQuantityLabelAnchors(
+  imageData: DetectionImageData,
+  interiorRegion: PixelRegion,
+  foregroundMask: Uint8Array,
+): QuantityLabelAnchor[] {
+  return suppressOverlappingQuantityLabelAnchors(
+    createQuantityLabelAnchorsForImageData(imageData, interiorRegion, foregroundMask),
+  )
+}
+
+function createQuantityLabelAnchorsForImageData(
+  imageData: DetectionImageData,
+  interiorRegion: PixelRegion,
+  foregroundMask: Uint8Array,
+): QuantityLabelAnchor[] {
+  const components = collectDarkComponents(imageData, interiorRegion, isQuantityTextPixel)
+    .filter((component) => isLikelyQuantityLabelComponent(imageData, component))
+  if (components.length === 0) {
+    return []
+  }
+
+  return createQuantityLabelAnchorCandidates(imageData, components, interiorRegion, foregroundMask)
+}
+
+function isLikelyQuantityLabelComponent(imageData: DetectionImageData, component: DarkComponent) {
+  const density = component.count / Math.max(1, component.width * component.height)
+  const maxLabelHeight = Math.max(24, imageData.height * 0.18)
+  const maxLabelWidth = Math.max(72, imageData.width * 0.28)
+
+  return (
+    component.height >= Math.max(4, Math.round(imageData.height * 0.018)) &&
+    component.height <= maxLabelHeight &&
+    component.width <= maxLabelWidth &&
+    component.count <= imageData.width * imageData.height * 0.04 &&
+    density <= 0.92
+  )
+}
+
+function createQuantityLabelAnchorCandidates(
+  imageData: DetectionImageData,
+  components: readonly DarkComponent[],
+  interiorRegion: PixelRegion,
+  foregroundMask: Uint8Array,
+): QuantityLabelAnchor[] {
+  const anchors: QuantityLabelAnchor[] = []
+  const busyBackgroundAnchors: QuantityLabelAnchor[] = []
+  const medianHeight = median(components.map((component) => component.height)) ?? 10
+  const lineTolerance = Math.max(5, Math.round(medianHeight * 0.85))
+  const maxComponentGap = Math.max(7, Math.round(medianHeight * 1.35))
+  const maxLabelWidth = Math.max(56, Math.round(imageData.width * 0.26))
+  const maxLabelHeight = Math.max(22, Math.round(imageData.height * 0.2))
+  const lines: DarkComponent[][] = []
+
+  for (const component of [...components].sort((left, right) => getRegionCenterY(left) - getRegionCenterY(right))) {
+    const line = lines.find((candidateLine) =>
+      Math.abs(getQuantityComponentLineCenterY(candidateLine) - getRegionCenterY(component)) <= lineTolerance
+    )
+    if (line) {
+      line.push(component)
+    } else {
+      lines.push([component])
+    }
+  }
+
+  for (const line of lines) {
+    const sortedLine = [...line].sort((left, right) => left.x - right.x || left.y - right.y)
+    for (let startIndex = 0; startIndex < sortedLine.length; startIndex += 1) {
+      const group: DarkComponent[] = []
+      for (let index = startIndex; index < sortedLine.length && group.length < 6; index += 1) {
+        const component = sortedLine[index]
+        const previous = group.at(-1)
+        if (!component) {
+          continue
+        }
+        if (previous && component.x - (previous.x + previous.width) > maxComponentGap) {
+          break
+        }
+
+        group.push(component)
+        const region = unionRegions(group)
+        if (!region || region.width > maxLabelWidth || region.height > maxLabelHeight) {
+          break
+        }
+
+        const candidate = createQuantityLabelAnchorCandidate(
+          imageData,
+          region,
+          group.length,
+          interiorRegion,
+          foregroundMask,
+        )
+        if (candidate) {
+          anchors.push(candidate)
+        } else {
+          const busyBackgroundCandidate = createQuantityLabelAnchorCandidate(
+            imageData,
+            region,
+            group.length,
+            interiorRegion,
+            foregroundMask,
+            0.3,
+          )
+          if (busyBackgroundCandidate) {
+            busyBackgroundAnchors.push(busyBackgroundCandidate)
+          } else {
+            const looseOneBackgroundCandidate = createQuantityLabelAnchorCandidate(
+              imageData,
+              region,
+              group.length,
+              interiorRegion,
+              foregroundMask,
+              1,
+            )
+            if (looseOneBackgroundCandidate?.quantity.value === 1) {
+              busyBackgroundAnchors.push(looseOneBackgroundCandidate)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const supportedBusyBackgroundAnchors: QuantityLabelAnchor[] = []
+  for (const anchor of [...busyBackgroundAnchors].sort((left, right) =>
+    left.maxBackgroundForegroundRatio - right.maxBackgroundForegroundRatio ||
+    right.score - left.score
+  )) {
+    if (isSupportedBusyBackgroundQuantityAnchor(anchor, [...anchors, ...supportedBusyBackgroundAnchors])) {
+      supportedBusyBackgroundAnchors.push(anchor)
+    }
+  }
+
+  const supportedAnchors = [
+    ...anchors,
+    ...supportedBusyBackgroundAnchors,
+  ]
+
+  return [
+    ...supportedAnchors,
+    ...createRowSupportedLooseOneLabelAnchors(imageData, components, interiorRegion, supportedAnchors),
+  ]
+}
+
+function createRowSupportedLooseOneLabelAnchors(
+  imageData: DetectionImageData,
+  components: readonly DarkComponent[],
+  interiorRegion: PixelRegion,
+  existingAnchors: readonly QuantityLabelAnchor[],
+): QuantityLabelAnchor[] {
+  const anchors: QuantityLabelAnchor[] = []
+  const medianHeight = median(components.map((component) => component.height)) ?? 10
+  const lineTolerance = Math.max(5, Math.round(medianHeight * 0.85))
+  const maxComponentGap = Math.max(7, Math.round(medianHeight * 1.35))
+  const lines: DarkComponent[][] = []
+
+  for (const component of [...components].sort((left, right) =>
+    getRegionCenterY(left) - getRegionCenterY(right) || left.x - right.x
+  )) {
+    const line = lines.find((candidateLine) =>
+      Math.abs(getRegionCenterY(candidateLine[0] ?? component) - getRegionCenterY(component)) <= lineTolerance
+    )
+    if (line) {
+      line.push(component)
+    } else {
+      lines.push([component])
+    }
+  }
+
+  for (const line of lines) {
+    const sortedLine = [...line].sort((left, right) => left.x - right.x || left.y - right.y)
+    for (let startIndex = 0; startIndex < sortedLine.length - 1; startIndex += 1) {
+      const left = sortedLine[startIndex]
+      const right = sortedLine[startIndex + 1]
+      if (!left || !right || right.x - (left.x + left.width) > maxComponentGap) {
+        continue
+      }
+
+      const region = unionRegions([left, right])
+      if (!region) {
+        continue
+      }
+
+      const quantity = readQuantityFromImageData(imageData, expandRegion(region, imageData, 2))
+      const textRegion = trimRegionToQuantityDisplayText(imageData, expandRegion(region, imageData, 2)) ??
+        trimRegionToQuantityText(imageData, expandRegion(region, imageData, 2))
+      if (
+        quantity.value !== 1 ||
+        quantity.confidence < 0.8 ||
+        !textRegion ||
+        !isQuantityLabelInsideInterior(textRegion, interiorRegion)
+      ) {
+        continue
+      }
+
+      const aspectRatio = textRegion.width / Math.max(1, textRegion.height)
+      if (aspectRatio < 0.55 || aspectRatio > 1.6) {
+        continue
+      }
+
+      const candidate: QuantityLabelAnchor = {
+        componentCount: 2,
+        maxBackgroundForegroundRatio: 1,
+        quantity,
+        region: normalizeRegion(textRegion, imageData.width, imageData.height),
+        score: quantity.confidence + 0.04,
+      }
+      if (
+        existingAnchors.some((anchor) => areQuantityLabelAnchorsDuplicative(anchor, candidate)) ||
+        anchors.some((anchor) => areQuantityLabelAnchorsDuplicative(anchor, candidate)) ||
+        !hasNearbyRowSupportedQuantityAnchor(candidate, [...existingAnchors, ...anchors])
+      ) {
+        continue
+      }
+
+      anchors.push(candidate)
+    }
+  }
+
+  return anchors
+}
+
+function hasNearbyRowSupportedQuantityAnchor(
+  candidate: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const rowTolerance = Math.max(8, Math.round(candidate.region.height * 1.25))
+  const rowAnchors = anchors.filter((anchor) =>
+    Math.abs(getRegionCenterY(anchor.region) - getRegionCenterY(candidate.region)) <= rowTolerance
+  )
+  if (rowAnchors.length === 0) {
+    return false
+  }
+
+  const nearestDistance = Math.min(
+    ...rowAnchors.map((anchor) => Math.abs(getRegionCenterX(anchor.region) - getRegionCenterX(candidate.region))),
+  )
+
+  return nearestDistance <= Math.max(candidate.region.height * 8, candidate.region.width * 4)
+}
+
+function getQuantityComponentLineCenterY(line: readonly DarkComponent[]) {
+  return median(line.map((component) => getRegionCenterY(component))) ?? 0
+}
+
+function isSupportedBusyBackgroundQuantityAnchor(
+  candidate: QuantityLabelAnchor,
+  strictAnchors: readonly QuantityLabelAnchor[],
+) {
+  if (
+    !candidate.quantity.value ||
+    candidate.quantity.value > 9 ||
+    candidate.componentCount < 2 ||
+    strictAnchors.some((anchor) => areQuantityLabelAnchorsDuplicative(anchor, candidate))
+  ) {
+    return false
+  }
+
+  const rowTolerance = Math.max(8, Math.round(candidate.region.height * 1.25))
+  const rowAnchors = strictAnchors
+    .filter((anchor) => Math.abs(getRegionCenterY(anchor.region) - getRegionCenterY(candidate.region)) <= rowTolerance)
+    .sort((left, right) => getRegionCenterX(left.region) - getRegionCenterX(right.region))
+
+  if (candidate.maxBackgroundForegroundRatio > 0.3) {
+    if (
+      candidate.quantity.value !== 1 ||
+      candidate.componentCount !== 2 ||
+      candidate.quantity.confidence < 0.8 ||
+      candidate.region.width > candidate.region.height * 1.6 ||
+      rowAnchors.length < 1
+    ) {
+      return false
+    }
+
+    const nearestRowAnchorDistance = Math.min(
+      ...rowAnchors.map((anchor) => Math.abs(getRegionCenterX(anchor.region) - getRegionCenterX(candidate.region))),
+    )
+
+    return nearestRowAnchorDistance <= Math.max(candidate.region.height * 8, candidate.region.width * 4)
+  }
+
+  if (
+    candidate.componentCount === 2 &&
+    candidate.quantity.confidence >= 0.76 &&
+    candidate.region.width <= candidate.region.height * 1.8
+  ) {
+    return true
+  }
+
+  if (candidate.quantity.confidence < 0.74) {
+    return false
+  }
+
+  if (rowAnchors.length < 2) {
+    return false
+  }
+
+  const rowGaps = rowAnchors
+    .slice(1)
+    .map((anchor, index) => getRegionCenterX(anchor.region) - getRegionCenterX(rowAnchors[index]?.region ?? anchor.region))
+    .filter((gap) => gap > candidate.region.width * 1.2)
+  const medianGap = median(rowGaps)
+  if (!medianGap) {
+    return false
+  }
+
+  const candidateCenterX = getRegionCenterX(candidate.region)
+  const leftBound = getRegionCenterX(rowAnchors[0]?.region ?? candidate.region) - medianGap * 1.35
+  const rightBound = getRegionCenterX(rowAnchors.at(-1)?.region ?? candidate.region) + medianGap * 1.35
+
+  return candidateCenterX >= leftBound && candidateCenterX <= rightBound
+}
+
+function createQuantityLabelAnchorCandidate(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  componentCount: number,
+  interiorRegion: PixelRegion,
+  foregroundMask: Uint8Array,
+  maxBackgroundForegroundRatio = 0.28,
+): QuantityLabelAnchor | null {
+  const readableRegion = expandRegion(region, imageData, 2)
+  const quantity = readQuantityFromImageData(imageData, readableRegion)
+  if (!quantity.value || quantity.confidence < 0.58) {
+    return null
+  }
+
+  const textRegion = trimRegionToQuantityDisplayText(imageData, readableRegion) ??
+    trimRegionToQuantityText(imageData, readableRegion)
+  if (
+    !textRegion ||
+    !isQuantityLabelInsideInterior(textRegion, interiorRegion) ||
+    !isQuantityLabelOnPlainBackground(imageData, foregroundMask, textRegion, maxBackgroundForegroundRatio)
+  ) {
+    return null
+  }
+
+  const aspectRatio = textRegion.width / Math.max(1, textRegion.height)
+  if (aspectRatio < 0.55 || aspectRatio > 5.2) {
+    return null
+  }
+  const digitCount = quantity.text?.length ?? 0
+  if (digitCount <= 1 && aspectRatio > 1.92) {
+    return null
+  }
+
+  return {
+    componentCount,
+    maxBackgroundForegroundRatio,
+    quantity,
+    region: normalizeRegion(textRegion, imageData.width, imageData.height),
+    score: quantity.confidence + clamp(componentCount / 4, 0, 1) * 0.08,
+  }
+}
+
+function isQuantityLabelOnPlainBackground(
+  imageData: DetectionImageData,
+  foregroundMask: Uint8Array,
+  textRegion: PixelRegion,
+  maxForegroundRatio: number,
+) {
+  const inspectRegion = expandRegion(
+    textRegion,
+    imageData,
+    Math.max(2, Math.round(textRegion.height * 0.14)),
+  )
+  let textPixels = 0
+  let nonTextForegroundPixels = 0
+  let nonTextPixels = 0
+
+  for (let y = inspectRegion.y; y < inspectRegion.y + inspectRegion.height; y += 1) {
+    for (let x = inspectRegion.x; x < inspectRegion.x + inspectRegion.width; x += 1) {
+      const pixelIndex = (y * imageData.width) + x
+      if (isQuantityTextPixel(imageData, x, y)) {
+        textPixels += 1
+        continue
+      }
+
+      nonTextPixels += 1
+      if (foregroundMask[pixelIndex]) {
+        nonTextForegroundPixels += 1
+      }
+    }
+  }
+
+  const foregroundRatio = nonTextForegroundPixels / Math.max(1, nonTextPixels)
+
+  return textPixels >= Math.max(8, textRegion.height * 0.68) && foregroundRatio <= maxForegroundRatio
+}
+
+function isQuantityLabelInsideInterior(region: PixelRegion, interiorRegion: PixelRegion) {
+  const centerX = getRegionCenterX(region)
+  const centerY = getRegionCenterY(region)
+
+  return (
+    centerX >= interiorRegion.x &&
+    centerX <= interiorRegion.x + interiorRegion.width &&
+    centerY >= interiorRegion.y &&
+    centerY <= interiorRegion.y + interiorRegion.height
+  )
+}
+
+function suppressOverlappingQuantityLabelAnchors(candidates: readonly QuantityLabelAnchor[]) {
+  const selected: QuantityLabelAnchor[] = []
+
+  for (const candidate of [...candidates].sort((left, right) =>
+    right.score - left.score ||
+    right.region.width * right.region.height - left.region.width * left.region.height
+  )) {
+    if (selected.some((existing) => areQuantityLabelAnchorsDuplicative(existing, candidate))) {
+      continue
+    }
+
+    selected.push(candidate)
+  }
+
+  return sortQuantityLabelAnchors(
+    selected.filter((candidate) => !isQuantityAnchorLikelyPartTextureAboveLabel(candidate, selected)),
+  )
+}
+
+function isQuantityAnchorLikelyPartTextureAboveLabel(
+  candidate: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  return anchors.some((anchor) => {
+    if (anchor === candidate || anchor.region.y <= candidate.region.y) {
+      return false
+    }
+
+    const verticalGap = anchor.region.y - (candidate.region.y + candidate.region.height)
+    const horizontalOverlap = Math.max(
+      0,
+      Math.min(candidate.region.x + candidate.region.width, anchor.region.x + anchor.region.width) -
+        Math.max(candidate.region.x, anchor.region.x),
+    )
+    const horizontalOverlapRatio = horizontalOverlap / Math.max(1, Math.min(candidate.region.width, anchor.region.width))
+
+    return (
+      verticalGap >= -Math.max(2, candidate.region.height * 0.12) &&
+      verticalGap <= Math.max(candidate.region.height, anchor.region.height) * 0.72 &&
+      horizontalOverlapRatio >= 0.35
+    )
+  })
+}
+
+function areQuantityLabelAnchorsDuplicative(left: QuantityLabelAnchor, right: QuantityLabelAnchor) {
+  const intersectionOverUnion = getIntersectionOverUnion(left.region, right.region)
+  if (intersectionOverUnion > 0.25) {
+    return true
+  }
+
+  const verticalOverlap = getVerticalOverlapRatio(left.region, right.region)
+  const centerDeltaX = Math.abs(getRegionCenterX(left.region) - getRegionCenterX(right.region))
+  const maxWidth = Math.max(left.region.width, right.region.width)
+
+  return verticalOverlap >= 0.58 && centerDeltaX <= maxWidth * 0.45
+}
+
+function sortQuantityLabelAnchors(anchors: readonly QuantityLabelAnchor[]) {
+  return [...anchors].sort((left, right) => {
+    const rowTolerance = Math.max(6, Math.round(Math.min(left.region.height, right.region.height) * 1.2))
+    if (Math.abs(getRegionCenterY(left.region) - getRegionCenterY(right.region)) <= rowTolerance) {
+      return left.region.x - right.region.x
+    }
+
+    return left.region.y - right.region.y || left.region.x - right.region.x
+  })
+}
+
+function createQuantityAnchorPartForegroundMask(
+  imageData: DetectionImageData,
+  foregroundMask: Uint8Array,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const mask = new Uint8Array(foregroundMask)
+  for (const anchor of anchors) {
+    const exclusionRegion = expandRegion(anchor.region, imageData, Math.max(1, Math.round(anchor.region.height * 0.16)))
+
+    for (let y = exclusionRegion.y; y < exclusionRegion.y + exclusionRegion.height; y += 1) {
+      for (let x = exclusionRegion.x; x < exclusionRegion.x + exclusionRegion.width; x += 1) {
+        mask[(y * imageData.width) + x] = 0
+      }
+    }
+  }
+
+  return mask
+}
+
+function createQuantityLabelAnchorZones(
+  anchors: readonly QuantityLabelAnchor[],
+  interiorRegion: PixelRegion,
+): QuantityLabelAnchorZone[] {
+  const rows = groupQuantityAnchorsIntoRows(anchors)
+  const zones: QuantityLabelAnchorZone[] = []
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex] ?? []
+    const sortedRow = [...row].sort((left, right) => getRegionCenterX(left.region) - getRegionCenterX(right.region))
+
+    for (let index = 0; index < sortedRow.length; index += 1) {
+      const anchor = sortedRow[index]
+      const previous = sortedRow[index - 1] ?? null
+      const next = sortedRow[index + 1] ?? null
+      if (!anchor) {
+        continue
+      }
+
+      const left = previous
+        ? Math.floor((getRegionCenterX(previous.region) + getRegionCenterX(anchor.region)) / 2)
+        : interiorRegion.x
+      const right = next
+        ? Math.ceil((getRegionCenterX(anchor.region) + getRegionCenterX(next.region)) / 2)
+        : interiorRegion.x + interiorRegion.width
+      const top = Math.max(
+        interiorRegion.y,
+        Math.floor(anchor.region.y - Math.max(anchor.region.height * 8, interiorRegion.height * 0.62)),
+      )
+      const bottomLimit = Math.min(
+        interiorRegion.y + interiorRegion.height,
+        Math.ceil(anchor.region.y + anchor.region.height * 1.4),
+      )
+      const region = intersectRegions({
+        height: bottomLimit - top,
+        width: right - left,
+        x: left,
+        y: top,
+      }, interiorRegion)
+
+      if (region) {
+        zones.push({ anchor, region })
+      }
+    }
+  }
+
+  return zones
+}
+
+function groupQuantityAnchorsIntoRows(anchors: readonly QuantityLabelAnchor[]) {
+  const sorted = [...anchors].sort((left, right) => getRegionCenterY(left.region) - getRegionCenterY(right.region))
+  const medianHeight = median(sorted.map((anchor) => anchor.region.height)) ?? 10
+  const tolerance = Math.max(8, Math.round(medianHeight * 1.4))
+  const rows: QuantityLabelAnchor[][] = []
+
+  for (const anchor of sorted) {
+    const row = rows.find((candidate) =>
+      Math.abs(getQuantityAnchorRowCenterY(candidate) - getRegionCenterY(anchor.region)) <= tolerance
+    )
+    if (row) {
+      row.push(anchor)
+    } else {
+      rows.push([anchor])
+    }
+  }
+
+  return rows.map((row) => [...row].sort((left, right) => left.region.x - right.region.x))
+}
+
+function getQuantityAnchorRowCenterY(row: readonly QuantityLabelAnchor[]) {
+  return median(row.map((anchor) => getRegionCenterY(anchor.region))) ?? 0
+}
+
+function findPartRegionForQuantityAnchor(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  zone: QuantityLabelAnchorZone,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const labelRegion = zone.anchor.region
+  const interiorRegion = getCalloutInteriorRegion(imageData)
+  const partSearchBottom = Math.min(
+    zone.region.y + zone.region.height,
+    Math.ceil(labelRegion.y + labelRegion.height * 0.32),
+  )
+  const baseSearchRegion = normalizeRegion({
+    height: partSearchBottom - zone.region.y,
+    width: zone.region.width,
+    x: zone.region.x,
+    y: zone.region.y,
+  }, imageData.width, imageData.height)
+  const boundedBaseSearchRegion = intersectRegions(baseSearchRegion, interiorRegion)
+  if (!boundedBaseSearchRegion) {
+    return null
+  }
+
+  const searchRegion = normalizeRegion(boundedBaseSearchRegion, imageData.width, imageData.height)
+  const rawPartRegion = selectNearestPartComponentRegion(imageData, partMask, searchRegion, labelRegion)
+  if (!rawPartRegion || !isLikelyAnchoredPartRegion(imageData, rawPartRegion, labelRegion)) {
+    return null
+  }
+
+  const expandedPartRegion = expandPartRegionAcrossConnectedForeground(
+    imageData,
+    partMask,
+    rawPartRegion,
+    zone.anchor,
+    anchors,
+    interiorRegion,
+  )
+  const ownedPartRegion = trimPartRegionToQuantityAnchorForeground(
+    imageData,
+    partMask,
+    expandedPartRegion,
+    zone.anchor,
+    anchors,
+  )
+  const padding = Math.max(2, Math.round(Math.min(rawPartRegion.width, rawPartRegion.height) * 0.06))
+  const paddedRegion = padRegion(ownedPartRegion, imageData.width, imageData.height, padding)
+  const constrainedRegion = intersectRegions(paddedRegion, interiorRegion) ?? rawPartRegion
+
+  return normalizeRegion(constrainedRegion, imageData.width, imageData.height)
+}
+
+function selectNearestPartComponentRegion(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  searchRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const components = collectMaskComponents(partMask, imageData.width, imageData.height, searchRegion)
+    .filter((component) =>
+      isLikelyPartComponentNearQuantityLabel(imageData, component, labelRegion) &&
+      !isLikelyRowSpanningPartComponent(imageData, component, labelRegion)
+    )
+  if (components.length === 0) {
+    return getFallbackAnchoredPartRegion(imageData, partMask, searchRegion, labelRegion)
+  }
+
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const horizontallyRelevant = components.filter((component) => {
+    const slack = Math.max(labelRegion.width * 2.8, component.width * 0.45)
+
+    return labelCenterX >= component.x - slack && labelCenterX <= component.x + component.width + slack
+  })
+  const candidates = horizontallyRelevant.length > 0 ? horizontallyRelevant : components
+  const primaryComponent = selectPrimaryPartComponentForQuantityLabel(candidates, labelRegion)
+  const selected = candidates.filter((component) =>
+    component === primaryComponent ||
+    areCandidatePartComponentsAdjacent(component, primaryComponent, labelRegion)
+  )
+
+  return unionRegions(selected.length > 0 ? selected : candidates) ??
+    getFallbackAnchoredPartRegion(imageData, partMask, searchRegion, labelRegion)
+}
+
+function selectPrimaryPartComponentForQuantityLabel(
+  components: readonly DarkComponent[],
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+
+  return [...components].sort((left, right) =>
+    scorePartComponentForQuantityLabel(left, labelRegion, labelCenterX) -
+    scorePartComponentForQuantityLabel(right, labelRegion, labelCenterX)
+  )[0] ?? components[0]
+}
+
+function scorePartComponentForQuantityLabel(
+  component: DarkComponent,
+  labelRegion: PixelRegion,
+  labelCenterX: number,
+) {
+  const horizontalGap = Math.max(
+    0,
+    Math.max(component.x - labelCenterX, labelCenterX - component.x - component.width),
+  )
+  const componentBottom = component.y + component.height
+  const verticalGapToLabel = Math.max(0, labelRegion.y - componentBottom)
+  const labelOverlapBonus = labelCenterX >= component.x && labelCenterX <= component.x + component.width ? labelRegion.width : 0
+  const area = component.width * component.height
+
+  return (horizontalGap * 2.4) + verticalGapToLabel - labelOverlapBonus - Math.min(area, labelRegion.width * labelRegion.height * 14) * 0.002
+}
+
+function areCandidatePartComponentsAdjacent(
+  component: DarkComponent,
+  primaryComponent: DarkComponent,
+  labelRegion: PixelRegion,
+) {
+  const horizontalGap = Math.max(
+    0,
+    Math.max(component.x - primaryComponent.x - primaryComponent.width, primaryComponent.x - component.x - component.width),
+  )
+  const verticalGap = Math.max(
+    0,
+    Math.max(component.y - primaryComponent.y - primaryComponent.height, primaryComponent.y - component.y - component.height),
+  )
+  const gapTolerance = Math.max(4, Math.round(labelRegion.height * 0.85))
+
+  if (horizontalGap > gapTolerance || verticalGap > gapTolerance) {
+    return false
+  }
+
+  return getVerticalOverlapRatio(component, primaryComponent) >= 0.16 ||
+    getHorizontalOverlapRatio(component, primaryComponent) >= 0.16
+}
+
+function expandPartRegionAcrossConnectedForeground(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  rawPartRegion: PixelRegion,
+  anchor: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+  interiorRegion: PixelRegion,
+) {
+  const labelRegion = anchor.region
+  const horizontalExpansion = Math.max(
+    24,
+    Math.round(labelRegion.width * 4.2),
+    Math.round(rawPartRegion.width * 0.72),
+  )
+  const verticalExpansion = Math.max(8, Math.round(labelRegion.height * 1.2))
+  const expandedSearch = intersectRegions({
+    height: rawPartRegion.height + verticalExpansion * 2,
+    width: rawPartRegion.width + horizontalExpansion * 2,
+    x: rawPartRegion.x - horizontalExpansion,
+    y: rawPartRegion.y - verticalExpansion,
+  }, interiorRegion)
+  if (!expandedSearch) {
+    return rawPartRegion
+  }
+
+  const components = collectMaskComponents(partMask, imageData.width, imageData.height, expandedSearch)
+    .filter((component) =>
+      isLikelyPartComponentNearQuantityLabel(imageData, component, labelRegion) &&
+      !isLikelyRowSpanningPartComponent(imageData, component, labelRegion)
+    )
+  const related = components.filter((component) => isConnectedPartRegionContinuation(component, rawPartRegion, labelRegion))
+
+  const expandedRegion = unionRegions(related) ?? rawPartRegion
+
+  return clipPartRegionAwayFromNeighboringQuantityAnchors(expandedRegion, anchor, anchors)
+}
+
+function clipPartRegionAwayFromNeighboringQuantityAnchors(
+  region: PixelRegion,
+  anchor: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const anchorCenterX = getRegionCenterX(anchor.region)
+  const rowTolerance = Math.max(8, Math.round(anchor.region.height * 1.35))
+  let left = region.x
+  let right = region.x + region.width
+
+  for (const neighbor of anchors) {
+    if (
+      neighbor === anchor ||
+      Math.abs(getRegionCenterY(neighbor.region) - getRegionCenterY(anchor.region)) > rowTolerance
+    ) {
+      continue
+    }
+
+    const neighborCenterX = getRegionCenterX(neighbor.region)
+    if (neighborCenterX < anchorCenterX) {
+      left = Math.max(left, Math.floor((neighborCenterX + anchorCenterX) / 2))
+    } else if (neighborCenterX > anchorCenterX) {
+      right = Math.min(right, Math.ceil((neighborCenterX + anchorCenterX) / 2))
+    }
+  }
+
+  if (right - left < Math.max(7, anchor.region.width * 0.8)) {
+    return region
+  }
+
+  return {
+    height: region.height,
+    width: right - left,
+    x: left,
+    y: region.y,
+  }
+}
+
+function trimPartRegionToQuantityAnchorForeground(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  region: PixelRegion,
+  anchor: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const components = collectMaskComponents(partMask, imageData.width, imageData.height, region)
+  if (components.length <= 1) {
+    return region
+  }
+
+  const sameRowAnchors = getSameRowQuantityAnchors(anchor, anchors)
+  const hasLeftNeighbor = sameRowAnchors.some((neighbor) => getRegionCenterX(neighbor.region) < getRegionCenterX(anchor.region))
+  const hasRightNeighbor = sameRowAnchors.some((neighbor) => getRegionCenterX(neighbor.region) > getRegionCenterX(anchor.region))
+  const maxArea = Math.max(...components.map((component) => component.width * component.height))
+  const ownedComponents = components.filter((component) =>
+    isPartComponentOwnedByQuantityAnchor(component, anchor, anchors)
+  )
+  const ownershipFilteredComponents = ownedComponents.length > 0 ? ownedComponents : components
+  const keptComponents = ownershipFilteredComponents.filter((component) =>
+    !isLikelyNeighborPartEdgeComponent(component, region, anchor.region, maxArea, {
+      hasLeftNeighbor,
+      hasRightNeighbor,
+    })
+  )
+
+  return unionRegions(keptComponents.length > 0 ? keptComponents : ownershipFilteredComponents) ?? region
+}
+
+function isPartComponentOwnedByQuantityAnchor(
+  component: DarkComponent,
+  anchor: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const componentScore = getPartComponentQuantityAnchorOwnershipScore(component, anchor)
+  if (componentScore == null) {
+    return false
+  }
+
+  const bestCompetingScore = Math.min(
+    Number.POSITIVE_INFINITY,
+    ...anchors
+      .filter((candidateAnchor) => candidateAnchor !== anchor)
+      .map((candidateAnchor) => getPartComponentQuantityAnchorOwnershipScore(component, candidateAnchor))
+      .filter((score): score is number => score != null),
+  )
+  if (!Number.isFinite(bestCompetingScore)) {
+    return true
+  }
+
+  const ownershipMargin = Math.max(3, Math.round(anchor.region.height * 0.35))
+
+  return componentScore <= bestCompetingScore + ownershipMargin
+}
+
+function getPartComponentQuantityAnchorOwnershipScore(
+  component: DarkComponent,
+  anchor: QuantityLabelAnchor,
+) {
+  if (!isPartComponentPlausiblyOwnedByQuantityAnchor(component, anchor.region)) {
+    return null
+  }
+
+  return scorePartComponentForQuantityLabel(component, anchor.region, getRegionCenterX(anchor.region))
+}
+
+function isPartComponentPlausiblyOwnedByQuantityAnchor(
+  component: DarkComponent,
+  labelRegion: PixelRegion,
+) {
+  const componentBottom = component.y + component.height
+
+  return (
+    component.y < labelRegion.y + labelRegion.height * 0.4 &&
+    componentBottom <= labelRegion.y + Math.max(2, labelRegion.height * 0.36) &&
+    componentBottom >= labelRegion.y - Math.max(labelRegion.height * 7, component.height * 2.5)
+  )
+}
+
+function getSameRowQuantityAnchors(anchor: QuantityLabelAnchor, anchors: readonly QuantityLabelAnchor[]) {
+  const rowTolerance = Math.max(8, Math.round(anchor.region.height * 1.35))
+
+  return anchors.filter((neighbor) =>
+    neighbor !== anchor &&
+    Math.abs(getRegionCenterY(neighbor.region) - getRegionCenterY(anchor.region)) <= rowTolerance
+  )
+}
+
+function isLikelyNeighborPartEdgeComponent(
+  component: DarkComponent,
+  region: PixelRegion,
+  labelRegion: PixelRegion,
+  maxArea: number,
   {
-    gapTolerance,
-    minCount,
-    minSize,
+    hasLeftNeighbor,
+    hasRightNeighbor,
   }: {
-    gapTolerance: number
-    minCount: number
-    minSize: number
+    hasLeftNeighbor: boolean
+    hasRightNeighbor: boolean
   },
 ) {
-  const bands: ProjectionBand[] = []
-  let start: number | null = null
-  let latestHit: number | null = null
+  const area = component.width * component.height
+  const overlapsLabelX = component.x <= labelRegion.x + labelRegion.width &&
+    component.x + component.width >= labelRegion.x
+  const touchesLeftBoundary = component.x <= region.x + 1
+  const touchesRightBoundary = component.x + component.width >= region.x + region.width - 1
 
-  for (let index = 0; index < projection.length; index += 1) {
-    const isHit = (projection[index] ?? 0) >= minCount
-    if (isHit) {
-      start ??= index
-      latestHit = index
-      continue
-    }
+  return (
+    area < maxArea * 0.72 &&
+    !overlapsLabelX &&
+    (
+      (hasLeftNeighbor && touchesLeftBoundary && component.x + component.width < labelRegion.x) ||
+      (hasRightNeighbor && touchesRightBoundary && component.x > labelRegion.x + labelRegion.width)
+    )
+  )
+}
 
-    if (start == null || latestHit == null || index - latestHit <= gapTolerance) {
-      continue
-    }
-
-    if (latestHit - start + 1 >= minSize) {
-      bands.push({ end: latestHit, start })
-    }
-    start = null
-    latestHit = null
+function isConnectedPartRegionContinuation(
+  component: DarkComponent,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  if (getIntersectionOverUnion(component, rawPartRegion) > 0) {
+    return true
   }
 
-  if (start != null && latestHit != null && latestHit - start + 1 >= minSize) {
-    bands.push({ end: latestHit, start })
+  const horizontalGap = Math.max(
+    0,
+    Math.max(component.x - rawPartRegion.x - rawPartRegion.width, rawPartRegion.x - component.x - component.width),
+  )
+  const verticalGap = Math.max(
+    0,
+    Math.max(component.y - rawPartRegion.y - rawPartRegion.height, rawPartRegion.y - component.y - component.height),
+  )
+
+  return (
+    horizontalGap <= Math.max(3, Math.round(labelRegion.height * 0.45)) &&
+    verticalGap <= Math.max(4, Math.round(labelRegion.height * 0.55)) &&
+    getVerticalOverlapRatio(component, rawPartRegion) >= 0.18
+  )
+}
+
+function isLikelyRowSpanningPartComponent(
+  imageData: DetectionImageData,
+  component: DarkComponent,
+  labelRegion: PixelRegion,
+) {
+  if (isTallPartComponentAnchoredToQuantityLabel(imageData, component, labelRegion)) {
+    return false
   }
 
-  return bands
+  return (
+    component.height > Math.max(labelRegion.height * 7.4, imageData.height * 0.36) &&
+    component.width < Math.max(labelRegion.width * 4, imageData.width * 0.12) &&
+    component.y < labelRegion.y - labelRegion.height * 4.5
+  )
+}
+
+function isTallPartComponentAnchoredToQuantityLabel(
+  imageData: DetectionImageData,
+  component: DarkComponent,
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const componentBottom = component.y + component.height
+  const verticalGapToLabel = labelRegion.y - componentBottom
+  const horizontalTolerance = Math.max(2, Math.round(labelRegion.width * 0.4))
+
+  return (
+    component.height > Math.max(labelRegion.height * 7.4, imageData.height * 0.36) &&
+    component.width >= Math.max(7, labelRegion.width * 0.72) &&
+    labelCenterX >= component.x - horizontalTolerance &&
+    labelCenterX <= component.x + component.width + horizontalTolerance &&
+    verticalGapToLabel >= -labelRegion.height * 0.4 &&
+    verticalGapToLabel <= Math.max(6, labelRegion.height * 0.8)
+  )
+}
+
+function getFallbackAnchoredPartRegion(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  searchRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const fallbackWidth = Math.max(labelRegion.width * 4.8, imageData.width * 0.12)
+  const fallbackHeight = Math.max(labelRegion.height * 7, imageData.height * 0.18)
+  const fallbackSearch = intersectRegions({
+    height: fallbackHeight,
+    width: fallbackWidth,
+    x: labelCenterX - fallbackWidth / 2,
+    y: labelRegion.y - fallbackHeight,
+  }, searchRegion)
+  if (!fallbackSearch) {
+    return null
+  }
+
+  return trimRegionToForeground(partMask, imageData.width, imageData.height, fallbackSearch)
+}
+
+function collectMaskComponents(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  region: PixelRegion,
+) {
+  const boundedRegion = normalizeRegion(region, width, height)
+  const visited = new Uint8Array(width * height)
+  const components: DarkComponent[] = []
+
+  for (let y = boundedRegion.y; y < boundedRegion.y + boundedRegion.height; y += 1) {
+    for (let x = boundedRegion.x; x < boundedRegion.x + boundedRegion.width; x += 1) {
+      const pixelIndex = (y * width) + x
+      if (visited[pixelIndex] || !mask[pixelIndex]) {
+        continue
+      }
+
+      components.push(collectMaskComponent(mask, visited, width, boundedRegion, pixelIndex))
+    }
+  }
+
+  return components.filter((component) => component.count >= 8)
+}
+
+function collectMaskComponent(
+  mask: Uint8Array,
+  visited: Uint8Array,
+  width: number,
+  bounds: PixelRegion,
+  startIndex: number,
+) {
+  const stack = [startIndex]
+  let count = 0
+  let minX = bounds.x + bounds.width
+  let minY = bounds.y + bounds.height
+  let maxX = bounds.x
+  let maxY = bounds.y
+  const pixels: number[] = []
+  visited[startIndex] = 1
+
+  while (stack.length > 0) {
+    const pixelIndex = stack.pop() ?? 0
+    const x = pixelIndex % width
+    const y = Math.floor(pixelIndex / width)
+    count += 1
+    pixels.push(pixelIndex)
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+
+    addMaskNeighbor(mask, visited, stack, pixelIndex - 1, x > bounds.x)
+    addMaskNeighbor(mask, visited, stack, pixelIndex + 1, x < bounds.x + bounds.width - 1)
+    addMaskNeighbor(mask, visited, stack, pixelIndex - width, y > bounds.y)
+    addMaskNeighbor(mask, visited, stack, pixelIndex + width, y < bounds.y + bounds.height - 1)
+  }
+
+  return {
+    count,
+    height: maxY - minY + 1,
+    pixels,
+    width: maxX - minX + 1,
+    x: minX,
+    y: minY,
+  }
+}
+
+function addMaskNeighbor(
+  mask: Uint8Array,
+  visited: Uint8Array,
+  stack: number[],
+  pixelIndex: number,
+  isInBounds: boolean,
+) {
+  if (!isInBounds || visited[pixelIndex] || !mask[pixelIndex]) {
+    return
+  }
+
+  visited[pixelIndex] = 1
+  stack.push(pixelIndex)
+}
+
+function isLikelyPartComponentNearQuantityLabel(
+  imageData: DetectionImageData,
+  component: DarkComponent,
+  labelRegion: PixelRegion,
+) {
+  const area = component.width * component.height
+  const componentBottom = component.y + component.height
+  const maxBottom = labelRegion.y + Math.max(2, labelRegion.height * 0.36)
+
+  return (
+    area >= imageData.width * imageData.height * 0.00035 &&
+    area <= imageData.width * imageData.height * 0.46 &&
+    component.width >= Math.max(5, imageData.width * 0.01) &&
+    component.height >= Math.max(5, imageData.height * 0.018) &&
+    componentBottom <= maxBottom &&
+    componentBottom >= labelRegion.y - Math.max(labelRegion.height * 7, imageData.height * 0.48)
+  )
+}
+
+function isLikelyAnchoredPartRegion(
+  imageData: DetectionImageData,
+  partRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const area = partRegion.width * partRegion.height
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const horizontalSlack = Math.max(labelRegion.width * 2.5, partRegion.width * 0.25)
+
+  return (
+    area >= imageData.width * imageData.height * 0.0015 &&
+    area <= imageData.width * imageData.height * 0.46 &&
+    partRegion.width >= Math.max(7, imageData.width * 0.012) &&
+    partRegion.width <= imageData.width * 0.9 &&
+    partRegion.height >= Math.max(7, imageData.height * 0.028) &&
+    partRegion.height <= imageData.height * 0.78 &&
+    partRegion.y < labelRegion.y + labelRegion.height * 0.4 &&
+    labelCenterX >= partRegion.x - horizontalSlack &&
+    labelCenterX <= partRegion.x + partRegion.width + horizontalSlack
+  )
+}
+
+function intersectRegions(left: PixelRegion, right: PixelRegion): PixelRegion | null {
+  const x = Math.max(left.x, right.x)
+  const y = Math.max(left.y, right.y)
+  const rightEdge = Math.min(left.x + left.width, right.x + right.width)
+  const bottomEdge = Math.min(left.y + left.height, right.y + right.height)
+
+  if (rightEdge <= x || bottomEdge <= y) {
+    return null
+  }
+
+  return {
+    height: bottomEdge - y,
+    width: rightEdge - x,
+    x,
+    y,
+  }
+}
+
+function scoreAnchoredPartItemRegion(
+  imageData: DetectionImageData,
+  anchor: QuantityLabelAnchor,
+  itemRegion: PixelRegion,
+  partRegion: PixelRegion,
+) {
+  const sizeScore = clamp((partRegion.width * partRegion.height) / Math.max(1, imageData.width * imageData.height * 0.035), 0, 1)
+  const itemScore = clamp((itemRegion.width * itemRegion.height) / Math.max(1, imageData.width * imageData.height * 0.06), 0, 1)
+
+  return clamp(anchor.quantity.confidence * 0.48 + sizeScore * 0.34 + itemScore * 0.18, 0, 1)
 }
 
 function trimRegionToForeground(
@@ -5774,54 +7415,6 @@ function trimRegionToForeground(
   }, width, height)
 }
 
-function isLikelyCalloutPartItemRegion(imageData: DetectionImageData, region: PixelRegion) {
-  const area = region.width * region.height
-  return (
-    area >= imageData.width * imageData.height * 0.008 &&
-    region.width >= Math.max(18, imageData.width * 0.035) &&
-    region.height >= Math.max(20, imageData.height * 0.09) &&
-    region.width <= imageData.width * 0.92 &&
-    region.height <= imageData.height * 0.82
-  )
-}
-
-function detectQuantityLabelRegion(imageData: DetectionImageData, itemRegion: PixelRegion): PixelRegion {
-  const fallbackRegion = getFallbackQuantityRegion(imageData, itemRegion)
-  const searchRegion = normalizeRegion({
-    height: Math.max(54, itemRegion.height * 1.8),
-    width: itemRegion.width + 8,
-    x: itemRegion.x - 4,
-    y: itemRegion.y + (itemRegion.height * 0.55),
-  }, imageData.width, imageData.height)
-  const minComponentHeight = Math.max(5, itemRegion.height * 0.08)
-  const components = collectDarkComponents(imageData, searchRegion, isQuantityTextPixel)
-    .filter((component) => {
-      const centerY = component.y + component.height / 2
-      return (
-        centerY >= itemRegion.y + itemRegion.height * 0.65 &&
-        component.height >= minComponentHeight &&
-        component.height <= Math.max(42, itemRegion.height * 0.7) &&
-        component.width <= itemRegion.width * 0.95 &&
-        component.x + component.width / 2 >= itemRegion.x - 2 &&
-        component.x + component.width / 2 <= itemRegion.x + itemRegion.width + 2
-      )
-    })
-
-  if (components.length === 0) {
-    return fallbackRegion
-  }
-
-  const candidateRegions = [
-    ...getQuantityLabelLineCandidates(components, itemRegion).map((candidate) => candidate.region),
-    fallbackRegion,
-  ]
-  const quantityRegion = selectQuantityLabelLine(imageData, candidateRegions, itemRegion)
-
-  return quantityRegion
-    ? normalizeRegion(quantityRegion, imageData.width, imageData.height)
-    : fallbackRegion
-}
-
 function collectDarkComponents(
   imageData: DetectionImageData,
   region: PixelRegion,
@@ -5846,92 +7439,6 @@ function collectDarkComponents(
   return components.filter((component) => component.count >= 4)
 }
 
-function getQuantityLabelLineCandidates(components: readonly DarkComponent[], itemRegion: PixelRegion) {
-  const lineTolerance = Math.max(6, itemRegion.height * 0.08)
-  const lines: DarkComponent[][] = []
-
-  for (const component of [...components].sort((left, right) => getRegionCenterY(left) - getRegionCenterY(right))) {
-    const line = lines.find((candidateLine) =>
-      Math.abs(getRegionCenterY(candidateLine[0] ?? component) - getRegionCenterY(component)) <= lineTolerance
-    )
-    if (line) {
-      line.push(component)
-    } else {
-      lines.push([component])
-    }
-  }
-
-  return lines
-    .map((line) => ({
-      componentCount: line.length,
-      region: unionRegions(line),
-    }))
-    .filter((candidate): candidate is { componentCount: number; region: PixelRegion } => {
-      if (!candidate.region) {
-        return false
-      }
-
-      const isMultiGlyphLabel = candidate.componentCount >= 2
-      const isCompactConnectedLabel = candidate.region.width <= candidate.region.height * 3.2
-
-      return (
-        (isMultiGlyphLabel || isCompactConnectedLabel) &&
-        candidate.componentCount <= 6 &&
-        candidate.region.width >= Math.max(6, itemRegion.width * 0.04) &&
-        candidate.region.width <= Math.max(84, itemRegion.width * 0.55) &&
-        candidate.region.height <= Math.max(42, itemRegion.height * 0.42)
-      )
-    })
-}
-
-function selectQuantityLabelLine(
-  imageData: DetectionImageData,
-  candidateRegions: readonly PixelRegion[],
-  itemRegion: PixelRegion,
-) {
-  if (candidateRegions.length === 0) {
-    return null
-  }
-
-  return candidateRegions
-    .map((region) => {
-      const normalizedRegion = normalizeRegion(region, imageData.width, imageData.height)
-      const readableRegion = expandRegion(normalizedRegion, imageData, 2)
-      const quantity = readQuantityFromImageData(imageData, readableRegion)
-      const textRegion = trimRegionToQuantityText(imageData, readableRegion)
-      const displayRegion = textRegion
-        ? normalizeRegion(textRegion, imageData.width, imageData.height)
-        : normalizedRegion
-      const leftOffsetScore = clamp(
-        1 - Math.max(0, displayRegion.x - itemRegion.x) / Math.max(1, itemRegion.width * 0.45),
-        0,
-        1,
-      )
-      const lowerDetailPenalty = clamp(
-        (displayRegion.y - (itemRegion.y + itemRegion.height * 0.84)) / Math.max(1, itemRegion.height * 0.24),
-        0,
-        1,
-      )
-      const compactScore = clamp(
-        1 - Math.abs((displayRegion.width / Math.max(1, displayRegion.height)) - 1.8) / 3,
-        0,
-        1,
-      )
-      const inkScore = textRegion ? clamp(textRegion.count / Math.max(8, displayRegion.width * 0.9), 0, 1) : 0
-      const parseScore = quantity.value ? 5 + quantity.confidence : 0
-
-      return {
-        region: displayRegion,
-        score: parseScore + leftOffsetScore * 1.15 + compactScore * 0.2 + inkScore * 0.2 - lowerDetailPenalty * 0.9,
-      }
-    })
-    .sort((left, right) =>
-      right.score - left.score ||
-      left.region.y - right.region.y ||
-      left.region.x - right.region.x
-    )[0]?.region ?? null
-}
-
 function getRegionCenterY(region: PixelRegion) {
   return region.y + (region.height / 2)
 }
@@ -5953,6 +7460,7 @@ function collectDarkComponent(
   let minY = imageData.height
   let maxX = 0
   let maxY = 0
+  const pixels: number[] = []
   visited[startIndex] = 1
 
   while (stack.length > 0) {
@@ -5960,6 +7468,7 @@ function collectDarkComponent(
     const x = pixelIndex % imageData.width
     const y = Math.floor(pixelIndex / imageData.width)
     count += 1
+    pixels.push(pixelIndex)
     minX = Math.min(minX, x)
     minY = Math.min(minY, y)
     maxX = Math.max(maxX, x)
@@ -5974,6 +7483,7 @@ function collectDarkComponent(
   return {
     count,
     height: maxY - minY + 1,
+    pixels,
     width: maxX - minX + 1,
     x: minX,
     y: minY,
@@ -6002,124 +7512,13 @@ function addDarkNeighbor(
   stack.push(pixelIndex)
 }
 
-function getFallbackQuantityRegion(imageData: DetectionImageData, itemRegion: PixelRegion) {
-  return normalizeRegion({
-    height: Math.max(16, itemRegion.height * 0.55),
-    width: itemRegion.width + 8,
-    x: itemRegion.x - 4,
-    y: itemRegion.y + itemRegion.height * 0.92,
-  }, imageData.width, imageData.height)
-}
-
-function getPartImageRegionForItem(
-  imageData: DetectionImageData,
-  foregroundMask: Uint8Array,
-  itemRegion: PixelRegion,
-  quantityRegion: PixelRegion,
-) {
-  const partRegion = trimPartImageRegionToForeground(imageData, foregroundMask, itemRegion, quantityRegion) ??
-    getFallbackPartImageRegion(imageData, itemRegion, quantityRegion)
-
-  if (partRegion.height >= Math.max(6, itemRegion.height * 0.12)) {
-    return partRegion
-  }
-
-  return getFallbackPartImageRegion(imageData, itemRegion, quantityRegion)
-}
-
-function getFallbackPartImageRegion(
-  imageData: DetectionImageData,
-  itemRegion: PixelRegion,
-  quantityRegion: PixelRegion,
-) {
-  const boundedItemRegion = normalizeRegion(itemRegion, imageData.width, imageData.height)
-  const partBottom = clamp(
-    Math.floor(quantityRegion.y - Math.max(2, quantityRegion.height * 0.08)),
-    boundedItemRegion.y + Math.max(6, Math.round(boundedItemRegion.height * 0.18)),
-    boundedItemRegion.y + boundedItemRegion.height,
-  )
-
-  return normalizeRegion({
-    height: partBottom - boundedItemRegion.y,
-    width: boundedItemRegion.width,
-    x: boundedItemRegion.x,
-    y: boundedItemRegion.y,
-  }, imageData.width, imageData.height)
-}
-
-function trimPartImageRegionToForeground(
-  imageData: DetectionImageData,
-  foregroundMask: Uint8Array,
-  itemRegion: PixelRegion,
-  quantityRegion: PixelRegion,
-) {
-  const boundedItemRegion = normalizeRegion(itemRegion, imageData.width, imageData.height)
-  const boundedQuantityRegion = expandRegion(
-    quantityRegion,
-    imageData,
-    Math.max(2, Math.round(quantityRegion.height * 0.35)),
-  )
-  let minX = imageData.width
-  let minY = imageData.height
-  let maxX = 0
-  let maxY = 0
-  let count = 0
-
-  for (let y = boundedItemRegion.y; y < boundedItemRegion.y + boundedItemRegion.height; y += 1) {
-    for (let x = boundedItemRegion.x; x < boundedItemRegion.x + boundedItemRegion.width; x += 1) {
-      if (!foregroundMask[(y * imageData.width) + x]) {
-        continue
-      }
-      if (isPixelInsideRegion(x, y, boundedQuantityRegion) && isQuantityTextPixel(imageData, x, y)) {
-        continue
-      }
-
-      count += 1
-      minX = Math.min(minX, x)
-      minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x)
-      maxY = Math.max(maxY, y)
-    }
-  }
-
-  if (count === 0) {
-    return null
-  }
-
-  return normalizeRegion({
-    height: maxY - minY + 1,
-    width: maxX - minX + 1,
-    x: minX,
-    y: minY,
-  }, imageData.width, imageData.height)
-}
-
-function isPixelInsideRegion(x: number, y: number, region: PixelRegion) {
-  return (
-    x >= region.x &&
-    x < region.x + region.width &&
-    y >= region.y &&
-    y < region.y + region.height
-  )
-}
-
-function scorePartItemRegion(
-  imageData: DetectionImageData,
-  itemRegion: PixelRegion,
-  quantityRegion: PixelRegion,
-  partRegion: PixelRegion,
-) {
-  const sizeScore = clamp((itemRegion.width * itemRegion.height) / Math.max(1, imageData.width * imageData.height * 0.08), 0, 1)
-  const quantityScore = clamp(quantityRegion.width / Math.max(1, itemRegion.width * 0.28), 0, 1)
-  const partScore = clamp(partRegion.height / Math.max(1, itemRegion.height * 0.6), 0, 1)
-
-  return clamp((sizeScore * 0.25) + (quantityScore * 0.35) + (partScore * 0.4), 0, 1)
-}
-
 function suppressOverlappingPartItemRegions(regions: readonly StepCalloutPartItemRegion[]) {
   const selected: StepCalloutPartItemRegion[] = []
-  for (const region of [...regions].sort((left, right) => right.confidence - left.confidence)) {
-    if (selected.some((existing) => getIntersectionOverUnion(existing.itemRegion, region.itemRegion) > 0.5)) {
+  const maxArea = Math.max(1, ...regions.map((region) => region.itemRegion.width * region.itemRegion.height))
+  for (const region of [...regions].sort((left, right) =>
+    getPartItemRegionSelectionScore(right, maxArea) - getPartItemRegionSelectionScore(left, maxArea)
+  )) {
+    if (selected.some((existing) => arePartItemRegionsDuplicative(existing, region))) {
       continue
     }
 
@@ -6127,6 +7526,58 @@ function suppressOverlappingPartItemRegions(regions: readonly StepCalloutPartIte
   }
 
   return selected
+}
+
+function getPartItemRegionSelectionScore(region: StepCalloutPartItemRegion, maxArea: number) {
+  const areaScore = (region.itemRegion.width * region.itemRegion.height) / maxArea
+
+  return region.confidence * 0.72 + areaScore * 0.28
+}
+
+function arePartItemRegionsDuplicative(left: StepCalloutPartItemRegion, right: StepCalloutPartItemRegion) {
+  if (areQuantityLabelAnchorsDuplicative(
+    {
+      componentCount: 1,
+      maxBackgroundForegroundRatio: 0,
+      quantity: left.quantity,
+      region: left.quantityRegion,
+      score: left.confidence,
+    },
+    {
+      componentCount: 1,
+      maxBackgroundForegroundRatio: 0,
+      quantity: right.quantity,
+      region: right.quantityRegion,
+      score: right.confidence,
+    },
+  )) {
+    return true
+  }
+
+  if (getIntersectionOverUnion(left.itemRegion, right.itemRegion) > 0.5) {
+    return true
+  }
+
+  const horizontalOverlap = Math.max(
+    0,
+    Math.min(left.itemRegion.x + left.itemRegion.width, right.itemRegion.x + right.itemRegion.width) -
+      Math.max(left.itemRegion.x, right.itemRegion.x),
+  )
+  const verticalOverlap = Math.max(
+    0,
+    Math.min(left.itemRegion.y + left.itemRegion.height, right.itemRegion.y + right.itemRegion.height) -
+      Math.max(left.itemRegion.y, right.itemRegion.y),
+  )
+  const horizontalOverlapRatio = horizontalOverlap / Math.max(1, Math.min(left.itemRegion.width, right.itemRegion.width))
+  const verticalOverlapRatio = verticalOverlap / Math.max(1, Math.min(left.itemRegion.height, right.itemRegion.height))
+  const labelCenterDeltaX = Math.abs(getRegionCenterX(left.quantityRegion) - getRegionCenterX(right.quantityRegion))
+  const maxLabelWidth = Math.max(left.quantityRegion.width, right.quantityRegion.width)
+
+  return (
+    horizontalOverlapRatio >= 0.42 &&
+    verticalOverlapRatio >= 0.5 &&
+    labelCenterDeltaX <= maxLabelWidth * 1.2
+  )
 }
 
 function sortPartItemRegions(regions: readonly StepCalloutPartItemRegion[]) {
@@ -6150,6 +7601,12 @@ function getVerticalOverlapRatio(left: PixelRegion, right: PixelRegion) {
   const overlap = Math.max(0, Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y))
 
   return overlap / Math.max(1, Math.min(left.height, right.height))
+}
+
+function getHorizontalOverlapRatio(left: PixelRegion, right: PixelRegion) {
+  const overlap = Math.max(0, Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x))
+
+  return overlap / Math.max(1, Math.min(left.width, right.width))
 }
 
 function unionRegions(regions: readonly PixelRegion[]) {
@@ -6193,11 +7650,490 @@ function cropCanvasRegion(canvas: HTMLCanvasElement, region: PixelRegion) {
   return createCanvasCrop(cropCanvasRegionToCanvas(canvas, region))
 }
 
+function getPartPreviewContentSearchRegion(
+  itemRegion: StepCalloutPartItemRegion,
+  itemRegions: readonly StepCalloutPartItemRegion[],
+  imageWidth: number,
+  imageHeight: number,
+  interiorRegion: PixelRegion,
+) {
+  const sameRowRegions = getSameRowPartItemRegions(itemRegion, itemRegions)
+  const labelRegion = itemRegion.quantityRegion
+  const horizontalExpansion = Math.max(
+    24,
+    Math.round(labelRegion.width * 4.2),
+    Math.round(itemRegion.partRegion.width * 0.72),
+  )
+  const topExpansion = Math.max(
+    8,
+    Math.round(labelRegion.height * 3.2),
+    Math.round(itemRegion.partRegion.height * 0.8),
+  )
+  const bottomExpansion = Math.max(12, Math.round(labelRegion.height * 3))
+  let left = itemRegion.partRegion.x - horizontalExpansion
+  let right = itemRegion.partRegion.x + itemRegion.partRegion.width + horizontalExpansion
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const bottom = Math.min(
+    itemRegion.partRegion.y + itemRegion.partRegion.height + bottomExpansion,
+    labelRegion.y + Math.round(labelRegion.height * 2.75),
+  )
+
+  for (const neighbor of sameRowRegions) {
+    const neighborCenterX = getRegionCenterX(neighbor.quantityRegion)
+    const guard = Math.max(
+      2,
+      Math.round(Math.min(labelRegion.height, neighbor.quantityRegion.height) * 0.22),
+    )
+    if (neighborCenterX < labelCenterX) {
+      left = Math.max(left, neighbor.quantityRegion.x + neighbor.quantityRegion.width + guard)
+    } else if (neighborCenterX > labelCenterX) {
+      right = Math.min(right, neighbor.quantityRegion.x - guard)
+    }
+  }
+
+  const searchRegion = normalizeRegion({
+    height: bottom - (itemRegion.partRegion.y - topExpansion),
+    width: right - left,
+    x: left,
+    y: itemRegion.partRegion.y - topExpansion,
+  }, imageWidth, imageHeight)
+
+  return intersectRegions(searchRegion, interiorRegion) ??
+    padPartRegion(itemRegion.partRegion, imageWidth, imageHeight, 1, interiorRegion)
+}
+
+function getOwnedPartContentForeground(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  background: ColorSample,
+  quantityGlyphRegions: readonly PixelRegion[],
+  itemRegion: StepCalloutPartItemRegion,
+  itemRegions: readonly StepCalloutPartItemRegion[],
+): OwnedPartContentForeground {
+  const boundedRegion = normalizeRegion(region, imageData.width, imageData.height)
+  const mask = new Uint8Array(imageData.width * imageData.height)
+
+  for (let y = boundedRegion.y; y < boundedRegion.y + boundedRegion.height; y += 1) {
+    for (let x = boundedRegion.x; x < boundedRegion.x + boundedRegion.width; x += 1) {
+      const sourceIndex = ((y * imageData.width) + x) * 4
+      const alpha = imageData.data[sourceIndex + 3] ?? 255
+      if (alpha < 32) {
+        continue
+      }
+
+      const color = {
+        b: imageData.data[sourceIndex + 2] ?? 0,
+        g: imageData.data[sourceIndex + 1] ?? 0,
+        r: imageData.data[sourceIndex] ?? 0,
+      }
+      if (isCalloutItemPreviewForegroundPixel(color, background)) {
+        mask[(y * imageData.width) + x] = 1
+      }
+    }
+  }
+
+  const components = collectMaskComponents(mask, imageData.width, imageData.height, boundedRegion)
+  if (components.length === 0) {
+    return {
+      componentRegions: [boundedRegion],
+      foregroundMask: mask,
+      region: boundedRegion,
+    }
+  }
+
+  const sortedComponents = [...components].sort((left, right) =>
+    right.count - left.count ||
+    right.width * right.height - left.width * left.height
+  )
+  const dominantComponent = sortedComponents[0]
+  if (!dominantComponent) {
+    return {
+      componentRegions: [boundedRegion],
+      foregroundMask: mask,
+      region: boundedRegion,
+    }
+  }
+
+  const sameRowRegions = getSameRowPartItemRegions(itemRegion, itemRegions)
+  const hasLeftNeighbor = sameRowRegions.some((neighbor) =>
+    getRegionCenterX(neighbor.quantityRegion) < getRegionCenterX(itemRegion.quantityRegion)
+  )
+  const hasRightNeighbor = sameRowRegions.some((neighbor) =>
+    getRegionCenterX(neighbor.quantityRegion) > getRegionCenterX(itemRegion.quantityRegion)
+  )
+  const maxArea = Math.max(...components.map((component) => component.width * component.height))
+  const directlyOwnedComponents = components.filter((component) =>
+    isDirectlyOwnedPartContentComponent(component, itemRegion.partRegion, itemRegion.quantityRegion)
+  )
+  const looselyOwnedComponents = components.filter((component) =>
+    isLooselyOwnedPartContentComponent(component, itemRegion.partRegion, itemRegion.quantityRegion)
+  )
+  const adjacentLooseComponents = directlyOwnedComponents.length > 0
+    ? looselyOwnedComponents.filter((component) =>
+        isNearAnyPartContentComponent(component, directlyOwnedComponents, itemRegion.quantityRegion)
+      )
+    : looselyOwnedComponents
+  const candidateComponents = mergeUniqueComponents(directlyOwnedComponents, adjacentLooseComponents)
+  const selectedComponents = candidateComponents.length > 0 ? candidateComponents : components
+  const quantityFilteredComponents = selectedComponents.filter((component) =>
+    !isLikelyQuantityGlyphComponent(component, imageData.width, quantityGlyphRegions)
+  )
+  const ruleFilteredComponents = quantityFilteredComponents.filter((component) =>
+    !isLikelyCalloutRuleComponent(component, boundedRegion, itemRegion.partRegion, itemRegion.quantityRegion)
+  )
+  const nonEdgeComponents = ruleFilteredComponents.filter((component) =>
+    !isLikelyForeignPartContentComponent(component, boundedRegion, itemRegion.partRegion, itemRegion.quantityRegion, {
+      hasLeftNeighbor,
+      hasRightNeighbor,
+    }) &&
+    !isLikelyNeighborPartEdgeComponent(component, boundedRegion, itemRegion.quantityRegion, maxArea, {
+      hasLeftNeighbor,
+      hasRightNeighbor,
+    })
+  )
+  const keptComponents = nonEdgeComponents.length > 0 ? nonEdgeComponents : ruleFilteredComponents.length > 0
+    ? ruleFilteredComponents
+    : candidateComponents.length > 0
+    ? candidateComponents
+    : [dominantComponent]
+  const componentRegions = (keptComponents.length > 0 ? keptComponents : [dominantComponent])
+    .map((component) =>
+      intersectRegions(
+        padRegion(component, imageData.width, imageData.height, 1),
+        boundedRegion,
+      ) ?? normalizeRegion(component, imageData.width, imageData.height)
+    )
+  const foregroundMask = createOwnedForegroundMask(
+    imageData,
+    imageData.width,
+    imageData.height,
+    keptComponents,
+    quantityGlyphRegions,
+    background,
+    boundedRegion,
+  )
+  const ownedRegion = unionRegions(componentRegions) ?? boundedRegion
+  const cropRegion = intersectRegions(
+    padRegion(ownedRegion, imageData.width, imageData.height, 3),
+    boundedRegion,
+  ) ?? ownedRegion
+
+  return {
+    componentRegions,
+    foregroundMask,
+    region: cropRegion,
+  }
+}
+
+function createOwnedForegroundMask(
+  imageData: DetectionImageData,
+  width: number,
+  height: number,
+  components: readonly DarkComponent[],
+  excludedRegions: readonly PixelRegion[],
+  background: ColorSample,
+  bounds: PixelRegion,
+) {
+  const foregroundMask = new Uint8Array(width * height)
+  for (const component of components) {
+    for (const pixelIndex of component.pixels ?? []) {
+      const x = pixelIndex % width
+      const y = Math.floor(pixelIndex / width)
+      if (isPointInsideAnyRegion(x, y, excludedRegions)) {
+        continue
+      }
+
+      foregroundMask[pixelIndex] = 1
+    }
+  }
+
+  return expandOwnedForegroundMaskIntoPartEdges(foregroundMask, imageData, background, bounds, excludedRegions)
+}
+
+function expandOwnedForegroundMaskIntoPartEdges(
+  foregroundMask: Uint8Array,
+  imageData: DetectionImageData,
+  background: ColorSample,
+  bounds: PixelRegion,
+  excludedRegions: readonly PixelRegion[],
+) {
+  const xStart = Math.max(0, bounds.x)
+  const yStart = Math.max(0, bounds.y)
+  const xEnd = Math.min(imageData.width, bounds.x + bounds.width)
+  const yEnd = Math.min(imageData.height, bounds.y + bounds.height)
+  let expandedMask = new Uint8Array(foregroundMask)
+
+  for (let iteration = 0; iteration < 2; iteration += 1) {
+    const sourceMask = expandedMask
+    expandedMask = new Uint8Array(sourceMask)
+
+    for (let y = yStart; y < yEnd; y += 1) {
+      for (let x = xStart; x < xEnd; x += 1) {
+        const pixelIndex = (y * imageData.width) + x
+        if (sourceMask[pixelIndex] || isPointInsideAnyRegion(x, y, excludedRegions)) {
+          continue
+        }
+        if (!hasOwnedForegroundNeighbor(sourceMask, imageData.width, imageData.height, x, y)) {
+          continue
+        }
+
+        const sourceIndex = pixelIndex * 4
+        const alpha = imageData.data[sourceIndex + 3] ?? 255
+        if (alpha < 32) {
+          continue
+        }
+        const color = {
+          b: imageData.data[sourceIndex + 2] ?? 0,
+          g: imageData.data[sourceIndex + 1] ?? 0,
+          r: imageData.data[sourceIndex] ?? 0,
+        }
+        if (isCalloutItemPreviewEdgePixel(color, background)) {
+          expandedMask[pixelIndex] = 1
+        }
+      }
+    }
+  }
+
+  return expandedMask
+}
+
+function hasOwnedForegroundNeighbor(
+  foregroundMask: Uint8Array,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+) {
+  for (let neighborY = Math.max(0, y - 1); neighborY <= Math.min(height - 1, y + 1); neighborY += 1) {
+    for (let neighborX = Math.max(0, x - 1); neighborX <= Math.min(width - 1, x + 1); neighborX += 1) {
+      if (neighborX === x && neighborY === y) {
+        continue
+      }
+      if (foregroundMask[(neighborY * width) + neighborX]) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function isLikelyQuantityGlyphComponent(
+  component: DarkComponent,
+  imageWidth: number,
+  quantityGlyphRegions: readonly PixelRegion[],
+) {
+  if (quantityGlyphRegions.length === 0 || !component.pixels || component.pixels.length === 0) {
+    return false
+  }
+
+  let overlapCount = 0
+  for (const pixelIndex of component.pixels) {
+    const x = pixelIndex % imageWidth
+    const y = Math.floor(pixelIndex / imageWidth)
+    if (isPointInsideAnyRegion(x, y, quantityGlyphRegions)) {
+      overlapCount += 1
+    }
+  }
+
+  return overlapCount / Math.max(1, component.count) >= 0.55
+}
+
+function getSameRowPartItemRegions(
+  itemRegion: StepCalloutPartItemRegion,
+  itemRegions: readonly StepCalloutPartItemRegion[],
+) {
+  const rowTolerance = Math.max(8, Math.round(itemRegion.quantityRegion.height * 1.35))
+
+  return itemRegions.filter((neighbor) =>
+    neighbor !== itemRegion &&
+    Math.abs(getRegionCenterY(neighbor.quantityRegion) - getRegionCenterY(itemRegion.quantityRegion)) <= rowTolerance
+  )
+}
+
+function isDirectlyOwnedPartContentComponent(
+  component: DarkComponent,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  if (getIntersectionOverUnion(component, rawPartRegion) > 0) {
+    return true
+  }
+
+  if (isConnectedPartRegionContinuation(component, rawPartRegion, labelRegion)) {
+    return true
+  }
+
+  if (isStackedPartRegionContinuation(component, rawPartRegion, labelRegion)) {
+    return true
+  }
+
+  return false
+}
+
+function isStackedPartRegionContinuation(
+  component: DarkComponent,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const verticalGap = Math.max(
+    0,
+    Math.max(component.y - rawPartRegion.y - rawPartRegion.height, rawPartRegion.y - component.y - component.height),
+  )
+  const horizontalOverlap = Math.max(
+    0,
+    Math.min(component.x + component.width, rawPartRegion.x + rawPartRegion.width) -
+      Math.max(component.x, rawPartRegion.x),
+  )
+  const horizontalOverlapRatio = horizontalOverlap / Math.max(1, Math.min(component.width, rawPartRegion.width))
+
+  return (
+    verticalGap <= Math.max(4, Math.round(labelRegion.height * 0.55)) &&
+    horizontalOverlapRatio >= 0.18
+  )
+}
+
+function isLooselyOwnedPartContentComponent(
+  component: DarkComponent,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const componentBottom = component.y + component.height
+  const verticalGapToLabel = labelRegion.y - componentBottom
+
+  return (
+    labelCenterX >= component.x - labelRegion.width * 1.2 &&
+    labelCenterX <= component.x + component.width + labelRegion.width * 1.2 &&
+    verticalGapToLabel >= -labelRegion.height * 0.35 &&
+    verticalGapToLabel <= Math.max(labelRegion.height * 5, rawPartRegion.height * 1.2)
+  )
+}
+
+function mergeUniqueComponents(...groups: readonly DarkComponent[][]) {
+  const merged: DarkComponent[] = []
+  const seen = new Set<DarkComponent>()
+
+  for (const group of groups) {
+    for (const component of group) {
+      if (seen.has(component)) {
+        continue
+      }
+      seen.add(component)
+      merged.push(component)
+    }
+  }
+
+  return merged
+}
+
+function isNearAnyPartContentComponent(
+  component: DarkComponent,
+  candidates: readonly DarkComponent[],
+  labelRegion: PixelRegion,
+) {
+  return candidates.some((candidate) =>
+    component === candidate || arePartContentComponentsNear(component, candidate, labelRegion)
+  )
+}
+
+function arePartContentComponentsNear(
+  left: DarkComponent,
+  right: DarkComponent,
+  labelRegion: PixelRegion,
+) {
+  const gapTolerance = Math.max(4, Math.round(labelRegion.height * 0.45))
+  const horizontalGap = Math.max(
+    0,
+    Math.max(left.x - right.x - right.width, right.x - left.x - left.width),
+  )
+  const verticalGap = Math.max(
+    0,
+    Math.max(left.y - right.y - right.height, right.y - left.y - left.height),
+  )
+
+  if (horizontalGap > gapTolerance || verticalGap > gapTolerance) {
+    return false
+  }
+
+  return getVerticalOverlapRatio(left, right) >= 0.16 || getHorizontalOverlapRatio(left, right) >= 0.16
+}
+
+function isLikelyCalloutRuleComponent(
+  component: DarkComponent,
+  searchRegion: PixelRegion,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const edgeTolerance = Math.max(2, Math.round(labelRegion.height * 0.1))
+  const touchesSearchTop = component.y <= searchRegion.y + edgeTolerance
+  const touchesSearchLeft = component.x <= searchRegion.x + edgeTolerance
+  const isHorizontalRule = component.height <= 3 &&
+    component.width >= Math.max(20, labelRegion.width * 2.4, searchRegion.width * 0.32) &&
+    (
+      component.y <= rawPartRegion.y - 1 ||
+      touchesSearchTop
+    )
+  const isVerticalRule = component.width <= 3 &&
+    component.height >= Math.max(20, labelRegion.height * 2.8, searchRegion.height * 0.42) &&
+    (
+      component.x <= rawPartRegion.x - 1 ||
+      touchesSearchLeft
+    )
+  const isSparseCornerRule = (
+    (
+      (touchesSearchTop && touchesSearchLeft) ||
+      (
+        component.x <= rawPartRegion.x + edgeTolerance &&
+        component.y <= rawPartRegion.y + edgeTolerance
+      )
+    ) &&
+    component.width >= Math.max(20, labelRegion.width * 2.4) &&
+    component.height >= Math.max(20, labelRegion.height * 2.8) &&
+    component.count / Math.max(1, component.width * component.height) <= 0.08
+  )
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const isSparsePreLabelFrame = (
+    component.width >= Math.max(20, labelRegion.width * 2.4) &&
+    component.height >= Math.max(20, labelRegion.height * 2.8) &&
+    component.count / Math.max(1, component.width * component.height) <= 0.08 &&
+    component.y + component.height <= labelRegion.y + Math.round(labelRegion.height * 0.45) &&
+    labelCenterX >= component.x &&
+    labelCenterX <= component.x + component.width
+  )
+
+  return isHorizontalRule || isVerticalRule || isSparseCornerRule || isSparsePreLabelFrame
+}
+
+function isLikelyForeignPartContentComponent(
+  component: DarkComponent,
+  searchRegion: PixelRegion,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+  {
+    hasLeftNeighbor,
+    hasRightNeighbor,
+  }: {
+    hasLeftNeighbor: boolean
+    hasRightNeighbor: boolean
+  },
+) {
+  const touchesLeftBoundary = component.x <= searchRegion.x + 1
+  const touchesRightBoundary = component.x + component.width >= searchRegion.x + searchRegion.width - 1
+  const horizontalTolerance = Math.max(2, Math.round(labelRegion.width * 0.22))
+
+  return (
+    (hasLeftNeighbor && touchesLeftBoundary && component.x + component.width <= rawPartRegion.x + horizontalTolerance) ||
+    (hasRightNeighbor && touchesRightBoundary && component.x >= rawPartRegion.x + rawPartRegion.width - horizontalTolerance)
+  )
+}
+
 function cropCanvasRegionRemovingBackground(
   canvas: HTMLCanvasElement,
   imageData: DetectionImageData,
   region: PixelRegion,
   background: ColorSample,
+  foregroundMask?: Uint8Array,
 ) {
   const boundedRegion = normalizeRegion(region, imageData.width, imageData.height)
   const cropCanvas = globalThis.document.createElement("canvas")
@@ -6215,6 +8151,15 @@ function cropCanvasRegionRemovingBackground(
     for (let x = 0; x < boundedRegion.width; x += 1) {
       const sourceX = boundedRegion.x + x
       const sourceY = boundedRegion.y + y
+      const sourceMaskIndex = (sourceY * imageData.width) + sourceX
+      const isOwnedMaskPixel = Boolean(foregroundMask?.[sourceMaskIndex])
+      if (
+        foregroundMask &&
+        !isOwnedMaskPixel
+      ) {
+        continue
+      }
+
       const sourceIndex = ((sourceY * imageData.width) + sourceX) * 4
       const alpha = imageData.data[sourceIndex + 3] ?? 255
       if (alpha < 32) {
@@ -6226,7 +8171,7 @@ function cropCanvasRegionRemovingBackground(
         g: imageData.data[sourceIndex + 1] ?? 0,
         r: imageData.data[sourceIndex] ?? 0,
       }
-      if (!isCalloutItemPreviewForegroundPixel(color, background)) {
+      if (!isOwnedMaskPixel && !isCalloutItemPreviewForegroundPixel(color, background)) {
         continue
       }
 
@@ -6256,6 +8201,14 @@ function isCalloutItemPreviewForegroundPixel(color: ColorSample, background: Col
   return distanceFromBackground >= 28 || brightness < 128 || (chroma >= 28 && distanceFromBackground >= 18)
 }
 
+function isCalloutItemPreviewEdgePixel(color: ColorSample, background: ColorSample) {
+  const brightness = getColorBrightness(color)
+  const chroma = Math.max(color.r, color.g, color.b) - Math.min(color.r, color.g, color.b)
+  const distanceFromBackground = getColorDistance(color, background)
+
+  return distanceFromBackground >= 10 || brightness < 245 || (chroma >= 12 && distanceFromBackground >= 6)
+}
+
 function cropCanvasRegionToCanvas(canvas: HTMLCanvasElement, region: PixelRegion) {
   const cropCanvas = globalThis.document.createElement("canvas")
   cropCanvas.width = region.width
@@ -6276,10 +8229,16 @@ function createCanvasCrop(canvas: HTMLCanvasElement) {
 
 function isPointInsideAnyRegion(x: number, y: number, regions: readonly PixelRegion[]) {
   return regions.some((region) =>
+    isPointInsideRegion(x, y, region)
+  )
+}
+
+function isPointInsideRegion(x: number, y: number, region: PixelRegion) {
+  return (
     x >= region.x &&
-      x < region.x + region.width &&
-      y >= region.y &&
-      y < region.y + region.height
+    x < region.x + region.width &&
+    y >= region.y &&
+    y < region.y + region.height
   )
 }
 
@@ -6292,23 +8251,38 @@ function padRegion(region: PixelRegion, imageWidth: number, imageHeight: number,
   }, imageWidth, imageHeight)
 }
 
+function padRegionWithin(
+  region: PixelRegion,
+  imageWidth: number,
+  imageHeight: number,
+  padding: number,
+  bounds: PixelRegion,
+) {
+  const paddedRegion = padRegion(region, imageWidth, imageHeight, padding)
+
+  return intersectRegions(paddedRegion, bounds) ?? normalizeRegion(region, imageWidth, imageHeight)
+}
+
 function padPartRegion(
   partRegion: PixelRegion,
   imageWidth: number,
   imageHeight: number,
   padding: number,
+  bounds?: PixelRegion,
 ) {
   const x = partRegion.x - padding
   const y = partRegion.y - padding
   const right = partRegion.x + partRegion.width + padding
   const bottom = partRegion.y + partRegion.height + padding
 
-  return normalizeRegion({
+  const paddedRegion = normalizeRegion({
     height: bottom - y,
     width: right - x,
     x,
     y,
   }, imageWidth, imageHeight)
+
+  return bounds ? intersectRegions(paddedRegion, bounds) ?? normalizeRegion(partRegion, imageWidth, imageHeight) : paddedRegion
 }
 
 function expandRegion(region: PixelRegion, imageData: DetectionImageData, padding: number) {

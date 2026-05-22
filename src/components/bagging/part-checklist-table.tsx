@@ -27,6 +27,7 @@ export type PartChecklistRow = {
   image: (props: { opacity: number }) => ReactNode
   locationLabel: ReactNode
   quantity: number
+  quantityDetail?: ReactNode
   sortValues: {
     color: string
     confidence?: number | null
@@ -387,9 +388,12 @@ function PartChecklistTableRow({
       {...row.dataAttributes}
     >
       <PartFoundControl checked={isChecked} />
-      <Text fontWeight="semibold" style={{ opacity: rowContentOpacity, transition: "opacity 120ms ease" }}>
-        {row.quantity}
-      </Text>
+      <Stack gap="1" align="start" style={{ opacity: rowContentOpacity, transition: "opacity 120ms ease" }}>
+        <Text fontWeight="semibold">
+          {row.quantity}
+        </Text>
+        {row.quantityDetail}
+      </Stack>
       {row.image({ opacity: rowContentOpacity })}
       <Grid
         data-testid="part-row-details"

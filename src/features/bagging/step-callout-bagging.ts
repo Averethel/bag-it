@@ -7,7 +7,7 @@ import type {
 } from "./step-callout-detection"
 import { compareColorNames } from "./color-sort"
 
-export const stepCalloutBaggingHeuristicVersion = "step-callout-bagging-v1"
+export const stepCalloutBaggingHeuristicVersion = "step-callout-bagging-v2"
 
 export type StepCalloutBaggingPolicy = {
   maxParts: number
@@ -121,8 +121,10 @@ export function createStepCalloutBaggingPlan(
     bags.push(createStepCalloutBag(currentCallouts, bags.length, policy))
   }
 
+  const balancedBags = mergeUndersizedTrailingBag(bags, policy)
+
   return {
-    bags,
+    bags: balancedBags,
     detectedPartCount,
     detectedStepCount: sortedCallouts.length,
     heuristicVersion: stepCalloutBaggingHeuristicVersion,
@@ -132,6 +134,31 @@ export function createStepCalloutBaggingPlan(
       inventoryPartCount,
     }),
   }
+}
+
+function mergeUndersizedTrailingBag(
+  bags: readonly StepCalloutBagPlan[],
+  policy: StepCalloutBaggingPolicy,
+) {
+  if (bags.length < 2) {
+    return bags
+  }
+
+  const previous = bags.at(-2)
+  const trailing = bags.at(-1)
+  if (
+    !previous ||
+    !trailing ||
+    trailing.partCount >= policy.minParts ||
+    previous.partCount + trailing.partCount > policy.maxParts
+  ) {
+    return bags
+  }
+
+  return [
+    ...bags.slice(0, -2),
+    createStepCalloutBag([...previous.callouts, ...trailing.callouts], bags.length - 2, policy),
+  ]
 }
 
 export function getStepCalloutBaggingPolicy({

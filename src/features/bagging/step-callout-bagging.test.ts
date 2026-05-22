@@ -66,6 +66,26 @@ describe("step callout bagging heuristics", () => {
     expect(plan.bags[0].reviewReasons).toContain("over 75 part target")
   })
 
+  it("merges an undersized trailing bag when the previous bag can absorb it", () => {
+    const plan = createStepCalloutBaggingPlan(createResult([
+      createCallout(1, 1, [80]),
+      createCallout(2, 1, [40]),
+      createCallout(3, 2, [13]),
+    ]), { inventoryPartCount: 1_500 })
+
+    expect(plan.policy).toMatchObject({
+      maxParts: 140,
+      minParts: 90,
+      setSizeBand: "large",
+      targetParts: 115,
+    })
+    expect(plan.bags).toHaveLength(1)
+    expect(plan.bags[0]).toMatchObject({
+      partCount: 133,
+      stepRange: { end: 3, start: 1 },
+    })
+  })
+
   it("closes a draft bag before exceeding the hard part target even if the current bag is small", () => {
     const plan = createStepCalloutBaggingPlan(createResult([
       createCallout(1, 1, [40]),

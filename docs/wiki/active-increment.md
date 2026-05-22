@@ -37,18 +37,42 @@ preserved in the Debug tab for later tuning; final ready-bag generation remains
 outside the active UI loop while this local baseline is being tightened.
 Step-number OCR, exports, labels, and ready-bag reconciliation remain out of
 scope until this callout baseline is working. Quantity text is kept as separate
-debug data; only trusted quantity glyph pixels are excluded from internal
-visual comparison and color sampling. Displayed callout item previews now keep
-the original detected item crop, including the quantity text, and only remove
-the sampled callout background. This avoids the failed quantity-removal
-heuristics while keeping the full rendered part visible for review.
+debug data and rendered from its own quantity-label crop. Displayed callout item
+previews now use the detected part-only crop with the sampled callout background
+removed, while trusted quantity glyph pixels are excluded from internal visual
+comparison and color sampling.
 Same-part local image grouping is debug metadata based on
 preserved-aspect mask, structure, detail, and color matching. As of the
-`step-callout-detection-v65` background-removal preview pass, detected color name is a
+`step-callout-detection-v82` label-anchored cropper pass, detected color name is a
 hard local grouping gate, edge silhouette is not used as a local grouping
 signal, and local image grouping stores the closest rejected candidate crops and
 failed shape, structure, detail, aspect, coverage, compactness, and color gates
-so false negatives can be inspected directly in the Debug tab.
+so false negatives can be inspected directly in the Debug tab. The quantity
+reader now treats visible `Nx` labels as anchors, finds the nearest part
+foreground above each trusted label inside the step crop, clears only the active
+label while validating that item, rejects giant assembled-model components, and
+keeps the full local part crop instead of cutting it at dark details. The OCR
+path still requires a trailing `x` marker before accepting a digit run, reads
+only the contiguous digit run immediately before that marker, keeps both digits
+in `11x`, and separates `6` and `9` from broad `4` and `3` fallbacks with
+fixture masks. The same pass rescues row-supported `1x` labels on busy part
+pixels, avoids narrow row-spanning part components that swallow neighboring
+rows, and is measured against saved Castle Ramp and Middle Wall session callout
+crops so detector totals can be compared with the recognized BOM totals without
+re-running PDF rendering.
+The `step-callout-detection-v82` crop-quality pass detects the actual inside of
+the callout border before segmentation, clips padded previews to that interior,
+expands connected foreground beyond a label midpoint so wide parts are not cut
+off, and stops that expansion before it crosses another same-row quantity label
+center. Displayed previews, color sampling, and local image features then use
+the dominant connected foreground component inside that owned part region so
+thin neighboring-part edges do not pollute the crop. The part-region pass also
+scores foreground components against every quantity anchor and keeps only the
+best-owned components, preventing lower labels from borrowing the part or label
+region above them when stacked callout items share a wide search zone.
+The
+`step-callout-bagging-v2` pass merges an undersized trailing bag into the
+previous bag when the previous bag can absorb it within the hard part limit.
 
 Increment 2 closure is conditional on the Castle hard gate documented in
 [Quality gates](quality-gates.md) and

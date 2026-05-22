@@ -96,18 +96,51 @@ The user gets bag assignments that map cleanly to manual steps.
 - Castle Ramp is the smallest local tuning target. The current pass now scans
   the full non-BOM manual while callout quantity, color, and BOM thumbnail
   matching are evaluated; row-level misses, over-fills, and unmatched items must
-  remain explicit and measurable. The `step-callout-detection-v65` tuning pass
+  remain explicit and measurable. The `step-callout-detection-v82` tuning pass
   anchors BOM image features from the row's centered quantity/part label,
   removes catalogue preview evidence from the matching decision, and disables
   coverage-completion assignment because quantity-perfect or row-filling
-  assignment can still be visually wrong. Accepted matches must have a strong
+  assignment can still be visually wrong. The `step-callout-detection-v82`
+  rebuild keeps quantity labels as item anchors, treats saved session callout
+  crops as measurable fixtures, and requires exact detector totals against the
+  recognized BOM totals for the local Castle Ramp and Middle Wall sessions.
+  Accepted matches must have a strong
   visual profile, a clear margin over the next candidate, and either repeated
   local-image support or extra-high one-off confidence. Weak visual matches must
   stay debuggable through row-level missing, overfilled, and unmatched
   quantities.
 - The first quantity reader targets the common visible `Nx` callout label and
-  parses the numeric run before the trailing marker. Broader quantity formats
-  still need fixture-driven tuning before the whole-manual pass.
+  parses the numeric run before the trailing marker. As of
+  `step-callout-detection-v82`, `Nx` labels anchor item detection directly:
+  the detector finds the nearest foreground component above each trusted label,
+  clears only the active label while validating that item, rejects giant
+  assembled-model components, and keeps separated part halves together inside
+  the label's local zone. A trailing `x` marker is still required before a digit
+  run is accepted, only the contiguous digit run immediately before that marker
+  is read, implausible repeated multi-digit reads are rejected, narrow and
+  sloped `1` glyphs are protected from broad `4` fallbacks, and `11x` labels
+  keep both contiguous digits before the marker. The classifier now has explicit
+  6/9 feature guards in addition to the 3/4 crossbar gates, prefers a feature
+  `3` over a weak template `9`, rescues row-supported `1x` labels on busy part
+  pixels, and rejects narrow row-spanning part components before overlap
+  suppression can drop a neighboring item. Regression masks and saved-session
+  callout crop validation cover annotated `1 -> 4`, `11 -> 1`, `3 -> 9`,
+  `4 -> 3`, `6 -> 9`, bad marker-only crops, busy-background `1x`, and
+  split-part cases. The crop-quality pass detects the actual inside of the
+  callout border before segmentation, clips padded part previews to that
+  interior, expands connected foreground beyond a label midpoint so wide parts
+  are not cut off, and stops that expansion before it crosses another same-row
+  quantity label center. Displayed previews, color sampling, and local image
+  features then use the dominant connected foreground component inside the
+  owned part region so thin neighboring-part edges do not pollute the crop.
+  Part-region ownership is scored against every quantity anchor so stacked
+  callout items keep the component nearest their own label instead of borrowing
+  the part or label region above them.
+  Broader quantity formats still need fixture-driven tuning before the
+  whole-manual pass.
+- As of `step-callout-bagging-v2`, undersized trailing bags are merged into the
+  previous bag when that merge stays within the hard part-count limit, avoiding
+  tiny end bags such as a two-step, low-part-count tail.
 - Visible part color estimates should bias toward locally supported part
   surface pixels so outlines, shadows, and detail lines do not dominate small
   parts.
@@ -115,10 +148,10 @@ The user gets bag assignments that map cleanly to manual steps.
   The previous match-oriented callout cards remain available under Debug so the
   matching work can resume without reintroducing wrong catalogue labels into the
   default bagging view.
-- Displayed callout item previews keep the original detected item crop,
-  including the quantity text, and only remove the sampled callout background.
-  This avoids the failed quantity-removal heuristics while keeping the full
-  rendered part visible for review.
+- Displayed callout item previews use the part-only crop with the sampled
+  callout background removed. Quantity text is kept as separate structured data
+  with its own quantity-label crop so color sampling and local visual grouping
+  are not polluted by label glyphs or callout borders.
 - Draft bag rows currently represent raw detected callout part items, not local
   callout part groups or catalogue identities. The app should avoid showing
   confident-looking BOM or Rebrickable labels until the matching baseline is

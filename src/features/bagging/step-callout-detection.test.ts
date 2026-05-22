@@ -68,6 +68,180 @@ describe("step callout detection", () => {
     expect(items.map((item) => item.quantityRegion.y)).toEqual([128, 130, 130, 230])
   })
 
+  it("splits adjacent callout items by their own trailing quantity markers", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 320, height: 170 }, [216, 239, 250])
+      for (const x of [136, 194, 252]) {
+        drawRect(imageData, { x, y: 134, width: 54, height: 38 }, [20, 132, 148])
+        drawSyntheticQuantityText(imageData, {
+          scale: 2,
+          text: "1x",
+          x: x + 2,
+          y: 184,
+        })
+      }
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(3)
+      expect(result.callouts[0].partItems.map((item) => item.quantity.value)).toEqual([1, 1, 1])
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not keep overlapping split halves from one continuous part", () => {
+    const imageData = createSyntheticPage(520, 260, [216, 239, 250])
+    drawRect(imageData, { x: 92, y: 44, width: 210, height: 68 }, [160, 166, 170])
+    drawRect(imageData, { x: 102, y: 54, width: 176, height: 10 }, [116, 124, 128])
+    drawSyntheticQuantityText(imageData, {
+      scale: 2,
+      text: "2x",
+      x: 106,
+      y: 122,
+    })
+    drawSyntheticQuantityText(imageData, {
+      scale: 2,
+      text: "1x",
+      x: 128,
+      y: 122,
+    })
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(1)
+  })
+
+  it("keeps separated halves of one part together when there is only one quantity label", () => {
+    const imageData = createSyntheticPage(340, 260, [216, 239, 250])
+    drawRect(imageData, { x: 86, y: 54, width: 38, height: 58 }, [160, 166, 170])
+    drawRect(imageData, { x: 134, y: 54, width: 37, height: 58 }, [160, 166, 170])
+    drawRect(imageData, { x: 96, y: 64, width: 65, height: 7 }, [116, 124, 128])
+    drawSyntheticQuantityText(imageData, {
+      scale: 2,
+      text: "1x",
+      x: 92,
+      y: 124,
+    })
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(1)
+    expect(items[0].partRegion.width).toBeGreaterThan(70)
+  })
+
+  it("keeps a row-supported 1x label when the label sits on busy part pixels", () => {
+    const imageData = createSyntheticPage(340, 250, [216, 239, 250])
+    drawRect(imageData, { x: 30, y: 46, width: 54, height: 44 }, [160, 166, 170])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 38, 104)
+    drawRect(imageData, { x: 32, y: 136, width: 86, height: 58 }, [160, 166, 170])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 38, 174)
+    drawRect(imageData, { x: 152, y: 136, width: 60, height: 46 }, [35, 120, 35])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 164, 194)
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(3)
+    expect(items.map((item) => item.quantity.value)).toEqual([1, 1, 1])
+  })
+
+  it("does not let a narrow row-spanning component suppress the item above it", () => {
+    const imageData = createSyntheticPage(260, 310, [216, 239, 250])
+    drawRect(imageData, { x: 8, y: 12, width: 4, height: 170 }, [30, 30, 30])
+    drawRect(imageData, { x: 28, y: 36, width: 44, height: 36 }, [160, 166, 170])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 32, 86)
+    drawRect(imageData, { x: 100, y: 30, width: 54, height: 40 }, [160, 166, 170])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 108, 86)
+    drawRect(imageData, { x: 28, y: 126, width: 56, height: 46 }, [160, 166, 170])
+    drawSyntheticQuantityMask(imageData, manualStyleSplitMarkerTwoQuantityMask, 32, 186)
+    drawRect(imageData, { x: 98, y: 126, width: 82, height: 46 }, [160, 166, 170])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 108, 186)
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(4)
+    expect(items.map((item) => item.quantity.value)).toEqual([1, 1, 2, 1])
+  })
+
+  it("keeps a tall real part even when it spans most of the label row height", () => {
+    const imageData = createSyntheticPage(540, 270, [216, 239, 250])
+    drawRect(imageData, { x: 420, y: 28, width: 88, height: 194 }, [116, 124, 128])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 430, 226)
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(1)
+    expect(items[0].partRegion.width).toBeGreaterThanOrEqual(84)
+    expect(items[0].partRegion.height).toBeGreaterThanOrEqual(188)
+  })
+
+  it("expands a connected wide part beyond the label midpoint without clipping its right side", () => {
+    const imageData = createSyntheticPage(420, 230, [216, 239, 250])
+    drawRect(imageData, { x: 72, y: 52, width: 150, height: 58 }, [35, 120, 35])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 112, 126)
+    drawRect(imageData, { x: 266, y: 58, width: 44, height: 44 }, [116, 124, 128])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 272, 126)
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(2)
+    expect(items[0].partRegion.x).toBeLessThanOrEqual(74)
+    expect(items[0].partRegion.x + items[0].partRegion.width).toBeGreaterThanOrEqual(220)
+    expect(items[1].partRegion.x).toBeGreaterThanOrEqual(260)
+  })
+
+  it("does not let a connected foreground blob cross a neighboring quantity label center", () => {
+    const imageData = createSyntheticPage(340, 220, [216, 239, 250])
+    drawRect(imageData, { x: 70, y: 98, width: 48, height: 36 }, [116, 124, 128])
+    drawRect(imageData, { x: 116, y: 112, width: 24, height: 6 }, [116, 124, 128])
+    drawRect(imageData, { x: 140, y: 100, width: 42, height: 36 }, [116, 124, 128])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 74, 142)
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 142, 142)
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(2)
+    expect(items[0].partRegion.x + items[0].partRegion.width).toBeLessThanOrEqual(132)
+    expect(items[1].partRegion.x).toBeGreaterThanOrEqual(108)
+  })
+
+  it("removes a clipped left-neighbor edge from an owned part region", () => {
+    const imageData = createSyntheticPage(300, 210, [216, 239, 250])
+    drawRect(imageData, { x: 29, y: 101, width: 26, height: 32 }, [116, 124, 128])
+    drawRect(imageData, { x: 73, y: 103, width: 51, height: 30 }, [116, 124, 128])
+    drawRect(imageData, { x: 139, y: 109, width: 37, height: 24 }, [116, 124, 128])
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 28, 136)
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 74, 136)
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 141, 136)
+
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(items).toHaveLength(3)
+    expect(items[1].partRegion.x + items[1].partRegion.width).toBeLessThanOrEqual(126)
+    expect(items[2].partRegion.x).toBeGreaterThanOrEqual(136)
+    expect(items[2].partRegion.x).toBeLessThanOrEqual(140)
+  })
+
   it("does not cut the part crop at an unparseable dark detail near the bottom", () => {
     const imageData = createSyntheticPage(300, 240, [216, 239, 250])
     drawRect(imageData, { x: 64, y: 42, width: 112, height: 128 }, [35, 120, 35])
@@ -75,10 +249,7 @@ describe("step callout detection", () => {
 
     const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
 
-    expect(items).toHaveLength(1)
-    expect(items[0].partRegion.y).toBe(42)
-    expect(items[0].partRegion.height).toBeGreaterThanOrEqual(126)
-    expect(items[0].quantityRegion.y).toBeGreaterThanOrEqual(138)
+    expect(items).toHaveLength(0)
   })
 
   it("does not read a single dark part detail as a quantity", async () => {
@@ -111,9 +282,7 @@ describe("step callout detection", () => {
         },
       )
 
-      expect(result.callouts[0].partItems).toHaveLength(1)
-      expect(result.callouts[0].partItems[0].quantity.value).toBeNull()
-      expect(result.callouts[0].partItems[0].quantity.text).toBeNull()
+      expect(result.callouts[0].partItems).toHaveLength(0)
     } finally {
       canvasApi.restore()
     }
@@ -180,7 +349,7 @@ describe("step callout detection", () => {
     }
   })
 
-  it("renders callout item previews with background removed while keeping quantity text", async () => {
+  it("renders part previews with background, border, and quantity text removed", async () => {
     const canvasApi = installMockCanvasApi()
 
     try {
@@ -218,8 +387,543 @@ describe("step callout detection", () => {
       expect(partCropImageData).toBeDefined()
       expect(countTransparentPixels(partCropImageData!)).toBeGreaterThan(0)
       expect(countPixelsMatching(partCropImageData!, [35, 120, 35])).toBeGreaterThan(0)
-      expect(countPixelsMatching(partCropImageData!, [0, 0, 0])).toBeGreaterThan(0)
+      expect(countPixelsMatching(partCropImageData!, [0, 0, 0])).toBe(0)
       expect(countPixelsMatching(partCropImageData!, [216, 239, 250])).toBe(0)
+      expect(countPixelsMatching(
+        canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].quantityLabel.crop.dataUrl)!,
+        [0, 0, 0],
+      )).toBeGreaterThan(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not copy a neighboring left part edge into the padded part preview", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 300, height: 210 }, [216, 239, 250])
+      drawRect(imageData, { x: 148, y: 144, width: 55, height: 44 }, [180, 30, 30])
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
+        text: "1x",
+        x: 156,
+        y: 210,
+      })
+      drawRect(imageData, { x: 205, y: 144, width: 54, height: 44 }, [35, 120, 35])
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
+        text: "1x",
+        x: 212,
+        y: 210,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(2)
+
+      const rightCrop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[1].partCrop.dataUrl)
+
+      expect(rightCrop).toBeDefined()
+      expect(countPixelsMatching(rightCrop!, [35, 120, 35])).toBeGreaterThan(0)
+      expect(countPixelsMatching(rightCrop!, [180, 30, 30])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("prefers the part aligned with the quantity label over an off-column seed fragment", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 360, height: 270 }, [216, 239, 250])
+      drawRect(imageData, { x: 190, y: 250, width: 34, height: 40 }, [180, 30, 30])
+      drawRect(imageData, { x: 250, y: 130, width: 46, height: 170 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 252, 310)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].partRegion.y).toBeLessThanOrEqual(132)
+      expect(result.callouts[0].partItems[0].partRegion.x).toBeGreaterThanOrEqual(246)
+
+      const crop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(crop).toBeDefined()
+      expect(countPixelsMatching(crop!, [35, 120, 35])).toBeGreaterThan(7_500)
+      expect(countPixelsMatching(crop!, [180, 30, 30])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not clip a wide owned part crop at the midpoint before the next quantity label", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 450, height: 230 }, [216, 239, 250])
+      drawRect(imageData, { x: 148, y: 138, width: 166, height: 52 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 170, 214)
+      drawRect(imageData, { x: 372, y: 146, width: 44, height: 42 }, [108, 110, 104])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 376, 214)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(2)
+      expect(result.callouts[0].partItems[0].partRegion.x + result.callouts[0].partItems[0].partRegion.width)
+        .toBeGreaterThanOrEqual(312)
+
+      const leftCrop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(leftCrop).toBeDefined()
+      expect(countPixelsMatching(leftCrop!, [35, 120, 35])).toBeGreaterThan(8_000)
+      expect(countPixelsMatching(leftCrop!, [108, 110, 104])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("keeps separated owned part components while dropping a left-neighbor edge", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 360, height: 230 }, [216, 239, 250])
+      drawRect(imageData, { x: 150, y: 148, width: 44, height: 38 }, [180, 30, 30])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 156, 214)
+      drawRect(imageData, { x: 204, y: 140, width: 44, height: 50 }, [35, 120, 35])
+      drawRect(imageData, { x: 253, y: 140, width: 48, height: 50 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 214, 214)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(2)
+
+      const rightCrop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[1].partCrop.dataUrl)
+
+      expect(rightCrop).toBeDefined()
+      expect(countPixelsMatching(rightCrop!, [35, 120, 35])).toBeGreaterThan(4_300)
+      expect(countPixelsMatching(rightCrop!, [180, 30, 30])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not copy a horizontal callout border into the part preview", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 360, height: 230 }, [216, 239, 250])
+      drawRect(imageData, { x: 132, y: 136, width: 190, height: 2 }, [0, 0, 0])
+      drawRect(imageData, { x: 184, y: 146, width: 64, height: 46 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 194, 214)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+
+      const crop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(crop).toBeDefined()
+      expect(countPixelsMatching(crop!, [35, 120, 35])).toBeGreaterThan(2_000)
+      expect(countPixelsMatching(crop!, [0, 0, 0])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not copy top or left callout rules when the detected seed overlaps them", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 240, height: 250 }, [216, 239, 250])
+      drawRect(imageData, { x: 165, y: 152, width: 96, height: 2 }, [0, 0, 0])
+      drawRect(imageData, { x: 165, y: 152, width: 2, height: 94 }, [0, 0, 0])
+      drawRect(imageData, { x: 198, y: 216, width: 24, height: 14 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 198, 246)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+
+      const crop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(crop).toBeDefined()
+      expect(countPixelsMatching(crop!, [35, 120, 35])).toBeGreaterThan(250)
+      expect(countPixelsMatching(crop!, [0, 0, 0])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not copy quantity glyphs enclosed by an owned part component box", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 360, height: 250 }, [216, 239, 250])
+      drawRect(imageData, { x: 180, y: 146, width: 74, height: 12 }, [35, 120, 35])
+      drawRect(imageData, { x: 180, y: 146, width: 14, height: 86 }, [35, 120, 35])
+      drawRect(imageData, { x: 240, y: 146, width: 14, height: 86 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 202, 208)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+
+      const crop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(crop).toBeDefined()
+      expect(countPixelsMatching(crop!, [35, 120, 35])).toBeGreaterThan(1_700)
+      expect(countPixelsMatching(crop!, [0, 0, 0])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("keeps lower part pixels when they overlap the quantity label band", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 360, height: 270 }, [216, 239, 250])
+      drawRect(imageData, { x: 180, y: 146, width: 74, height: 12 }, [35, 120, 35])
+      drawRect(imageData, { x: 180, y: 146, width: 14, height: 98 }, [35, 120, 35])
+      drawRect(imageData, { x: 240, y: 146, width: 14, height: 98 }, [35, 120, 35])
+      drawRect(imageData, { x: 180, y: 224, width: 74, height: 20 }, [35, 120, 35])
+      drawRect(imageData, { x: 180, y: 244, width: 74, height: 2 }, [209, 232, 241])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 202, 208)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+
+      const crop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(crop).toBeDefined()
+      expect(countPixelsMatching(crop!, [35, 120, 35])).toBeGreaterThan(3_000)
+      expect(countPixelsMatching(crop!, [209, 232, 241])).toBeGreaterThan(100)
+      expect(countPixelsMatching(crop!, [0, 0, 0])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("keeps a lower owned part component close to the quantity label", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 300, height: 230 }, [216, 239, 250])
+      drawRect(imageData, { x: 166, y: 142, width: 70, height: 42 }, [35, 120, 35])
+      drawRect(imageData, { x: 184, y: 188, width: 34, height: 16 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 184, 216)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].partRegion.y + result.callouts[0].partItems[0].partRegion.height)
+        .toBeGreaterThanOrEqual(204)
+
+      const crop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[0].partCrop.dataUrl)
+
+      expect(crop).toBeDefined()
+      expect(countPixelsMatching(crop!, [35, 120, 35])).toBeGreaterThan(3_400)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not keep a larger foreign part from the left side of the preview search", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 380, height: 230 }, [216, 239, 250])
+      drawRect(imageData, { x: 150, y: 144, width: 92, height: 48 }, [180, 30, 30])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 156, 216)
+      drawRect(imageData, { x: 258, y: 146, width: 38, height: 48 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 258, 216)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(2)
+
+      const rightCrop = canvasApi.getImageDataForDataUrl(result.callouts[0].partItems[1].partCrop.dataUrl)
+
+      expect(rightCrop).toBeDefined()
+      expect(countPixelsMatching(rightCrop!, [35, 120, 35])).toBeGreaterThan(1_500)
+      expect(countPixelsMatching(rightCrop!, [180, 30, 30])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not let a lower quantity label borrow an upper part component", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 390, height: 330 }, [216, 239, 250])
+      drawRect(imageData, { x: 150, y: 142, width: 54, height: 34 }, [180, 30, 30])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 154, 206)
+      drawRect(imageData, { x: 132, y: 242, width: 78, height: 48 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleSplitMarkerTwoQuantityMask, 140, 316)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      const lowerItem = result.callouts[0].partItems.find((item) => item.quantity.value === 2)
+
+      expect(result.callouts[0].partItems).toHaveLength(2)
+      expect(lowerItem).toBeDefined()
+      expect(lowerItem!.partRegion.y).toBeGreaterThanOrEqual(238)
+
+      const lowerCrop = canvasApi.getImageDataForDataUrl(lowerItem!.partCrop.dataUrl)
+
+      expect(lowerCrop).toBeDefined()
+      expect(countPixelsMatching(lowerCrop!, [35, 120, 35])).toBeGreaterThan(2_500)
+      expect(countPixelsMatching(lowerCrop!, [180, 30, 30])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("assigns diagonal neighboring part components to their closest quantity labels", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 760)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 470, height: 390 }, [216, 239, 250])
+      drawRect(imageData, { x: 145, y: 250, width: 112, height: 44 }, [180, 30, 30])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 150, 322)
+      drawRect(imageData, { x: 280, y: 246, width: 34, height: 98 }, [35, 120, 35])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 286, 350)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 760 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(2)
+
+      const sortedItems = [...result.callouts[0].partItems].sort((left, right) =>
+        left.quantityLabel.region.x - right.quantityLabel.region.x
+      )
+      const leftCrop = canvasApi.getImageDataForDataUrl(sortedItems[0]!.partCrop.dataUrl)
+      const rightCrop = canvasApi.getImageDataForDataUrl(sortedItems[1]!.partCrop.dataUrl)
+
+      expect(leftCrop).toBeDefined()
+      expect(rightCrop).toBeDefined()
+      expect(countPixelsMatching(leftCrop!, [180, 30, 30])).toBeGreaterThan(3_500)
+      expect(countPixelsMatching(leftCrop!, [35, 120, 35])).toBe(0)
+      expect(countPixelsMatching(rightCrop!, [35, 120, 35])).toBeGreaterThan(2_500)
+      expect(countPixelsMatching(rightCrop!, [180, 30, 30])).toBe(0)
     } finally {
       canvasApi.restore()
     }
@@ -1264,6 +1968,137 @@ describe("step callout detection", () => {
     }
   })
 
+  it("separates split trailing x markers before classifying manual-style quantity digits", async () => {
+    for (const { expected, mask } of [
+      { expected: 1, mask: manualStyleSplitMarkerOneQuantityMask },
+      { expected: 1, mask: manualStyleSerifOneQuantityMask },
+      { expected: 1, mask: annotatedTallSlopedOneQuantityMask },
+      { expected: 1, mask: annotatedNarrowSlopedOneQuantityMask },
+      { expected: 11, mask: annotatedElevenQuantityMask },
+      { expected: 2, mask: manualStyleSplitMarkerTwoQuantityMask },
+      { expected: 3, mask: manualStyleSplitMarkerThreeQuantityMask },
+      { expected: 3, mask: manualStyleRoundedThreeQuantityMask },
+      { expected: 3, mask: manualStyleLowBottomThreeQuantityMask },
+      { expected: 4, mask: manualStyleSplitMarkerFourQuantityMask },
+      { expected: 4, mask: manualStyleRightWeightedFourQuantityMask },
+      { expected: 4, mask: manualStyleCompactFourQuantityMask },
+      { expected: 4, mask: manualStyleOpenLeftFourQuantityMask },
+      { expected: 4, mask: manualStyleDenseTopFourQuantityMask },
+      { expected: 4, mask: annotatedReddishBrownFourQuantityMask },
+      { expected: 4, mask: annotatedTransparentFourQuantityMask },
+      { expected: 9, mask: manualStyleSplitMarkerNineQuantityMask },
+    ]) {
+      const canvasApi = installMockCanvasApi()
+
+      try {
+        const imageData = createSyntheticPage(1_000, 700)
+        drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 240, height: 170 }, [216, 239, 250])
+        drawRect(imageData, { x: 135, y: 135, width: 58, height: 46 }, [35, 120, 35])
+        drawSyntheticQuantityMask(imageData, mask, 145, 195)
+
+        const result = await detectStepCalloutsFromPdfDocument(
+          {
+            getPage: async (pageNumber) => ({
+              getViewport: ({ scale }) => ({
+                height: 700 * scale,
+                width: 1_000 * scale,
+              }),
+              pageNumber,
+              render: ({ canvas }) => {
+                canvasApi.setCanvasImageData(canvas, imageData)
+
+                return { promise: Promise.resolve() }
+              },
+            }),
+            numPages: 1,
+          },
+          { renderMaxWidth: 1_000 },
+        )
+
+        expect(result.callouts[0].partItems[0].quantity.value).toBe(expected)
+      } finally {
+        canvasApi.restore()
+      }
+    }
+  })
+
+  it("does not invent a quantity from a crop that only contains the trailing marker", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 220, height: 180 }, [216, 239, 250])
+      drawRect(imageData, { x: 145, y: 135, width: 36, height: 74 }, [160, 166, 170])
+      drawSyntheticQuantityMask(imageData, manualStyleMarkerOnlyQuantityMask, 146, 220)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("reads only the digit run immediately before the trailing quantity marker", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 320, height: 260 }, [216, 239, 250])
+      drawRect(imageData, { x: 150, y: 132, width: 150, height: 120 }, [160, 166, 170])
+      drawRect(imageData, { x: 160, y: 150, width: 6, height: 86 }, [35, 35, 35])
+      drawRect(imageData, { x: 166, y: 214, width: 26, height: 6 }, [35, 35, 35])
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
+        text: "1x",
+        x: 198,
+        y: 272,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].quantity.value).toBe(1)
+      expect(result.callouts[0].partItems[0].quantity.text).toBe("1")
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
   it("reads image 4x quantity labels as four", async () => {
     const canvasApi = installMockCanvasApi()
 
@@ -1273,6 +2108,45 @@ describe("step callout detection", () => {
       drawRect(imageData, { x: 135, y: 135, width: 58, height: 46 }, [35, 120, 35])
       drawSyntheticQuantityText(imageData, {
         scale: 3,
+        text: "4x",
+        x: 145,
+        y: 195,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems[0].quantity.value).toBe(4)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("reads compact image 4x labels below narrow item crops", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 220, height: 180 }, [216, 239, 250])
+      drawRect(imageData, { x: 145, y: 135, width: 34, height: 46 }, [88, 42, 18])
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
         text: "4x",
         x: 145,
         y: 195,
@@ -1337,6 +2211,84 @@ describe("step callout detection", () => {
       )
 
       expect(result.callouts[0].partItems[0].quantity.value).toBe(10)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("keeps valid non-repeated quantities above the normal callout range", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 300, height: 180 }, [216, 239, 250])
+      drawRect(imageData, { x: 135, y: 135, width: 76, height: 52 }, [35, 120, 35])
+      drawSyntheticQuantityText(imageData, {
+        scale: 3,
+        text: "24x",
+        x: 145,
+        y: 202,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems[0].quantity.value).toBe(24)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not accept implausible repeated digits from part detail as a step quantity", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 220, height: 190 }, [216, 239, 250])
+      drawRect(imageData, { x: 145, y: 135, width: 66, height: 80 }, [160, 166, 170])
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
+        text: "66x",
+        x: 145,
+        y: 228,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(0)
     } finally {
       canvasApi.restore()
     }
@@ -1448,12 +2400,12 @@ function drawSyntheticPartItem(imageData: ReturnType<typeof createSyntheticPage>
 
 function drawColoredPartItem(imageData: ReturnType<typeof createSyntheticPage>, rect: Rect, fill: Rgb) {
   drawRect(imageData, rect, fill)
-  drawSyntheticQuantityText(imageData, {
-    scale: Math.max(2, Math.round(rect.height * 0.035)),
-    text: "1x",
-    x: rect.x + Math.round(rect.width * 0.18),
-    y: rect.y + rect.height + 14,
-  })
+  drawSyntheticQuantityMask(
+    imageData,
+    manualStyleOneQuantityMask,
+    rect.x + Math.round(rect.width * 0.18),
+    rect.y + rect.height + 14,
+  )
 }
 
 function drawInkHeavyPartItem(imageData: ReturnType<typeof createSyntheticPage>, rect: Rect, fill: Rgb) {
@@ -1470,12 +2422,12 @@ function drawInkHeavyPartItem(imageData: ReturnType<typeof createSyntheticPage>,
     drawRect(imageData, { height: 1, width: rect.width - 8, x: rect.x + 4, y }, [0, 0, 0])
   }
 
-  drawSyntheticQuantityText(imageData, {
-    scale: 2,
-    text: "1x",
-    x: rect.x + Math.round(rect.width * 0.18),
-    y: rect.y + rect.height + 14,
-  })
+  drawSyntheticQuantityMask(
+    imageData,
+    manualStyleOneQuantityMask,
+    rect.x + Math.round(rect.width * 0.18),
+    rect.y + rect.height + 14,
+  )
 }
 
 function drawLShapedPart(imageData: ReturnType<typeof createSyntheticPage>, rect: Rect, fill: Rgb) {
@@ -1624,6 +2576,15 @@ const syntheticQuantityGlyphs: Record<string, string[]> = {
     "10000",
     "11111",
   ],
+  "3": [
+    "11111",
+    "00001",
+    "00001",
+    "11111",
+    "00001",
+    "00001",
+    "11111",
+  ],
   "4": [
     "10001",
     "10001",
@@ -1661,6 +2622,350 @@ const manualStyleOneQuantityMask = [
   "....##.......##..###.",
   "....##......##....##.",
   "....##.....###.....##",
+]
+
+const manualStyleSplitMarkerOneQuantityMask = [
+  "....##.................",
+  "...###.................",
+  "..####.................",
+  "....##.................",
+  "....##........#.....#..",
+  "....##.........#...#...",
+  "....##..........#.#....",
+  "....##...........#.....",
+  "....##..........#.#....",
+  "....##.........#...#...",
+  "....##........#.....#..",
+  "....##.................",
+  "....##.................",
+  "....##.................",
+  "....##.................",
+  "....##.................",
+]
+
+const manualStyleSerifOneQuantityMask = [
+  "...###..................",
+  "..####..................",
+  "...###..................",
+  "....##..................",
+  "....##.........#.....#..",
+  "....##..........#...#...",
+  "....##...........#.#....",
+  "....##............#.....",
+  "....##...........#.#....",
+  "....##..........#...#...",
+  "....##........#.....#..",
+  "....##.................",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+]
+
+const annotatedTallSlopedOneQuantityMask = [
+  ".......#................",
+  "......###...............",
+  ".....####...............",
+  "....#####...............",
+  "...######...............",
+  "..###.###.....###....###",
+  "......###......##....##.",
+  "......###......###..###.",
+  "......###.......######..",
+  "......###........####...",
+  "......###........####...",
+  "......###........####...",
+  "......###.......######..",
+  "......###.......###.##..",
+  "......###......###..###.",
+  "......###......##....###",
+  ".......##.....###.....##",
+  "........................",
+]
+
+const annotatedNarrowSlopedOneQuantityMask = [
+  ".....##................",
+  ".....###...............",
+  "....####...............",
+  "..######...............",
+  ".#######.............#.",
+  ".##..###.....###....##",
+  ".....##......###...###",
+  ".....##.......###.###.",
+  ".....##........#####..",
+  ".....###........####..",
+  ".....###........###...",
+  ".....###........####..",
+  ".....###.......######.",
+  ".....##.......###..##.",
+  ".....###.....###...###",
+  ".....##......###....##",
+  ".....##......##.....##",
+  "......................",
+]
+
+const annotatedElevenQuantityMask = [
+  ".....##...........###...............",
+  "....###...........###...............",
+  "...####.........#####...............",
+  "..#####........######...............",
+  ".###.##.......#######.....##......#.",
+  ".##..##.......##..###.....###....###",
+  ".....##...........###......###..###.",
+  ".....##...........###.......##..##..",
+  ".....##...........###.......######..",
+  ".....##...........###........####...",
+  ".....##...........###........####...",
+  ".....##...........###........####...",
+  ".....##...........###.......######..",
+  ".....##...........###......###..###.",
+  ".....##...........###......##....##.",
+  ".....##...........###.....###....###",
+  ".....##............#......##......##",
+  "....................................",
+]
+
+const manualStyleSplitMarkerTwoQuantityMask = [
+  ".######.................",
+  "##....##................",
+  "......##................",
+  "......##................",
+  ".....##.........#.....#.",
+  "....##...........#...#..",
+  "...##.............#.#...",
+  "..##...............#....",
+  ".##...............#.#...",
+  "##...............#...#..",
+  "########........#.....#.",
+  "########................",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+]
+
+const manualStyleSplitMarkerThreeQuantityMask = [
+  ".######.................",
+  "##....##................",
+  "......##................",
+  "......##................",
+  "...####.........#.....#.",
+  "......##.........#...#..",
+  "......##..........#.#...",
+  "......##...........#....",
+  "......##..........#.#...",
+  "##....##.........#...#..",
+  ".######.........#.....#.",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+]
+
+const manualStyleRoundedThreeQuantityMask = [
+  ".######.................",
+  "##....##................",
+  "......##................",
+  ".....##.................",
+  "...####.........#.....#.",
+  "......##.........#...#..",
+  "......##..........#.#...",
+  "......##...........#....",
+  "......##..........#.#...",
+  "##....##.........#...#..",
+  ".######.........#.....#.",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+]
+
+const manualStyleLowBottomThreeQuantityMask = [
+  ".######.................",
+  "##....##................",
+  "......##................",
+  "......##................",
+  "...####.........#.....#.",
+  "......##.........#...#..",
+  "......##..........#.#...",
+  "......##...........#....",
+  "......##..........#.#...",
+  ".....##..........#...#..",
+  "..####..........#.....#.",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+]
+
+const manualStyleSplitMarkerFourQuantityMask = [
+  "##...##.................",
+  "##...##.................",
+  "##...##.................",
+  "##...##.................",
+  "########........#.....#.",
+  ".....##..........#...#..",
+  ".....##...........#.#...",
+  ".....##............#....",
+  ".....##...........#.#...",
+  ".....##..........#...#..",
+  ".....##.........#.....#.",
+  ".....##.................",
+  ".....##.................",
+  ".....##.................",
+  "........................",
+  "........................",
+]
+
+const manualStyleCompactFourQuantityMask = [
+  "...##.##................",
+  "..###.##................",
+  ".##...##................",
+  "##....##................",
+  "########........#.....#.",
+  "......##.........#...#..",
+  "......##..........#.#...",
+  "......##...........#....",
+  "......##..........#.#...",
+  "......##.........#...#..",
+  "......##........#.....#.",
+  "......##................",
+  "......##................",
+  "......##................",
+  "........................",
+  "........................",
+]
+
+const manualStyleRightWeightedFourQuantityMask = [
+  "..##..##................",
+  ".###..##................",
+  ".##...##................",
+  "##....##................",
+  "########........#.....#.",
+  "......##.........#...#..",
+  "......##..........#.#...",
+  "......##...........#....",
+  "......##..........#.#...",
+  "......##.........#...#..",
+  "......##........#.....#.",
+  "......##................",
+  "......##................",
+  "......##................",
+  "........................",
+  "........................",
+]
+
+const manualStyleOpenLeftFourQuantityMask = [
+  ".....##.................",
+  "....###.................",
+  "...####.................",
+  "..##.##.................",
+  ".##..##.........#.....#.",
+  "########.........#...#..",
+  ".....##...........#.#...",
+  ".....##............#....",
+  ".....##...........#.#...",
+  ".....##..........#...#..",
+  ".....##.........#.....#.",
+  ".....##.................",
+  ".....##.................",
+  ".....##.................",
+  "........................",
+  "........................",
+]
+
+const manualStyleDenseTopFourQuantityMask = [
+  "########.................",
+  "########.................",
+  ".##..##.................",
+  "##...##.................",
+  "########........#.....#.",
+  ".....##..........#...#..",
+  ".....##...........#.#...",
+  ".....##............#....",
+  ".....##...........#.#...",
+  ".....##..........#...#..",
+  ".....##.........#.....#.",
+  ".....##.................",
+  ".....##.................",
+  ".....##.................",
+  "........................",
+  "........................",
+]
+
+const annotatedReddishBrownFourQuantityMask = [
+  ".........##................",
+  "........###................",
+  ".......####................",
+  ".......####................",
+  "......##.##.....##.....##.",
+  ".....###.##.....###...###.",
+  "....###..##.....###...###.",
+  "....##...##......###.###..",
+  "...##....##.......#####...",
+  "..###....##........###....",
+  "..####.#####.......###....",
+  ".############.....#####...",
+  "..###########.....#####...",
+  ".........##......###.###..",
+  ".........##.....###...###.",
+  ".........##....###.....###",
+  ".........##....##.......##",
+  "..........................",
+]
+
+const annotatedTransparentFourQuantityMask = [
+  "........##................",
+  ".......####...............",
+  ".......####...............",
+  "......#####...............",
+  ".....######....##......##",
+  ".....##.###....###....###",
+  "....##..###.....###..###.",
+  "...###..###......##..##..",
+  "..###...###......######..",
+  "..##....###.......####...",
+  ".#####.####.......####...",
+  ".############.....####...",
+  ".###########.....######..",
+  "........###.....###..###.",
+  "........###.....##....##.",
+  "........###....###....###",
+  "........##.....##......##",
+  ".........................",
+]
+
+const manualStyleMarkerOnlyQuantityMask = [
+  ".........#.....#.",
+  "..........#...#..",
+  "...........#.#...",
+  "............#....",
+  "...........#.#...",
+  "..........#...#..",
+  ".........#.....#.",
+  "..................",
+]
+
+const manualStyleSplitMarkerNineQuantityMask = [
+  ".######.................",
+  "##....##................",
+  "##....##................",
+  "##....##................",
+  ".#######........#.....#.",
+  "......##.........#...#..",
+  "......##..........#.#...",
+  "......##...........#....",
+  "......##..........#.#...",
+  "......##.........#...#..",
+  ".######.........#.....#.",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
+  "........................",
 ]
 
 function drawSyntheticQuantityMask(

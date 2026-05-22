@@ -333,6 +333,7 @@ function createStepBagPartChecklistRow(
     image: ({ opacity }) => <StepBagPartPreviewImage opacity={opacity} row={row} />,
     locationLabel: <StepCalloutPreviewStep row={row} />,
     quantity: row.quantity,
+    quantityDetail: <StepBagQuantityLabelCrop row={row} />,
     sortValues: {
       color: row.colorName,
       location: row.stepIndex + row.itemIndex / 1000,
@@ -390,6 +391,35 @@ function StepCalloutPreviewStep({ row }: { row: StepBagChecklistRow }) {
         </HoverCard.Positioner>
       </Portal>
     </HoverCard.Root>
+  )
+}
+
+function StepBagQuantityLabelCrop({ row }: { row: StepBagChecklistRow }) {
+  return (
+    <Box
+      aria-label={`Detected quantity label crop for ${row.bagLabel} step ${row.stepIndex} item ${row.itemIndex}`}
+      data-testid="step-bag-quantity-label-crop"
+      border="sm"
+      borderColor="bagging.border"
+      bg="bagging.imageBg"
+      rounded="xs"
+      overflow="hidden"
+      w="8"
+      h="4"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+    >
+      <Image
+        alt=""
+        src={row.quantityLabelCrop.dataUrl}
+        maxW="full"
+        maxH="full"
+        objectFit="contain"
+        loading="eager"
+        decoding="async"
+      />
+    </Box>
   )
 }
 
@@ -1123,6 +1153,7 @@ function getStepBagChecklistRows(plan: StepCalloutBaggingPlan): StepBagChecklist
           quantity,
           quantityConfidence: item.quantity.confidence,
           quantityIsEstimated: item.quantity.value == null,
+          quantityLabelCrop: item.quantityLabel.crop,
           pageNumber: callout.pageNumber,
           representativeCrop: item.partCrop,
           sourceItemIds: [item.id],
@@ -1304,6 +1335,7 @@ type StepBagChecklistRow = {
   quantity: number
   quantityConfidence: number
   quantityIsEstimated: boolean
+  quantityLabelCrop: DetectedStepCalloutPartItem["quantityLabel"]["crop"]
   representativeCrop: StepCalloutBagPartGroup["representativeCrop"]
   sourceItemIds: readonly string[]
   stepIndex: number
