@@ -1,6 +1,6 @@
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v82"
+export const stepCalloutDetectorVersion = "step-callout-detection-v83"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -1069,6 +1069,9 @@ function detectStepCalloutPartItemsFromCanvas(
   const interiorRegion = getCalloutInteriorRegion(imageData)
 
   const detectedRegions = detectStepCalloutPartItemRegionsFromImageData(imageData)
+  const detectedQuantityGlyphExclusionRegions = detectedRegions.flatMap((region) =>
+    getPartPreviewQuantityGlyphExclusionRegions(imageData, region.quantityRegion, region.quantity)
+  )
 
   return detectedRegions.map((region, index) => {
     const itemRegion = padRegionWithin(region.itemRegion, canvas.width, canvas.height, itemCropPaddingPixels, interiorRegion)
@@ -1090,7 +1093,10 @@ function detectStepCalloutPartItemsFromCanvas(
     )
     const quantityRegion = getQuantityDisplayRegion(imageData, rawQuantityRegion, quantity) ?? rawQuantityRegion
     const quantitySourceRegion = toPageSourceRegion(quantityRegion, pageOffsetX, pageOffsetY)
-    const quantityGlyphExclusionRegions = getPartPreviewQuantityGlyphExclusionRegions(imageData, quantityRegion, quantity)
+    const quantityGlyphExclusionRegions = [
+      ...detectedQuantityGlyphExclusionRegions,
+      ...getPartPreviewQuantityGlyphExclusionRegions(imageData, quantityRegion, quantity),
+    ]
     const partContentRegion = getPartPreviewContentSearchRegion(
       region,
       detectedRegions,

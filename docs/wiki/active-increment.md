@@ -43,7 +43,7 @@ removed, while trusted quantity glyph pixels are excluded from internal visual
 comparison and color sampling.
 Same-part local image grouping is debug metadata based on
 preserved-aspect mask, structure, detail, and color matching. As of the
-`step-callout-detection-v82` label-anchored cropper pass, detected color name is a
+`step-callout-detection-v83` label-anchored cropper pass, detected color name is a
 hard local grouping gate, edge silhouette is not used as a local grouping
 signal, and local image grouping stores the closest rejected candidate crops and
 failed shape, structure, detail, aspect, coverage, compactness, and color gates
@@ -60,7 +60,7 @@ pixels, avoids narrow row-spanning part components that swallow neighboring
 rows, and is measured against saved Castle Ramp and Middle Wall session callout
 crops so detector totals can be compared with the recognized BOM totals without
 re-running PDF rendering.
-The `step-callout-detection-v82` crop-quality pass detects the actual inside of
+The `step-callout-detection-v83` crop-quality pass detects the actual inside of
 the callout border before segmentation, clips padded previews to that interior,
 expands connected foreground beyond a label midpoint so wide parts are not cut
 off, and stops that expansion before it crosses another same-row quantity label
@@ -69,7 +69,9 @@ the dominant connected foreground component inside that owned part region so
 thin neighboring-part edges do not pollute the crop. The part-region pass also
 scores foreground components against every quantity anchor and keeps only the
 best-owned components, preventing lower labels from borrowing the part or label
-region above them when stacked callout items share a wide search zone.
+region above them when stacked callout items share a wide search zone. Every
+detected quantity-label glyph region is excluded from every displayed part crop
+so tall-part preview expansion cannot leak a previous item's label.
 The
 `step-callout-bagging-v2` pass merges an undersized trailing bag into the
 previous bag when the previous bag can absorb it within the hard part limit.

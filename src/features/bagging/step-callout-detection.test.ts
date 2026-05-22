@@ -705,6 +705,53 @@ describe("step callout detection", () => {
     }
   })
 
+  it("does not copy quantity glyphs from a previous item into a lower part preview", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 760)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 460, height: 390 }, [216, 239, 250])
+      drawRect(imageData, { x: 148, y: 144, width: 38, height: 32 }, [160, 166, 170])
+      drawSyntheticQuantityMask(imageData, manualStyleSplitMarkerThreeQuantityMask, 150, 206)
+      drawRect(imageData, { x: 212, y: 144, width: 38, height: 32 }, [160, 166, 170])
+      drawSyntheticQuantityMask(imageData, manualStyleSplitMarkerThreeQuantityMask, 214, 206)
+      drawRect(imageData, { x: 138, y: 244, width: 180, height: 96 }, [160, 166, 170])
+      drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 150, 382)
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 760 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      const lowerItem = result.callouts[0].partItems.find((item) => item.quantity.value === 1)
+
+      expect(result.callouts[0].partItems).toHaveLength(3)
+      expect(lowerItem).toBeDefined()
+
+      const lowerCrop = canvasApi.getImageDataForDataUrl(lowerItem!.partCrop.dataUrl)
+
+      expect(lowerCrop).toBeDefined()
+      expect(countPixelsMatching(lowerCrop!, [160, 166, 170])).toBeGreaterThan(10_000)
+      expect(countPixelsMatching(lowerCrop!, [0, 0, 0])).toBe(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
   it("keeps lower part pixels when they overlap the quantity label band", async () => {
     const canvasApi = installMockCanvasApi()
 

@@ -96,11 +96,11 @@ The user gets bag assignments that map cleanly to manual steps.
 - Castle Ramp is the smallest local tuning target. The current pass now scans
   the full non-BOM manual while callout quantity, color, and BOM thumbnail
   matching are evaluated; row-level misses, over-fills, and unmatched items must
-  remain explicit and measurable. The `step-callout-detection-v82` tuning pass
+  remain explicit and measurable. The `step-callout-detection-v83` tuning pass
   anchors BOM image features from the row's centered quantity/part label,
   removes catalogue preview evidence from the matching decision, and disables
   coverage-completion assignment because quantity-perfect or row-filling
-  assignment can still be visually wrong. The `step-callout-detection-v82`
+  assignment can still be visually wrong. The `step-callout-detection-v83`
   rebuild keeps quantity labels as item anchors, treats saved session callout
   crops as measurable fixtures, and requires exact detector totals against the
   recognized BOM totals for the local Castle Ramp and Middle Wall sessions.
@@ -111,7 +111,7 @@ The user gets bag assignments that map cleanly to manual steps.
   quantities.
 - The first quantity reader targets the common visible `Nx` callout label and
   parses the numeric run before the trailing marker. As of
-  `step-callout-detection-v82`, `Nx` labels anchor item detection directly:
+  `step-callout-detection-v83`, `Nx` labels anchor item detection directly:
   the detector finds the nearest foreground component above each trusted label,
   clears only the active label while validating that item, rejects giant
   assembled-model components, and keeps separated part halves together inside
@@ -135,7 +135,9 @@ The user gets bag assignments that map cleanly to manual steps.
   owned part region so thin neighboring-part edges do not pollute the crop.
   Part-region ownership is scored against every quantity anchor so stacked
   callout items keep the component nearest their own label instead of borrowing
-  the part or label region above them.
+  the part or label region above them. All detected quantity-label glyph regions
+  are excluded from every displayed part crop so tall-part preview expansion
+  cannot leak a previous item's quantity label.
   Broader quantity formats still need fixture-driven tuning before the
   whole-manual pass.
 - As of `step-callout-bagging-v2`, undersized trailing bags are merged into the
