@@ -1,9 +1,12 @@
-import { screen, within } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it } from "vitest"
-import { stepCalloutDetectorVersion, type StepCalloutDetectionResult } from "@/features/bagging/step-callout-detection"
+import { describe, expect, it, vi } from "vitest"
+import {
+  stepCalloutDetectorVersion,
+  type StepCalloutDetectionResult,
+} from "@/features/bagging/step-callout-detection"
 import { renderWithProvider } from "@/test/render"
-import { StepCalloutDebugPanel, StepCalloutsPanel } from "./step-callouts-panel"
+import { StepCalloutDebugPanel, StepCalloutMatchingDebugPanel, StepCalloutsPanel } from "./step-callouts-panel"
 
 describe("StepCalloutsPanel", () => {
   it("renders detected step parts as a bag checklist grouped by bag or color", async () => {
@@ -15,6 +18,11 @@ describe("StepCalloutsPanel", () => {
     expect(
       screen.getByText("1 draft bag from 2 callouts and 5 detected parts across 2 pages; full non-inventory manual."),
     ).toBeVisible()
+    const diagnosticsPanel = screen.getByTestId("step-callout-quantity-diagnostics")
+    expect(diagnosticsPanel).toHaveAttribute("data-bom-part-count", "480")
+    expect(diagnosticsPanel).toHaveAttribute("data-detected-part-count", "5")
+    expect(diagnosticsPanel).toHaveAttribute("data-missing-part-count", "475")
+    expect(screen.getByText("Step coverage needs attention")).toBeVisible()
     expect(screen.getByText("0 of 5 detected parts checked.")).toBeVisible()
     expect(screen.getByTestId("step-bag-completion-summary")).toHaveTextContent("0% packed")
     expect(screen.getByRole("button", { name: "Bag" })).toHaveAttribute("aria-pressed", "true")
@@ -134,6 +142,38 @@ describe("StepCalloutsPanel", () => {
     ])
   })
 
+  it("multiplies step quantities for checklist totals and row quantities", () => {
+    renderWithProvider(
+      <StepCalloutsPanel
+        calloutMultipliers={{ "step-callout:p1:r1": 2 }}
+        inventoryPartCount={480}
+        result={createResult()}
+      />,
+    )
+
+    expect(
+      screen.getByText("1 draft bag from 2 callouts and 8 detected parts across 2 pages; full non-inventory manual."),
+    ).toBeVisible()
+    expect(screen.getByText("0 of 8 detected parts checked.")).toBeVisible()
+    expect(screen.getByTestId("step-bag-checklist-group")).toHaveAttribute("data-total-quantity", "8")
+    expect(screen.getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute("data-missing-part-count", "472")
+    expect(screen.getAllByTestId("step-bag-part-row").map((row) => row.getAttribute("data-quantity"))).toEqual([
+      "4",
+      "2",
+      "2",
+    ])
+    expect(screen.getAllByTestId("step-bag-part-row").map((row) => row.getAttribute("data-step-multiplier"))).toEqual([
+      "2",
+      "2",
+      "1",
+    ])
+    expect(screen.getAllByTestId("step-bag-part-row").map((row) => row.getAttribute("data-row-id")?.includes(":m2:"))).toEqual([
+      true,
+      true,
+      false,
+    ])
+  })
+
   it("moves callout crops and local match diagnostics to the debug panel", () => {
     renderWithProvider(<StepCalloutDebugPanel inventoryPartCount={480} result={createResult()} />)
 
@@ -172,6 +212,140 @@ describe("StepCalloutsPanel", () => {
     expect(screen.getByRole("img", { name: "Rejected local match candidate step 2 item 1" })).toBeVisible()
   })
 
+  it("renders page-grouped callout matching diagnostics with page previews shown by default", async () => {
+    const user = userEvent.setup()
+    const result = createResult()
+    result.callouts[0].pageNumber = 3
+    result.callouts[0].stepIndex = 2
+    result.callouts[1].pageNumber = 1
+    result.callouts[1].stepIndex = 1
+
+    renderWithProvider(
+      <StepCalloutMatchingDebugPanel
+        pageRenders={[
+          {
+            dataUrl: "data:image/png;base64,page-three-full",
+            height: 1000,
+            pageNumber: 3,
+            renderKind: "canvas",
+            width: 700,
+          },
+        ]}
+        result={result}
+      />,
+    )
+
+    expect(screen.getByTestId("step-callout-matching-debug-panel")).toBeVisible()
+    expect(screen.getByText("Build steps")).toBeVisible()
+    expect(screen.getByText("2 callouts across 2 scanned pages.")).toBeVisible()
+    expect(screen.getByTestId("step-callout-matching-debug-page-groups")).toBeVisible()
+    expect(screen.getAllByTestId("step-callout-matching-debug-page-group").map((group) => group.dataset.pageNumber)).toEqual([
+      "1",
+      "3",
+    ])
+    expect(screen.getAllByTestId("step-callout-matching-debug-table")).toHaveLength(2)
+    expect(screen.getAllByTestId("step-callout-matching-debug-row").map((row) => row.dataset.pageNumber)).toEqual([
+      "1",
+      "3",
+    ])
+
+    expect(screen.getAllByTestId("step-callout-matching-debug-row").map((row) => row.dataset.stepIndex)).toEqual([
+      "1",
+      "2",
+    ])
+
+    expect(screen.getByRole("img", { name: "Manual page 3 preview" })).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Preview page 3" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Preview step 2 label" })).not.toBeInTheDocument()
+
+    await user.hover(screen.getByRole("button", { name: "Enlarge step 2 callout" }))
+    expect(await screen.findByRole("img", { name: "Step 2 callout enlarged" })).toBeVisible()
+  })
+
+  it("lets build-step rows request multiplier changes", async () => {
+    const user = userEvent.setup()
+    const onCalloutMultiplierChange = vi.fn()
+
+    renderWithProvider(
+      <StepCalloutMatchingDebugPanel
+        calloutMultipliers={{ "step-callout:p1:r1": 2 }}
+        onCalloutMultiplierChange={onCalloutMultiplierChange}
+        result={createResult()}
+      />,
+    )
+
+    const rows = screen.getAllByTestId("step-callout-matching-debug-row")
+    expect(rows[0]).toHaveAttribute("data-step-multiplier", "2")
+    expect(rows[1]).toHaveAttribute("data-step-multiplier", "1")
+    expect(screen.getAllByTestId("step-callout-multiplier-value").map((value) => value.textContent)).toEqual([
+      "x2",
+      "x1",
+    ])
+    expect(screen.getByRole("button", { name: "Decrease step 2 multiplier" })).toBeDisabled()
+
+    await user.click(screen.getByRole("button", { name: "Increase step 1 multiplier" }))
+    expect(onCalloutMultiplierChange).toHaveBeenLastCalledWith("step-callout:p1:r1", 3)
+
+    await user.click(screen.getByRole("button", { name: "Decrease step 1 multiplier" }))
+    expect(onCalloutMultiplierChange).toHaveBeenLastCalledWith("step-callout:p1:r1", 1)
+  })
+
+  it("renders zero-part callouts in build steps diagnostics", () => {
+    const result = createResult()
+    result.callouts = [createZeroPartCallout(), ...result.callouts]
+    result.scannedPageNumbers = [1, 3]
+
+    renderWithProvider(<StepCalloutMatchingDebugPanel result={result} />)
+
+    expect(screen.getByText("3 callouts across 2 scanned pages.")).toBeVisible()
+    expect(screen.getAllByTestId("step-callout-matching-debug-row")).toHaveLength(3)
+    expect(screen.getAllByText(/0 part types/)[0]).toBeVisible()
+    expect(screen.getByText(/x889 y112 w178 h68/)).toBeVisible()
+    expect(screen.getByText("Not bagged")).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Increase step 8 multiplier" })).not.toBeInTheDocument()
+  })
+
+  it("loads missing page previews from the matching debug panel in batches", async () => {
+    const loadPageRenders = vi.fn(async (pageNumbers: readonly number[]) =>
+      pageNumbers.map((pageNumber) => ({
+        dataUrl: `data:image/png;base64,page-${pageNumber}`,
+        height: 1000,
+        pageNumber,
+        renderKind: "canvas" as const,
+        width: 700,
+      })),
+    )
+
+    const result = createResult()
+    result.scannedPageNumbers = [1, 2, 3, 4]
+
+    renderWithProvider(<StepCalloutMatchingDebugPanel loadPageRenders={loadPageRenders} result={result} />)
+
+    await waitFor(() => expect(loadPageRenders).toHaveBeenNthCalledWith(1, [1, 2, 3]))
+    await waitFor(() => expect(loadPageRenders).toHaveBeenNthCalledWith(2, [4]))
+    expect(await screen.findByRole("img", { name: "Manual page 1 preview" })).toBeVisible()
+    expect(screen.getByRole("img", { name: "Manual page 2 preview" })).toBeVisible()
+    expect(screen.getByRole("img", { name: "Manual page 3 preview" })).toBeVisible()
+    expect(screen.getByRole("img", { name: "Manual page 4 preview" })).toBeVisible()
+  })
+
+  it("renders scanned pages even when no build steps are detected on that page", () => {
+    const result = createResult()
+    result.scannedPageNumbers = [1, 2, 3]
+
+    renderWithProvider(<StepCalloutMatchingDebugPanel result={result} />)
+
+    expect(screen.getAllByTestId("step-callout-matching-debug-page-group").map((group) => group.dataset.pageNumber)).toEqual([
+      "1",
+      "2",
+      "3",
+    ])
+    const rows = screen.getAllByTestId("step-callout-matching-debug-row")
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.dataset.pageNumber)).toEqual(["1", "3"])
+    expect(screen.getByText("No build steps detected on this page.")).toBeVisible()
+  })
+
   it("renders bag ranges from sorted callout order", () => {
     const result = createResult()
     result.callouts[0].stepIndex = 6
@@ -184,6 +358,19 @@ describe("StepCalloutsPanel", () => {
     expect(screen.getByTestId("step-bag-checklist-group")).toHaveAttribute("data-total-quantity", "5")
     expect(screen.getAllByTestId("step-bag-part-row")).toHaveLength(3)
     expect(screen.queryByTestId("step-callout-card")).not.toBeInTheDocument()
+  })
+
+  it("does not include zero-part callouts in bag checklist planning", () => {
+    const result = createResult()
+    result.callouts = [createZeroPartCallout(), ...result.callouts]
+
+    renderWithProvider(<StepCalloutsPanel inventoryPartCount={480} result={result} />)
+
+    expect(
+      screen.getByText("1 draft bag from 2 callouts and 5 detected parts across 2 pages; full non-inventory manual."),
+    ).toBeVisible()
+    expect(screen.getAllByTestId("step-bag-part-row")).toHaveLength(3)
+    expect(screen.queryByText(/0 part types/)).not.toBeInTheDocument()
   })
 })
 
@@ -216,6 +403,34 @@ function createMultiBagSameColorResult(): StepCalloutDetectionResult {
     })),
     scannedPageNumbers: [1, 2],
     skippedBomPageNumbers: [],
+  }
+}
+
+function createZeroPartCallout(): StepCalloutDetectionResult["callouts"][number] {
+  return {
+    confidence: 0.54,
+    crop: {
+      dataUrl: "data:image/png;base64,false-positive",
+      height: 68,
+      width: 178,
+    },
+    id: "step-callout:p3:false-positive",
+    indexOnPage: 1,
+    pageNumber: 3,
+    partItems: [],
+    sourceImage: {
+      height: 900,
+      unit: "step_pixel",
+      width: 1400,
+    },
+    sourceRegion: {
+      height: 68,
+      unit: "step_pixel",
+      width: 178,
+      x: 889,
+      y: 112,
+    },
+    stepIndex: 8,
   }
 }
 

@@ -52,16 +52,16 @@ describe("step callout bagging heuristics", () => {
     })
   })
 
-  it("keeps an oversized step intact and marks the bag for review", () => {
+  it("keeps an oversized page group intact and marks the bag for review", () => {
     const plan = createStepCalloutBaggingPlan(createResult([
       createCallout(1, 1, [90]),
       createCallout(2, 1, [10]),
     ]), { inventoryPartCount: 400 })
 
     expect(plan.bags[0]).toMatchObject({
-      partCount: 90,
+      partCount: 100,
       status: "review",
-      stepRange: { end: 1, start: 1 },
+      stepRange: { end: 2, start: 1 },
     })
     expect(plan.bags[0].reviewReasons).toContain("over 75 part target")
   })
@@ -86,14 +86,83 @@ describe("step callout bagging heuristics", () => {
     })
   })
 
-  it("closes a draft bag before exceeding the hard part target even if the current bag is small", () => {
+  it("merges a tiny bag into the previous bag even when the merged range stays in review", () => {
+    const plan = createStepCalloutBaggingPlan(createResult([
+      createCallout(1, 1, [150]),
+      createCallout(2, 1, [5]),
+    ]), { inventoryPartCount: 1_500 })
+
+    expect(plan.policy).toMatchObject({
+      maxParts: 140,
+      minParts: 90,
+      setSizeBand: "large",
+      targetParts: 115,
+    })
+    expect(plan.bags).toHaveLength(1)
+    expect(plan.bags[0]).toMatchObject({
+      partCount: 155,
+      status: "review",
+      stepRange: { end: 2, start: 1 },
+    })
+    expect(plan.bags[0].reviewReasons).toContain("over 140 part target")
+  })
+
+  it("keeps same-page callouts together even when they exceed the hard part target", () => {
     const plan = createStepCalloutBaggingPlan(createResult([
       createCallout(1, 1, [40]),
       createCallout(2, 1, [40]),
     ]), { inventoryPartCount: 480 })
 
+    expect(plan.bags).toHaveLength(1)
+    expect(plan.bags[0]).toMatchObject({
+      partCount: 80,
+      status: "review",
+      pageRange: { end: 1, start: 1 },
+      stepRange: { end: 2, start: 1 },
+    })
+  })
+
+  it("applies step multipliers before balancing while keeping page groups intact", () => {
+    const result = createResult([
+      createCallout(1, 1, [30]),
+      createCallout(2, 1, [30]),
+      createCallout(3, 2, [30]),
+    ])
+    const plan = createStepCalloutBaggingPlan(result, {
+      calloutMultipliers: {
+        "step-callout:p1:s2": 2,
+      },
+      inventoryPartCount: 480,
+    })
+
+    expect(plan.detectedPartCount).toBe(120)
+    expect(plan.bags).toHaveLength(2)
+    expect(plan.bags[0]).toMatchObject({
+      pageRange: { end: 1, start: 1 },
+      partCount: 90,
+      status: "review",
+      stepRange: { end: 2, start: 1 },
+    })
+    expect(plan.bags[0].reviewReasons).toContain("over 75 part target")
+    expect(plan.bags[1]).toMatchObject({
+      pageRange: { end: 2, start: 2 },
+      partCount: 30,
+      stepRange: { end: 3, start: 3 },
+    })
+  })
+
+  it("closes a draft bag before exceeding the hard part target at a page boundary", () => {
+    const plan = createStepCalloutBaggingPlan(createResult([
+      createCallout(1, 1, [40]),
+      createCallout(2, 2, [40]),
+    ]), { inventoryPartCount: 480 })
+
     expect(plan.bags).toHaveLength(2)
     expect(plan.bags.map((bag) => bag.partCount)).toEqual([40, 40])
+    expect(plan.bags.map((bag) => bag.pageRange)).toEqual([
+      { end: 1, start: 1 },
+      { end: 2, start: 2 },
+    ])
     expect(plan.bags.map((bag) => bag.status)).toEqual(["draft", "draft"])
   })
 

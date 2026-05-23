@@ -1,6 +1,7 @@
 import type { PartsListPartPreview } from "./browser-catalogue"
 import type { PartsListPdfExtractionResult } from "./parts-list-pdf-extraction"
 import type { PdfIntakeJobSnapshot, PdfIntakeMetadata } from "./pdf-intake"
+import type { StepCalloutMultiplierMap } from "./step-callout-bagging"
 import type { StepCalloutDetectionResult } from "./step-callout-detection"
 
 export const baggingSessionFileKind = "bag-it-session"
@@ -15,6 +16,7 @@ export type BaggingSessionFileInput = {
   metadata: PdfIntakeMetadata | null
   partPreviewByKey: ReadonlyMap<string, PartsListPartPreview>
   partsListResult: PartsListPdfExtractionResult | null
+  stepCalloutMultipliers?: StepCalloutMultiplierMap
   stepCalloutResult?: StepCalloutDetectionResult | null
 }
 
@@ -28,6 +30,7 @@ export type RestoredBaggingSession = {
   partsListResult: PartsListPdfExtractionResult | null
   savedExtractorVersion: string | null
   savedStepCalloutDetectorVersion: string | null
+  stepCalloutMultipliers: StepCalloutMultiplierMap
   stepCalloutResult: StepCalloutDetectionResult | null
 }
 
@@ -40,6 +43,7 @@ type BaggingSessionFile = {
     partPreviewEntries: [string, PartsListPartPreview][]
     partsListResult: PartsListPdfExtractionResult | null
     stepCalloutDetectorVersion?: string | null
+    stepCalloutMultiplierEntries?: [string, number][]
     stepCalloutResult?: StepCalloutDetectionResult | null
   }
   createdAt: string
@@ -67,6 +71,7 @@ export async function createBaggingSessionFile({
   metadata,
   partPreviewByKey,
   partsListResult,
+  stepCalloutMultipliers = {},
   stepCalloutResult = null,
 }: BaggingSessionFileInput) {
   return {
@@ -78,6 +83,7 @@ export async function createBaggingSessionFile({
       partPreviewEntries: [...partPreviewByKey.entries()],
       partsListResult,
       stepCalloutDetectorVersion: stepCalloutResult?.detectorVersion ?? null,
+      stepCalloutMultiplierEntries: createStepCalloutMultiplierEntries(stepCalloutMultipliers, stepCalloutResult),
       stepCalloutResult,
     },
     createdAt: new Date().toISOString(),
@@ -117,6 +123,10 @@ export async function restoreBaggingSessionFile(file: File): Promise<RestoredBag
     partsListResult: parsed.analysis.partsListResult,
     savedExtractorVersion: parsed.analysis.extractorVersion,
     savedStepCalloutDetectorVersion: parsed.analysis.stepCalloutDetectorVersion ?? null,
+    stepCalloutMultipliers: restoreStepCalloutMultipliers(
+      parsed.analysis.stepCalloutMultiplierEntries ?? [],
+      parsed.analysis.stepCalloutResult ?? null,
+    ),
     stepCalloutResult: getRestorableStepCalloutResult(parsed.analysis.stepCalloutResult ?? null),
   }
 }
@@ -153,6 +163,58 @@ export function getBaggingSessionDownloadName(manualName: string | null | undefi
     .slice(0, 80)
 
   return `${baseName || "bag-it-session"}.bagit.json`
+}
+
+function createStepCalloutMultiplierEntries(
+  multipliers: StepCalloutMultiplierMap,
+  result: StepCalloutDetectionResult | null,
+): [string, number][] {
+  if (!result) {
+    return []
+  }
+
+  const calloutIds = new Set(result.callouts.map((callout) => callout.id))
+
+  return Object.entries(multipliers)
+    .flatMap(([calloutId, multiplier]): [string, number][] => {
+      const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
+      return calloutIds.has(calloutId) && normalizedMultiplier > 1
+        ? [[calloutId, normalizedMultiplier]]
+        : []
+    })
+    .sort(([leftCalloutId], [rightCalloutId]) => leftCalloutId.localeCompare(rightCalloutId))
+}
+
+function restoreStepCalloutMultipliers(entries: unknown, resultValue: unknown): StepCalloutMultiplierMap {
+  const result = getRestorableStepCalloutResult(resultValue)
+  if (!result || !Array.isArray(entries)) {
+    return {}
+  }
+
+  const calloutIds = new Set(result.callouts.map((callout) => callout.id))
+  const multipliers: Record<string, number> = {}
+
+  for (const entry of entries) {
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      continue
+    }
+
+    const [calloutId, multiplier] = entry
+    const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
+    if (typeof calloutId === "string" && calloutIds.has(calloutId) && normalizedMultiplier > 1) {
+      multipliers[calloutId] = normalizedMultiplier
+    }
+  }
+
+  return multipliers
+}
+
+function normalizeStepCalloutMultiplier(multiplier: unknown) {
+  if (typeof multiplier !== "number" || !Number.isFinite(multiplier)) {
+    return 1
+  }
+
+  return Math.max(1, Math.floor(multiplier))
 }
 
 function assertBaggingSessionFile(value: unknown): asserts value is BaggingSessionFile {

@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderWithProvider } from "@/test/render"
@@ -1270,6 +1270,9 @@ describe("BaggingPage parts list extraction", () => {
         delete row.part.name
       }
     })
+    const stepCalloutResult = stepCalloutMock.createStepCalloutResult() as unknown as NonNullable<
+      Parameters<typeof createBaggingSessionFile>[0]["stepCalloutResult"]
+    >
     const metadata = createSessionMetadata(manualFile)
     const session = await createBaggingSessionFile({
       attemptedPartPreviewKeys: new Set(),
@@ -1280,6 +1283,8 @@ describe("BaggingPage parts list extraction", () => {
       metadata,
       partPreviewByKey: catalogueMock.createPreviewMap([{ colorId: "0", partNumber: "3005" }]),
       partsListResult,
+      stepCalloutMultipliers: { "step-callout:p1:r1": 3 },
+      stepCalloutResult,
     })
     const user = userEvent.setup()
     renderWithProvider(<BaggingPage />)
@@ -1297,6 +1302,13 @@ describe("BaggingPage parts list extraction", () => {
     expect(screen.getByText("Analysis complete")).toBeVisible()
     expect(catalogueMock.fetchPartsListNormalization).toHaveBeenCalled()
     expect(extractionMock.extractPartsListFromPdfDocument).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("tab", { name: "Build steps" }))
+    expect(await screen.findByTestId("step-callout-multiplier-value")).toHaveTextContent("x3")
+    expect(screen.getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute("data-detected-part-count", "3")
+
+    await user.click(screen.getByRole("tab", { name: "Bags" }))
+    expect(await screen.findByTestId("step-bag-part-row")).toHaveAttribute("data-quantity", "3")
   })
 
   it("does not restore a failed upload state when the saved part analysis is current", async () => {
@@ -1412,9 +1424,28 @@ describe("BaggingPage parts list extraction", () => {
     expect(stepOptions).not.toHaveProperty("inventoryRows")
     expect(stepOptions.maxPages).toBeNull()
 
+    await user.click(screen.getByRole("tab", { name: "Build steps" }))
+    const stepDiagnostics = await screen.findByTestId("step-callout-quantity-diagnostics")
+    expect(stepDiagnostics).toHaveAttribute("data-bom-part-count", "14")
+    expect(stepDiagnostics).toHaveAttribute("data-detected-part-count", "1")
+    expect(stepDiagnostics).toHaveAttribute("data-missing-part-count", "13")
+    await user.click(screen.getByRole("button", { name: "Increase step 1 multiplier" }))
+    await waitFor(() =>
+      expect(screen.getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute(
+        "data-detected-part-count",
+        "2",
+      ),
+    )
+
     await user.click(screen.getByRole("tab", { name: "Bags" }))
-    expect(await screen.findByRole("img", { name: "Detected part crop for Bag 1 step 1 item 1" })).toBeVisible()
-    expect(screen.getByTestId("step-bag-part-row")).toHaveAttribute("data-color-name", "Green")
+    const bagPanel = await screen.findByTestId("step-callouts-panel")
+    expect(await within(bagPanel).findByRole("img", { name: "Detected part crop for Bag 1 step 1 item 1" })).toBeVisible()
+    expect(within(bagPanel).getByTestId("step-bag-part-row")).toHaveAttribute("data-color-name", "Green")
+    expect(within(bagPanel).getByTestId("step-bag-part-row")).toHaveAttribute("data-quantity", "2")
+    expect(within(bagPanel).getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute(
+      "data-missing-part-count",
+      "12",
+    )
   })
 
   it("keeps completed step-only detection when the resumed PDF job fails after scanning", async () => {

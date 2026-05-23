@@ -36,6 +36,10 @@ describe("Bag It session files", () => {
         ],
       ]),
       partsListResult,
+      stepCalloutMultipliers: {
+        "missing-callout": 4,
+        "step-callout:p1:r1": 3.8,
+      },
       stepCalloutResult: createStepCalloutResult(),
     })
 
@@ -49,6 +53,7 @@ describe("Bag It session files", () => {
     expect(restored.jobSnapshot).toEqual(jobSnapshot)
     expect(restored.partsListResult).toEqual(partsListResult)
     expect(restored.stepCalloutResult).toEqual(createStepCalloutResult())
+    expect(restored.stepCalloutMultipliers).toEqual({ "step-callout:p1:r1": 3 })
     expect(restored.partPreviewByKey.get("3005:0")?.name).toBe("Brick 1 x 1")
     expect(restored.attemptedPartPreviewKeys.has("3005:0")).toBe(true)
     expect(restored.checkedRowIds.has("2-0-14-3005-0")).toBe(true)
@@ -101,6 +106,7 @@ describe("Bag It session files", () => {
 
     expect(restored.savedStepCalloutDetectorVersion).toBe(stepCalloutDetectorVersion)
     expect(restored.stepCalloutResult).toBeNull()
+    expect(restored.stepCalloutMultipliers).toEqual({})
     expect(isRestoredStepAnalysisCurrent(restored, stepCalloutDetectorVersion)).toBe(false)
     expect(isRestoredAnalysisCurrent(restored, "parts-list-extraction-v26")).toBe(true)
   })
