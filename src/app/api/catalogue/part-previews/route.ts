@@ -281,14 +281,14 @@ async function readGenericPreviewByPartNumber(target: CatalogueSnapshotReadTarge
   ])
   const previews = new Map(
     parseRebrickablePartsCsv(csvText)
-      .filter((part) => part.imageUrl)
       .map((part) => {
         const partNumber = normalizePartNumber(part.partNum)
+        const imageUrl = part.imageUrl ?? getGenericPartImageUrl(partNumber)
 
         return [
           partNumber,
           {
-            imageUrl: part.imageUrl ?? "",
+            imageUrl,
             key: getPartPreviewKey(partNumber),
             ...(part.name ? { name: part.name } : {}),
             partNumber,
@@ -757,6 +757,10 @@ function getPartPreviewKey(partNumber: string, colorId?: string | null) {
 
 function getElementImageUrl(elementId: string) {
   return `https://cdn.rebrickable.com/media/parts/elements/${encodeURIComponent(elementId)}.jpg`
+}
+
+function getGenericPartImageUrl(partNumber: string) {
+  return `https://cdn.rebrickable.com/media/parts/ldraw/${encodeURIComponent(partNumber)}.png`
 }
 
 function normalizePartNumber(partNumber: unknown) {
