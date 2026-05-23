@@ -2,7 +2,7 @@
 
 import { Box, Stack } from "@chakra-ui/react"
 import { Boxes, PackageCheck, Search } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { BaggingOverview } from "@/components/bagging/bagging-overview"
 import { BaggingPageFrame } from "@/components/bagging/bagging-page-frame"
 import { ExtractedPartsPanel, NormalizationAttentionList } from "@/components/bagging/extracted-parts-panel"
@@ -13,7 +13,7 @@ import { PendingOutputPanel } from "@/components/bagging/pending-output-panel"
 import { ProcessingStatusCard, type ProcessingStatusStep } from "@/components/bagging/processing-status-card"
 import { SessionControlsCard } from "@/components/bagging/session-controls-card"
 import {
-  getStepCalloutQuantityDiagnostic,
+  getStepCalloutQuantityDiagnosticForResult,
   StepCalloutDebugPanel,
   StepCalloutMatchingDebugPanel,
   StepCalloutQuantityDiagnosticPanel,
@@ -74,10 +74,7 @@ import {
   type StepCalloutDetectionProgress,
   type StepCalloutDetectionResult,
 } from "@/features/bagging/step-callout-detection"
-import {
-  createStepCalloutBaggingPlan,
-  type StepCalloutMultiplierMap,
-} from "@/features/bagging/step-callout-bagging"
+import type { StepCalloutMultiplierMap } from "@/features/bagging/step-callout-bagging"
 
 type PartsAnalysisProgress = Pick<PartsListPdfExtractionProgress, "message" | "progress"> &
   Partial<
@@ -138,6 +135,7 @@ export function BaggingPage() {
   const [sessionRecoveryNotice, setSessionRecoveryNotice] = useState<SessionRecoveryNotice>(null)
   const [analysisHeartbeat, setAnalysisHeartbeat] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [, startStepCalloutMultiplierTransition] = useTransition()
   const abortControllerRef = useRef<AbortController | null>(null)
   const activeJobIdRef = useRef<string | null>(null)
   const checkedPartRowIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -172,11 +170,9 @@ export function BaggingPage() {
       return null
     }
 
-    return getStepCalloutQuantityDiagnostic(
-      createStepCalloutBaggingPlan(visibleStepCalloutResult, {
-        calloutMultipliers: stepCalloutMultipliers,
-        inventoryPartCount,
-      }),
+    return getStepCalloutQuantityDiagnosticForResult(
+      visibleStepCalloutResult,
+      stepCalloutMultipliers,
       inventoryPartCount,
     )
   }, [inventoryPartCount, stepCalloutMultipliers, visibleStepCalloutResult])
@@ -210,8 +206,10 @@ export function BaggingPage() {
       ? "Find steps"
       : "Bag it!"
   const updateStepCalloutMultiplier = useCallback((calloutId: string, multiplier: number) => {
-    setStepCalloutMultipliers((current) => setStepCalloutMultiplier(current, calloutId, multiplier))
-  }, [])
+    startStepCalloutMultiplierTransition(() => {
+      setStepCalloutMultipliers((current) => setStepCalloutMultiplier(current, calloutId, multiplier))
+    })
+  }, [startStepCalloutMultiplierTransition])
   const loadStepDebugPageRenders = useCallback(async (pageNumbers: readonly number[]): Promise<readonly PdfPrivatePageRender[]> => {
     if (!selectedManualFile || pageNumbers.length === 0 || !canUseBrowserPdfParser()) {
       return []

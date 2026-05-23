@@ -275,6 +275,9 @@ describe("StepCalloutsPanel", () => {
     expect(screen.getByRole("img", { name: "Manual page 3 preview" })).toBeVisible()
     expect(screen.queryByRole("button", { name: "Preview page 3" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Preview step 2 label" })).not.toBeInTheDocument()
+    expect(screen.getByText("1 part type · 2 total parts")).toBeVisible()
+    expect(screen.getByText("2 part types · 3 total parts")).toBeVisible()
+    expect(screen.queryByText(/x10 y20 w200 h140/)).not.toBeInTheDocument()
 
     await user.hover(screen.getByRole("button", { name: "Enlarge step 2 callout" }))
     expect(await screen.findByRole("img", { name: "Step 2 callout enlarged" })).toBeVisible()
@@ -303,13 +306,21 @@ describe("StepCalloutsPanel", () => {
       "x2",
       "x1",
     ])
+    expect(screen.getByText("2 part types · 6 total parts")).toBeVisible()
+    expect(screen.getByText("1 part type · 2 total parts")).toBeVisible()
     expect(screen.getByRole("button", { name: "Decrease step 2 multiplier" })).toBeDisabled()
 
     await user.click(screen.getByRole("button", { name: "Increase step 1 multiplier" }))
     expect(onCalloutMultiplierChange).toHaveBeenLastCalledWith("step-callout:p1:r1", 3)
+    expect(screen.getAllByTestId("step-callout-multiplier-value").map((value) => value.textContent)).toEqual([
+      "x3",
+      "x1",
+    ])
+    expect(partDiagnostic).toHaveAttribute("data-total-quantity", "11")
+    expect(screen.getByText("2 part types · 9 total parts")).toBeVisible()
 
     await user.click(screen.getByRole("button", { name: "Decrease step 1 multiplier" }))
-    expect(onCalloutMultiplierChange).toHaveBeenLastCalledWith("step-callout:p1:r1", 1)
+    expect(onCalloutMultiplierChange).toHaveBeenLastCalledWith("step-callout:p1:r1", 2)
   })
 
   it("renders zero-part callouts in build steps diagnostics", () => {
@@ -322,7 +333,8 @@ describe("StepCalloutsPanel", () => {
     expect(screen.getByText("3 callouts across 2 scanned pages.")).toBeVisible()
     expect(screen.getAllByTestId("step-callout-matching-debug-row")).toHaveLength(3)
     expect(screen.getAllByText(/0 part types/)[0]).toBeVisible()
-    expect(screen.getByText(/x889 y112 w178 h68/)).toBeVisible()
+    expect(screen.getByText("0 part types · 0 total parts")).toBeVisible()
+    expect(screen.queryByText(/x889 y112 w178 h68/)).not.toBeInTheDocument()
     expect(screen.getByText("Not bagged")).toBeVisible()
     expect(screen.queryByRole("button", { name: "Increase step 8 multiplier" })).not.toBeInTheDocument()
   })

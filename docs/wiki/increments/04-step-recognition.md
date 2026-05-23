@@ -191,7 +191,7 @@ to the original build callouts.
   Multipliers are saved in user-owned session bundles alongside current step
   analysis and are dropped when the saved step analysis is stale or structurally
   invalid.
-- As of `step-callout-detection-v104`, the default detector returns to
+- As of `step-callout-detection-v107`, the default detector returns to
   callout-first region detection for performance. Printed step-label OCR and
   label-anchored non-blue callout search remain available behind an explicit
   debug option for manuals where the callout-only path is insufficient. The
@@ -200,9 +200,11 @@ to the original build callouts.
   expected blue interior fill, and either an `x`-delimited quantity label or
   nearby printed-step glyph evidence are enough evidence even when the part
   itself is too small or light to provide separate dark foreground. Weak tiny
-  rectangles still need strong rectangle evidence plus parsed quantity-anchored
-  part items before they can enter Build steps. Zero-part rectangle candidates
-  remain internal detector evidence only, even when they look visually
+  rectangles still need enough true blue-fill share, strong rectangle evidence,
+  and parsed quantity-anchored part items before they can enter Build steps, so
+  neutral grey model panels near printed step labels cannot borrow
+  small-callout context. Zero-part rectangle candidates remain internal
+  detector evidence only, even when they look visually
   callout-like. The part-item cropper accepts isolated single-item `Nx` labels
   on busy part pixels when a foreground part image sits above the label, and the
   quantity classifier distinguishes compact lower-courtyard `9x` labels from

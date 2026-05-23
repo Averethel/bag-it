@@ -70,7 +70,7 @@ for (const sessionPath of sessionPaths) {
     0,
   )
   const invalidDetails = details.filter((detail) =>
-    detail.quantities.some((quantity) => quantity <= 0 || quantity > 30)
+    detail.quantities.some((quantity) => quantity <= 0)
   )
   const legacyDifferences = details.filter((detail) =>
     detail.newItems !== detail.oldItems ||

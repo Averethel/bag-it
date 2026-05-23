@@ -2,7 +2,7 @@
 
 import { Accordion, Badge, Box, Button, Flex, Grid, HoverCard, HStack, Image, Portal, Progress, SimpleGrid, Stack, Text } from "@chakra-ui/react"
 import { ImageIcon, Minus, Plus } from "lucide-react"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { compareColorNames } from "@/features/bagging/color-sort"
 import {
   createStepCalloutBaggingPlan,
@@ -178,21 +178,24 @@ export function StepCalloutMatchingDebugPanel({
   const [loadedPageRenders, setLoadedPageRenders] = useState<readonly PdfPrivatePageRender[]>([])
   const [loadingPageNumbers, setLoadingPageNumbers] = useState<ReadonlySet<number>>(() => new Set())
   const [unavailablePageNumbers, setUnavailablePageNumbers] = useState<ReadonlySet<number>>(() => new Set())
+  const [visibleCalloutMultipliers, setVisibleCalloutMultipliers] =
+    useState<StepCalloutMultiplierMap>(calloutMultipliers)
+  const visibleCalloutMultipliersRef = useRef(visibleCalloutMultipliers)
+  const onCalloutMultiplierChangeRef = useRef(onCalloutMultiplierChange)
   const pageCalloutsByNumber = useMemo(() => getCalloutsByPageNumber(result.callouts), [result.callouts])
   const matchingRows = useMemo(() => getStepCalloutMatchingRows(result), [result])
   const pageGroups = useMemo(
     () => getStepCalloutMatchingPageGroups(matchingRows, result.scannedPageNumbers),
     [matchingRows, result.scannedPageNumbers],
   )
-  const baggingPlan = useMemo(
-    () => createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount }),
-    [calloutMultipliers, inventoryPartCount, result],
-  )
   const quantityDiagnostic = useMemo(
-    () => getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount),
-    [baggingPlan, inventoryPartCount],
+    () => getStepCalloutQuantityDiagnosticForResult(result, visibleCalloutMultipliers, inventoryPartCount),
+    [inventoryPartCount, result, visibleCalloutMultipliers],
   )
-  const partDiagnostic = useMemo(() => getStepCalloutPartDiagnostic(baggingPlan), [baggingPlan])
+  const partDiagnostic = useMemo(
+    () => getStepCalloutPartDiagnosticForResult(result, visibleCalloutMultipliers),
+    [result, visibleCalloutMultipliers],
+  )
   const pageRenderByNumber = useMemo(
     () => mergePageRenderSources(pageRenders, loadedPageRenders),
     [loadedPageRenders, pageRenders],
@@ -206,6 +209,38 @@ export function StepCalloutMatchingDebugPanel({
     [pageRenderByNumber, previewPageNumbers, unavailablePageNumbers],
   )
   const previewPageNumbersToLoadKey = previewPageNumbersToLoad.join(",")
+
+  useLayoutEffect(() => {
+    visibleCalloutMultipliersRef.current = visibleCalloutMultipliers
+    onCalloutMultiplierChangeRef.current = onCalloutMultiplierChange
+  }, [onCalloutMultiplierChange, visibleCalloutMultipliers])
+
+  useEffect(() => {
+    let isCancelled = false
+    visibleCalloutMultipliersRef.current = calloutMultipliers
+
+    queueMicrotask(() => {
+      if (!isCancelled) {
+        setVisibleCalloutMultipliers(calloutMultipliers)
+      }
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [calloutMultipliers, result])
+
+  const updateVisibleCalloutMultiplier = useCallback((calloutId: string, multiplier: number) => {
+    const current = visibleCalloutMultipliersRef.current
+    const next = setStepCalloutMultiplierValue(current, calloutId, multiplier)
+    if (next === current) {
+      return
+    }
+
+    visibleCalloutMultipliersRef.current = next
+    setVisibleCalloutMultipliers(next)
+    onCalloutMultiplierChangeRef.current?.(calloutId, normalizeStepCalloutMultiplierValue(multiplier))
+  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -312,8 +347,8 @@ export function StepCalloutMatchingDebugPanel({
                   loadingPageNumbers,
                   unavailablePageNumbers,
                 )}
-                calloutMultipliers={calloutMultipliers}
-                onCalloutMultiplierChange={onCalloutMultiplierChange}
+                calloutMultipliers={visibleCalloutMultipliers}
+                onCalloutMultiplierChange={updateVisibleCalloutMultiplier}
               />
             ))}
           </Stack>
@@ -613,38 +648,51 @@ const StepCalloutMatchingRow = memo(function StepCalloutMatchingRow({
   onMultiplierChange,
   row,
 }: StepCalloutMatchingRowProps) {
+  const partSummary = formatCalloutPartSummary(row.callout, multiplier)
+
   return (
-    <Box
-      as="tr"
-      data-testid="step-callout-matching-debug-row"
-      data-page-number={row.pageNumber}
-      data-part-type-count={row.callout.partItems.length}
-      data-row-kind="callout"
-      data-source-region={formatSourceRegion(row.callout.sourceRegion)}
-      data-step-index={row.stepIndex}
-      data-step-multiplier={multiplier}
-      _hover={{ bg: "bagging.subtleBg" }}
-    >
-      <Box as="td" borderBottom="sm" borderColor="bagging.rowBorder" p="2" verticalAlign="middle">
-        <StepCalloutStepCell row={row} />
+    <>
+      <Box
+        as="tr"
+        data-testid="step-callout-matching-debug-row"
+        data-page-number={row.pageNumber}
+        data-part-type-count={row.callout.partItems.length}
+        data-row-kind="callout"
+        data-source-region={formatSourceRegion(row.callout.sourceRegion)}
+        data-step-index={row.stepIndex}
+        data-step-multiplier={multiplier}
+        _hover={{ bg: "bagging.subtleBg" }}
+      >
+        <Box as="td" p="2" verticalAlign="middle">
+          <StepCalloutStepCell row={row} />
+        </Box>
+        <Box as="td" p="2" verticalAlign="middle">
+          {row.callout.partItems.length > 0 ? (
+            <StepCalloutMultiplierControl
+              multiplier={multiplier}
+              onMultiplierChange={(nextMultiplier) => onMultiplierChange?.(row.callout.id, nextMultiplier)}
+              stepIndex={row.stepIndex}
+            />
+          ) : (
+            <Text color="fg.muted" fontSize="xs">
+              Not bagged
+            </Text>
+          )}
+        </Box>
+        <Box as="td" p="2" verticalAlign="middle">
+          <StepCalloutCropPreviewHover row={row} />
+        </Box>
       </Box>
-      <Box as="td" borderBottom="sm" borderColor="bagging.rowBorder" p="2" verticalAlign="middle">
-        {row.callout.partItems.length > 0 ? (
-          <StepCalloutMultiplierControl
-            multiplier={multiplier}
-            onMultiplierChange={(nextMultiplier) => onMultiplierChange?.(row.callout.id, nextMultiplier)}
-            stepIndex={row.stepIndex}
-          />
-        ) : (
-          <Text color="fg.muted" fontSize="xs">
-            Not bagged
-          </Text>
-        )}
+      <Box as="tr" _hover={{ bg: "bagging.subtleBg" }}>
+        <td colSpan={3} style={{ padding: 0 }}>
+          <Box borderBottom="sm" borderColor="bagging.rowBorder" px="2" pb="2" pt="bagging.none">
+            <Text color="fg.muted" fontSize="xs">
+              {partSummary}
+            </Text>
+          </Box>
+        </td>
       </Box>
-      <Box as="td" borderBottom="sm" borderColor="bagging.rowBorder" p="2" verticalAlign="middle">
-        <StepCalloutCropPreviewHover row={row} />
-      </Box>
-    </Box>
+    </>
   )
 }, areStepCalloutMatchingRowPropsEqual)
 
@@ -816,9 +864,6 @@ function StepCalloutCropPreviewHover({ row }: { row: StepCalloutMatchingRowData 
             <Stack gap="bagging.none" minW="bagging.zero">
               <Text fontSize="sm" fontWeight="medium" truncate>
                 Callout {callout.indexOnPage}
-              </Text>
-              <Text color="fg.muted" fontSize="xs" truncate>
-                {formatPartTypeCount(callout.partItems.length)} · {formatSourceRegion(callout.sourceRegion)}
               </Text>
             </Stack>
           </HStack>
@@ -1844,15 +1889,33 @@ export function getStepCalloutQuantityDiagnostic(
   plan: StepCalloutBaggingPlan,
   inventoryPartCount?: number | null,
 ): StepCalloutQuantityDiagnostic | null {
-  if (inventoryPartCount == null || inventoryPartCount === plan.detectedPartCount) {
+  return getStepCalloutQuantityDiagnosticForDetectedPartCount(plan.detectedPartCount, inventoryPartCount)
+}
+
+export function getStepCalloutQuantityDiagnosticForResult(
+  result: StepCalloutDetectionResult,
+  calloutMultipliers: StepCalloutMultiplierMap,
+  inventoryPartCount?: number | null,
+): StepCalloutQuantityDiagnostic | null {
+  return getStepCalloutQuantityDiagnosticForDetectedPartCount(
+    getStepCalloutTotalQuantity(result, calloutMultipliers),
+    inventoryPartCount,
+  )
+}
+
+function getStepCalloutQuantityDiagnosticForDetectedPartCount(
+  detectedPartCount: number,
+  inventoryPartCount?: number | null,
+): StepCalloutQuantityDiagnostic | null {
+  if (inventoryPartCount == null || inventoryPartCount === detectedPartCount) {
     return null
   }
 
-  const overagePartCount = Math.max(0, plan.detectedPartCount - inventoryPartCount)
-  const missingPartCount = Math.max(0, inventoryPartCount - plan.detectedPartCount)
+  const overagePartCount = Math.max(0, detectedPartCount - inventoryPartCount)
+  const missingPartCount = Math.max(0, inventoryPartCount - detectedPartCount)
 
   return {
-    detectedPartCount: plan.detectedPartCount,
+    detectedPartCount,
     kind: overagePartCount > 0 ? "overage" : "missing",
     inventoryPartCount,
     missingPartCount,
@@ -1860,13 +1923,13 @@ export function getStepCalloutQuantityDiagnostic(
   }
 }
 
-function getStepCalloutPartDiagnostic(plan: StepCalloutBaggingPlan): StepCalloutPartDiagnosticData {
+function getStepCalloutPartDiagnosticForResult(
+  result: StepCalloutDetectionResult,
+  calloutMultipliers: StepCalloutMultiplierMap,
+): StepCalloutPartDiagnosticData {
   return {
-    partTypeCount: plan.bags.reduce(
-      (sum, bag) => sum + bag.partGroups.reduce((bagSum, group) => bagSum + group.itemCount, 0),
-      0,
-    ),
-    totalQuantity: plan.detectedPartCount,
+    partTypeCount: result.callouts.reduce((sum, callout) => sum + callout.partItems.length, 0),
+    totalQuantity: getStepCalloutTotalQuantity(result, calloutMultipliers),
   }
 }
 
@@ -2028,6 +2091,63 @@ function normalizeStepBagColorName(colorName: string) {
 
 function formatPartTypeCount(count: number) {
   return `${count} ${count === 1 ? "part type" : "part types"}`
+}
+
+function formatTotalPartQuantity(count: number) {
+  return `${stepQuantityFormatter.format(count)} total ${count === 1 ? "part" : "parts"}`
+}
+
+function formatCalloutPartSummary(callout: DetectedStepCallout, multiplier: number) {
+  return `${formatPartTypeCount(callout.partItems.length)} · ${formatTotalPartQuantity(getCalloutTotalQuantity(callout, multiplier))}`
+}
+
+function getStepCalloutTotalQuantity(
+  result: StepCalloutDetectionResult,
+  calloutMultipliers: StepCalloutMultiplierMap,
+) {
+  return result.callouts.reduce(
+    (sum, callout) => sum + getCalloutTotalQuantity(callout, getStepCalloutMultiplier(callout.id, calloutMultipliers)),
+    0,
+  )
+}
+
+function getCalloutTotalQuantity(callout: DetectedStepCallout, multiplier: number) {
+  return callout.partItems.reduce((sum, item) => sum + getCalloutItemQuantity(item) * multiplier, 0)
+}
+
+function getCalloutItemQuantity(item: DetectedStepCalloutPartItem) {
+  const value = item.quantity.value
+
+  return value != null && Number.isFinite(value) && value > 0 ? value : 1
+}
+
+function setStepCalloutMultiplierValue(
+  current: StepCalloutMultiplierMap,
+  calloutId: string,
+  multiplier: number,
+): StepCalloutMultiplierMap {
+  const nextMultiplier = normalizeStepCalloutMultiplierValue(multiplier)
+  const currentMultiplier = getStepCalloutMultiplier(calloutId, current)
+  if (nextMultiplier === currentMultiplier) {
+    return current
+  }
+
+  const next = { ...current }
+  if (nextMultiplier <= 1) {
+    delete next[calloutId]
+  } else {
+    next[calloutId] = nextMultiplier
+  }
+
+  return next
+}
+
+function normalizeStepCalloutMultiplierValue(value: number | undefined) {
+  if (value == null || !Number.isFinite(value)) {
+    return 1
+  }
+
+  return Math.max(1, Math.floor(value))
 }
 
 function formatStepRange(range: { end: number; start: number }) {

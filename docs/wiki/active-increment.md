@@ -99,7 +99,7 @@ target and enter review, but it is not split across physical bags. Undersized
 bags are still merged into the previous bag when possible, and truly tiny bags
 can fold into the previous review range so five-part tail groups do not stand
 alone.
-The `step-callout-detection-v104` default path detects callout rectangles from
+The `step-callout-detection-v107` default path detects callout rectangles from
 callout visual evidence only and assigns fallback build-step indexes in page
 order. The older step-label OCR and label-anchored non-blue callout path remains
 available behind an explicit option for debugging manuals where the callout-only
@@ -108,8 +108,10 @@ gate are admitted from their rectangle structure: paired dark or soft
 anti-aliased borders, expected blue callout fill, and either an `x`-delimited
 quantity label or nearby printed-step glyph evidence are enough evidence even
 when the single part is too small or light to form a separate dark component.
-Weak tiny rectangles still need strong rectangle evidence plus parsed
-quantity-anchored part items before they can enter Build steps. Zero-part
+Weak tiny rectangles still need enough true blue-fill share, strong rectangle
+evidence, and parsed quantity-anchored part items before they can enter Build
+steps, so neutral grey model panels near printed step labels do not borrow
+small-callout context. Zero-part
 rectangle candidates remain internal detector evidence only, even when they
 look visually callout-like. The part-item cropper accepts isolated single-item
 `Nx` labels on busy part pixels when a foreground part image sits above the

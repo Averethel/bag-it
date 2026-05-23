@@ -1,6 +1,6 @@
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v83"
+export const stepCalloutDetectorVersion = "step-callout-detection-v107"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -17,6 +17,8 @@ const stepBomImageMatchThreshold = 0.82
 const stepPartCanonicalGridPadding = 2
 const stepLocalImageMutualBestTolerance = 0.005
 const stepBomImageBestMatchTolerance = 0.02
+const stepCalloutProgressMinDelta = 1
+const stepCalloutProgressMinIntervalMs = 200
 
 export type StepCalloutSourceRegion = {
   height: number
@@ -30,6 +32,22 @@ export type StepCalloutSourceImage = {
   height: number
   unit: "step_pixel"
   width: number
+}
+
+export type DetectedStepNumberLabel = {
+  confidence: number
+  crop: {
+    dataUrl: string
+    height: number
+    width: number
+  }
+  id: string
+  indexOnPage: number
+  pageNumber: number
+  rawValue?: number
+  sourceRegion: StepCalloutSourceRegion
+  value: number
+  valueSource: "ocr" | "sequence"
 }
 
 export type DetectedStepCallout = {
@@ -46,6 +64,7 @@ export type DetectedStepCallout = {
   sourceImage: StepCalloutSourceImage
   sourceRegion: StepCalloutSourceRegion
   stepIndex: number
+  stepLabel?: DetectedStepNumberLabel | null
 }
 
 export type DetectedStepCalloutPartItem = {
@@ -169,11 +188,46 @@ export type StepCalloutDetectionResult = {
   scannedPageNumbers: number[]
   skippedBomPageNumbers: number[]
   status: "detected" | "empty"
+  stepLabels?: DetectedStepNumberLabel[]
+  timings?: StepCalloutDetectionTimings
+}
+
+export type StepCalloutDetectionPageTiming = {
+  calloutCount: number
+  calloutExtractionMs: number
+  pageLoadMs: number
+  pageNumber: number
+  regionDetectionMs: number
+  renderMs: number
+  stepLabelCount: number
+  stepLabelDetectionMs: number
+  textLayerMs: number
+  totalMs: number
+}
+
+export type StepCalloutDetectionTimings = {
+  averagePageMs: number | null
+  bomMatchMs: number
+  calloutExtractionMs: number
+  localImageMatchMs: number
+  pageLoadMs: number
+  pageScanMs: number
+  pages: StepCalloutDetectionPageTiming[]
+  regionDetectionMs: number
+  renderMs: number
+  stepLabelDetectionMs: number
+  textLayerMs: number
+  totalMs: number
 }
 
 export type StepCalloutDetectionProgress = {
+  averagePageMs?: number | null
   currentPage: number | null
+  currentPageElapsedMs?: number
   detectedCalloutCount: number
+  elapsedMs?: number
+  estimatedRemainingMs?: number | null
+  lastPageTiming?: StepCalloutDetectionPageTiming
   message: string
   pageCount: number
   progress: number
@@ -188,6 +242,8 @@ export type StepCalloutDetectionOptions = {
   onProgress?: (progress: StepCalloutDetectionProgress) => void
   renderMaxWidth?: number
   signal?: AbortSignal
+  useNativeTextLayer?: boolean
+  useStepNumberLabels?: boolean
 }
 
 export type StepCalloutInventoryMatchRow = {
@@ -360,6 +416,33 @@ type QuantityLabelAnchorZone = {
   region: PixelRegion
 }
 
+type QuantityAnchorPartRegionResult = {
+  expandedPartRegion?: PixelRegion
+  ownedPartRegion?: PixelRegion
+  partRegion: PixelRegion | null
+  rawPartRegion?: PixelRegion
+  reason?: string
+  searchRegion?: PixelRegion
+}
+
+type StepNumberLabel = {
+  confidence: number
+  rawValue?: number
+  region: PixelRegion
+  value: number
+  valueSource?: "ocr" | "sequence"
+}
+
+type StepAnchoredCalloutRegion = {
+  region: RegionCandidate
+  stepLabel?: StepNumberLabel
+  stepIndex: number
+}
+
+type HorizontalBorderSegment = PixelRegion & {
+  darkRatio: number
+}
+
 export async function detectStepCalloutsFromPdfDocument(
   document: PdfReadableDocument,
   {
@@ -369,22 +452,33 @@ export async function detectStepCalloutsFromPdfDocument(
     onProgress,
     renderMaxWidth = defaultRenderMaxWidth,
     signal,
+    useNativeTextLayer = false,
+    useStepNumberLabels = false,
   }: StepCalloutDetectionOptions = {},
 ): Promise<StepCalloutDetectionResult> {
+  const detectionStartedAt = getNowMs()
   const excludedPages = new Set(excludedPageNumbers)
   const pageNumbers = getInitialStepCalloutPageNumbers(document.numPages, excludedPages, maxPages)
   const callouts: DetectedStepCallout[] = []
   const partFeatureEntries: StepCalloutPartItemFeatureEntry[] = []
+  const pageTimings: StepCalloutDetectionPageTiming[] = []
+  const publishProgress = createStepCalloutProgressPublisher(onProgress)
+  const stepLabels: DetectedStepNumberLabel[] = []
+  let nextFallbackStepIndex = 1
+  let localImageMatchMs = 0
+  let bomMatchMs = 0
 
-  onProgress?.({
+  publishProgress({
     currentPage: null,
     detectedCalloutCount: 0,
+    elapsedMs: 0,
+    estimatedRemainingMs: null,
     message: `Preparing step callout scan for ${pageNumbers.length} pages.`,
     pageCount: document.numPages,
     progress: pageNumbers.length === 0 ? 100 : 5,
     scannedPageCount: 0,
     targetPageCount: pageNumbers.length,
-  })
+  }, { force: true })
 
   if (!document.getPage || typeof globalThis.document === "undefined") {
     return createStepCalloutDetectionResult({
@@ -393,14 +487,31 @@ export async function detectStepCalloutsFromPdfDocument(
       excludedPages,
       maxPages,
       pageNumbers,
+      stepLabels,
+      timings: createStepCalloutDetectionTimings({
+        bomMatchMs,
+        detectionStartedAt,
+        localImageMatchMs,
+        pageTimings,
+      }),
     })
   }
 
   for (const [pageIndex, pageNumber] of pageNumbers.entries()) {
     assertStepCalloutDetectionCanContinue(signal)
-    onProgress?.({
+    const pageStartedAt = getNowMs()
+    const pageTiming = createEmptyStepCalloutDetectionPageTiming(pageNumber)
+
+    publishProgress({
       currentPage: pageNumber,
+      currentPageElapsedMs: 0,
       detectedCalloutCount: callouts.length,
+      ...createStepCalloutProgressTimingFields({
+        detectionStartedAt,
+        pageTimings,
+        scannedPageCount: pageIndex,
+        targetPageCount: pageNumbers.length,
+      }),
       message: `Scanning page ${pageNumber} for step callouts.`,
       pageCount: document.numPages,
       progress: getStepCalloutProgress(pageIndex, pageNumbers.length, 0.15),
@@ -408,77 +519,182 @@ export async function detectStepCalloutsFromPdfDocument(
       targetPageCount: pageNumbers.length,
     })
 
-    const page = await document.getPage!(pageNumber)
+    let page: PdfReadablePage | null = null
     try {
-      const renderedPage = await renderPdfPageForStepCallouts(page, { renderMaxWidth, signal })
-      if (!renderedPage) {
-        continue
-      }
+      const pageLoadStartedAt = getNowMs()
+      page = await document.getPage!(pageNumber)
+      pageTiming.pageLoadMs += getElapsedMs(pageLoadStartedAt)
 
-      const nativeTextItems = await extractStepPageTextItems(page, {
-        scale: renderedPage.scale,
-        viewportHeight: renderedPage.viewportHeight,
-      })
-      const regions = detectStepCalloutRegionsFromImageData(renderedPage.imageData)
-      const pageCallouts = regions.map((region, index) => {
-        const paddedRegion = padRegion(region, renderedPage.canvas.width, renderedPage.canvas.height, cropPaddingPixels)
-        const calloutCanvas = cropCanvasRegionToCanvas(renderedPage.canvas, paddedRegion)
-        const calloutCrop = createCanvasCrop(calloutCanvas)
-        const calloutIndex = callouts.length + index
-        const stepIndex = calloutIndex + 1
-        const partItems = detectStepCalloutPartItemsFromCanvas(calloutCanvas, {
-          calloutIdPrefix: `step-callout:p${pageNumber}:r${index + 1}`,
-          calloutIndex,
-          nativeTextItems,
-          pageOffsetX: paddedRegion.x,
-          pageOffsetY: paddedRegion.y,
-          partFeatureEntries,
-          stepIndex,
-        })
+      try {
+        const renderStartedAt = getNowMs()
+        const renderedPage = await renderPdfPageForStepCallouts(page, { renderMaxWidth, signal })
+        pageTiming.renderMs += getElapsedMs(renderStartedAt)
+        if (renderedPage) {
+          const regionDetectionStartedAt = getNowMs()
+          const fillRegions = detectStepCalloutRegionsFromImageData(renderedPage.imageData)
+          pageTiming.regionDetectionMs += getElapsedMs(regionDetectionStartedAt)
 
-        return {
-          confidence: region.confidence,
-          crop: calloutCrop,
-          id: `step-callout:p${pageNumber}:r${index + 1}:x${paddedRegion.x}:y${paddedRegion.y}:w${paddedRegion.width}:h${paddedRegion.height}`,
-          indexOnPage: index + 1,
-          pageNumber,
-          partItems,
-          sourceImage: {
-            height: renderedPage.canvas.height,
-            unit: "step_pixel" as const,
-            width: renderedPage.canvas.width,
-          },
-          sourceRegion: {
-            height: paddedRegion.height,
-            unit: "step_pixel" as const,
-            width: paddedRegion.width,
-            x: paddedRegion.x,
-            y: paddedRegion.y,
-          },
-          stepIndex,
+          let regions = mergeStepCalloutRegionCandidates(fillRegions)
+          let stepNumberLabels: StepNumberLabel[] = []
+          if (useStepNumberLabels) {
+            const stepLabelDetectionStartedAt = getNowMs()
+            const rawStepNumberLabels = detectStepNumberLabelsFromImageData(renderedPage.imageData)
+            const candidateStepNumberLabels = selectSequenceStepNumberLabels(
+              stabilizeConsecutiveStepNumberLabelRun(
+                normalizeStepNumberLabelsForSequence(
+                  rejectStepNumberLabelsInsideCalloutRegions(rawStepNumberLabels, fillRegions, renderedPage.imageData),
+                  nextFallbackStepIndex,
+                ),
+                nextFallbackStepIndex,
+              ),
+              nextFallbackStepIndex,
+            )
+            const labelRegions = detectStepLabelAnchoredCalloutRegionsFromImageData(
+              renderedPage.imageData,
+              candidateStepNumberLabels,
+              fillRegions,
+            )
+            regions = mergeStepCalloutRegionCandidates([...fillRegions, ...labelRegions])
+            stepNumberLabels = selectSequenceStepNumberLabels(
+              stabilizeConsecutiveStepNumberLabelRun(
+                normalizeStepNumberLabelsForSequence(
+                  rejectStepNumberLabelsInsideCalloutRegions(rawStepNumberLabels, regions, renderedPage.imageData),
+                  nextFallbackStepIndex,
+                ),
+                nextFallbackStepIndex,
+              ),
+              nextFallbackStepIndex,
+            )
+            pageTiming.stepLabelDetectionMs += getElapsedMs(stepLabelDetectionStartedAt)
+          }
+
+          const textLayerStartedAt = getNowMs()
+          const nativeTextItems = useNativeTextLayer
+            ? await extractStepPageTextItems(page, {
+                scale: renderedPage.scale,
+                viewportHeight: renderedPage.viewportHeight,
+              })
+            : []
+          pageTiming.textLayerMs += getElapsedMs(textLayerStartedAt)
+
+          const calloutExtractionStartedAt = getNowMs()
+          const detectedStepLabelBySource = new Map<StepNumberLabel, DetectedStepNumberLabel>()
+          const pageStepLabels = stepNumberLabels.map((label, labelIndex) => {
+            const detectedLabel = createDetectedStepNumberLabel(renderedPage.canvas, pageNumber, label, labelIndex + 1)
+            detectedStepLabelBySource.set(label, detectedLabel)
+            return detectedLabel
+          })
+          stepLabels.push(...pageStepLabels)
+          pageTiming.stepLabelCount = pageStepLabels.length
+          const anchoredRegions = assignCalloutRegionsFromStepNumberLabels(
+            regions,
+            stepNumberLabels,
+            nextFallbackStepIndex,
+          )
+          const unavailablePageStepIndexes = new Set(stepNumberLabels.map((label) => label.value))
+          let nextPageFallbackStepIndex = nextFallbackStepIndex
+          const pageCallouts: DetectedStepCallout[] = []
+          for (const [index, { region, stepIndex: anchoredStepIndex, stepLabel }] of anchoredRegions.entries()) {
+            let stepIndex = anchoredStepIndex
+            if (!stepLabel) {
+              while (unavailablePageStepIndexes.has(nextPageFallbackStepIndex)) {
+                nextPageFallbackStepIndex += 1
+              }
+              stepIndex = nextPageFallbackStepIndex
+            }
+            const paddedRegion = padRegion(region, renderedPage.canvas.width, renderedPage.canvas.height, cropPaddingPixels)
+            const calloutCanvas = cropCanvasRegionToCanvas(renderedPage.canvas, paddedRegion)
+            const calloutCrop = createCanvasCrop(calloutCanvas)
+            const calloutIndex = callouts.length + pageCallouts.length
+            const partItems = detectStepCalloutPartItemsFromCanvas(calloutCanvas, {
+              calloutIdPrefix: `step-callout:p${pageNumber}:r${index + 1}`,
+              calloutIndex,
+              nativeTextItems,
+              pageOffsetX: paddedRegion.x,
+              pageOffsetY: paddedRegion.y,
+              partFeatureEntries,
+              stepIndex,
+            })
+
+            if (partItems.length === 0) {
+              continue
+            }
+
+            const indexOnPage = pageCallouts.length + 1
+            if (!stepLabel) {
+              unavailablePageStepIndexes.add(stepIndex)
+              nextPageFallbackStepIndex = stepIndex + 1
+            }
+
+            pageCallouts.push({
+              confidence: region.confidence,
+              crop: calloutCrop,
+              id: `step-callout:p${pageNumber}:r${indexOnPage}:x${paddedRegion.x}:y${paddedRegion.y}:w${paddedRegion.width}:h${paddedRegion.height}`,
+              indexOnPage,
+              pageNumber,
+              partItems,
+              sourceImage: {
+                height: renderedPage.canvas.height,
+                unit: "step_pixel" as const,
+                width: renderedPage.canvas.width,
+              },
+              sourceRegion: {
+                height: paddedRegion.height,
+                unit: "step_pixel" as const,
+                width: paddedRegion.width,
+                x: paddedRegion.x,
+                y: paddedRegion.y,
+              },
+              stepIndex,
+              stepLabel: stepLabel ? detectedStepLabelBySource.get(stepLabel) ?? null : null,
+            })
+          }
+          pageTiming.calloutExtractionMs += getElapsedMs(calloutExtractionStartedAt)
+          pageTiming.calloutCount = pageCallouts.length
+          callouts.push(...pageCallouts)
+          nextFallbackStepIndex = getNextFallbackStepIndex(nextFallbackStepIndex, stepNumberLabels, pageCallouts)
         }
-      })
-      callouts.push(...pageCallouts)
+      } finally {
+        page.cleanup?.()
+      }
     } finally {
-      page.cleanup?.()
+      pageTiming.totalMs = getElapsedMs(pageStartedAt)
+      pageTimings.push(roundStepCalloutDetectionPageTiming(pageTiming))
     }
 
-    onProgress?.({
+    const lastPageTiming = pageTimings.at(-1)
+    publishProgress({
       currentPage: pageNumber,
+      currentPageElapsedMs: lastPageTiming?.totalMs,
       detectedCalloutCount: callouts.length,
+      lastPageTiming,
+      ...createStepCalloutProgressTimingFields({
+        detectionStartedAt,
+        pageTimings,
+        scannedPageCount: pageIndex + 1,
+        targetPageCount: pageNumbers.length,
+      }),
       message: `Finished page ${pageNumber}; ${callouts.length} step callouts detected so far.`,
       pageCount: document.numPages,
       progress: getStepCalloutProgress(pageIndex + 1, pageNumbers.length, 1),
       scannedPageCount: pageIndex + 1,
       targetPageCount: pageNumbers.length,
-    })
+    }, { force: pageIndex === pageNumbers.length - 1 })
+
+    if (pageIndex < pageNumbers.length - 1) {
+      await yieldStepCalloutPageScan(signal)
+    }
   }
 
+  const localImageMatchStartedAt = getNowMs()
   const groupedCallouts = groupStepCalloutPartItemsByLocalImageMatch(callouts, partFeatureEntries)
+  localImageMatchMs += getElapsedMs(localImageMatchStartedAt)
+  const bomMatchStartedAt = getNowMs()
   const inventoryMatchedCallouts = await matchStepCalloutPartItemsToBomRows(document, groupedCallouts, partFeatureEntries, {
     inventoryRows,
     signal,
   })
+  bomMatchMs += getElapsedMs(bomMatchStartedAt)
 
   return createStepCalloutDetectionResult({
     callouts: inventoryMatchedCallouts,
@@ -486,6 +702,13 @@ export async function detectStepCalloutsFromPdfDocument(
     excludedPages,
     maxPages,
     pageNumbers,
+    stepLabels,
+    timings: createStepCalloutDetectionTimings({
+      bomMatchMs,
+      detectionStartedAt,
+      localImageMatchMs,
+      pageTimings,
+    }),
   })
 }
 
@@ -508,6 +731,14 @@ export function getInitialStepCalloutPageNumbers(
 }
 
 export function detectStepCalloutRegionsFromImageData(imageData: DetectionImageData): RegionCandidate[] {
+  const nativeCandidates = detectNativeStepCalloutRegionsFromImageData(imageData)
+  const scaledCandidates = detectDownscaledStepCalloutRegionsFromImageData(imageData)
+
+  return suppressOverlappingCandidates([...nativeCandidates, ...scaledCandidates])
+    .sort((left, right) => left.y - right.y || left.x - right.x)
+}
+
+function detectNativeStepCalloutRegionsFromImageData(imageData: DetectionImageData): RegionCandidate[] {
   const background = samplePageBackground(imageData)
   const fillMask = createCalloutFillMask(imageData, background)
   const visited = new Uint8Array(imageData.width * imageData.height)
@@ -525,8 +756,1326 @@ export function detectStepCalloutRegionsFromImageData(imageData: DetectionImageD
     }
   }
 
+  const smallBorderedCandidates = detectSmallBorderedStepCalloutRegionsFromImageData(imageData)
+
+  return suppressOverlappingCandidates([...candidates, ...smallBorderedCandidates])
+    .sort((left, right) => left.y - right.y || left.x - right.x)
+}
+
+function detectDownscaledStepCalloutRegionsFromImageData(imageData: DetectionImageData): RegionCandidate[] {
+  const targetWidth = 450
+  if (imageData.width <= targetWidth * 1.45) {
+    return []
+  }
+
+  const scale = targetWidth / imageData.width
+  const downscaledImageData = downscaleDetectionImageData(imageData, scale)
+  const downscaledCandidates = detectNativeStepCalloutRegionsFromImageData(downscaledImageData)
+  const standardMinWidth = getMinimumStepCalloutRegionWidth(imageData)
+  const standardMinHeight = getMinimumStepCalloutRegionHeight(imageData)
+
+  return downscaledCandidates
+    .map((candidate) => createDownscaledStepCalloutRegionCandidate(imageData, candidate, scale))
+    .filter((candidate): candidate is RegionCandidate => Boolean(candidate))
+    .filter((candidate) => candidate.width < standardMinWidth || candidate.height < standardMinHeight)
+}
+
+function downscaleDetectionImageData(imageData: DetectionImageData, scale: number): DetectionImageData {
+  const width = Math.max(1, Math.round(imageData.width * scale))
+  const height = Math.max(1, Math.round(imageData.height * scale))
+  const data = new Uint8ClampedArray(width * height * 4)
+
+  for (let y = 0; y < height; y += 1) {
+    const sourceYStart = Math.max(0, Math.floor(y / scale))
+    const sourceYEnd = Math.min(imageData.height, Math.max(sourceYStart + 1, Math.ceil((y + 1) / scale)))
+
+    for (let x = 0; x < width; x += 1) {
+      const sourceXStart = Math.max(0, Math.floor(x / scale))
+      const sourceXEnd = Math.min(imageData.width, Math.max(sourceXStart + 1, Math.ceil((x + 1) / scale)))
+      let r = 0
+      let g = 0
+      let b = 0
+      let a = 0
+      let count = 0
+
+      for (let sourceY = sourceYStart; sourceY < sourceYEnd; sourceY += 1) {
+        for (let sourceX = sourceXStart; sourceX < sourceXEnd; sourceX += 1) {
+          const sourceIndex = ((sourceY * imageData.width) + sourceX) * 4
+          r += imageData.data[sourceIndex] ?? 0
+          g += imageData.data[sourceIndex + 1] ?? 0
+          b += imageData.data[sourceIndex + 2] ?? 0
+          a += imageData.data[sourceIndex + 3] ?? 255
+          count += 1
+        }
+      }
+
+      const targetIndex = ((y * width) + x) * 4
+      data[targetIndex] = Math.round(r / Math.max(1, count))
+      data[targetIndex + 1] = Math.round(g / Math.max(1, count))
+      data[targetIndex + 2] = Math.round(b / Math.max(1, count))
+      data[targetIndex + 3] = Math.round(a / Math.max(1, count))
+    }
+  }
+
+  return { data, height, width }
+}
+
+function createDownscaledStepCalloutRegionCandidate(
+  imageData: DetectionImageData,
+  downscaledCandidate: RegionCandidate,
+  scale: number,
+): RegionCandidate | null {
+  const minWidth = getMinimumSmallStepCalloutRegionWidth(imageData)
+  const minHeight = getMinimumSmallStepCalloutRegionHeight(imageData)
+  const standardMinWidth = getMinimumStepCalloutRegionWidth(imageData)
+  const standardMinHeight = getMinimumStepCalloutRegionHeight(imageData)
+  const maxWidth = Math.max(standardMinWidth * 1.35, minWidth * 3.2)
+  const maxHeight = Math.max(standardMinHeight * 1.35, minHeight * 3.2)
+  const rawRegion = normalizeRegion({
+    height: Math.ceil(downscaledCandidate.height / scale) + 4,
+    width: Math.ceil(downscaledCandidate.width / scale) + 4,
+    x: Math.floor(downscaledCandidate.x / scale) - 2,
+    y: Math.floor(downscaledCandidate.y / scale) - 2,
+  }, imageData.width, imageData.height)
+  const searchRadius = Math.max(3, Math.round(Math.min(imageData.width, imageData.height) * 0.005))
+  const region = snapRegionToDarkBorder(imageData, rawRegion, searchRadius)
+  const isSmallRegion = region.width < standardMinWidth || region.height < standardMinHeight
+
+  if (
+    !isSmallRegion ||
+    region.width < minWidth ||
+    region.height < minHeight ||
+    region.width > maxWidth ||
+    region.height > maxHeight
+  ) {
+    return null
+  }
+
+  const borderScore = getRegionBorderScore(imageData, region, isSoftStepCalloutBorderPixel)
+  const fillRatio = getCalloutInteriorFillEvidenceRatio(imageData, region)
+  if (!hasSmallStepCalloutBlueFillEvidence(imageData, region)) {
+    return null
+  }
+  if (borderScore < 0.26 || fillRatio < 0.1 || !hasSmallStepCalloutAcceptanceEvidence(imageData, region)) {
+    return null
+  }
+
+  return {
+    ...region,
+    borderScore,
+    confidence: clamp(0.16 + (downscaledCandidate.confidence * 0.18) + (fillRatio * 0.22) + (borderScore * 0.44), 0, 1),
+    fillRatio,
+  }
+}
+
+function detectSmallBorderedStepCalloutRegionsFromImageData(imageData: DetectionImageData): RegionCandidate[] {
+  const minWidth = getMinimumSmallStepCalloutRegionWidth(imageData)
+  const minHeight = getMinimumSmallStepCalloutRegionHeight(imageData)
+  const standardMinWidth = getMinimumStepCalloutRegionWidth(imageData)
+  const standardMinHeight = getMinimumStepCalloutRegionHeight(imageData)
+  const maxWidth = Math.max(standardMinWidth * 1.35, minWidth * 3.2)
+  const maxHeight = Math.max(standardMinHeight * 1.35, minHeight * 3.2)
+  const segments = collectHorizontalBorderSegments(
+    imageData,
+    Math.max(14, Math.round(minWidth * 0.68)),
+    {
+      minDarkRatio: 0.52,
+      pixelMatcher: isSoftStepCalloutBorderPixel,
+    },
+  )
+    .filter((segment) => segment.width >= minWidth && segment.width <= maxWidth)
+  const candidates: RegionCandidate[] = []
+
+  for (let topIndex = 0; topIndex < segments.length; topIndex += 1) {
+    const topSegment = segments[topIndex]
+    if (!topSegment) {
+      continue
+    }
+
+    for (let bottomIndex = topIndex + 1; bottomIndex < segments.length; bottomIndex += 1) {
+      const bottomSegment = segments[bottomIndex]
+      if (!bottomSegment) {
+        continue
+      }
+
+      const height = bottomSegment.y - topSegment.y + bottomSegment.height
+      if (height > maxHeight) {
+        break
+      }
+      if (height < minHeight || getHorizontalOverlapRatio(topSegment, bottomSegment) < 0.72) {
+        continue
+      }
+
+      const rawRegion = createRegionFromBorderSegments(topSegment, bottomSegment, imageData)
+      const candidate = createSmallBorderedStepCalloutRegionCandidate(imageData, rawRegion, maxWidth, maxHeight)
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+  }
+
+  return mergeStackedSmallBorderedRegionFragments(imageData, candidates, maxWidth, maxHeight)
+    .filter((candidate) => hasSmallStepCalloutPartItemRegionEvidence(imageData, candidate))
+}
+
+function mergeStackedSmallBorderedRegionFragments(
+  imageData: DetectionImageData,
+  candidates: readonly RegionCandidate[],
+  maxWidth: number,
+  maxHeight: number,
+) {
+  const merged: RegionCandidate[] = []
+
+  for (const candidate of [...candidates].sort((left, right) => left.y - right.y || left.x - right.x)) {
+    const previous = merged.at(-1)
+    if (!previous || !areStackedSmallBorderedRegionFragments(previous, candidate)) {
+      merged.push(candidate)
+      continue
+    }
+
+    const mergedCandidate = createMergedStackedSmallBorderedRegionCandidate(
+      imageData,
+      previous,
+      candidate,
+      maxWidth,
+      maxHeight,
+    )
+
+    merged[merged.length - 1] = mergedCandidate ?? (
+      isBetterDuplicateRegionCandidate(candidate, previous) ? candidate : previous
+    )
+  }
+
+  return merged
+}
+
+function createMergedStackedSmallBorderedRegionCandidate(
+  imageData: DetectionImageData,
+  first: RegionCandidate,
+  second: RegionCandidate,
+  maxWidth: number,
+  maxHeight: number,
+): RegionCandidate | null {
+  const region = unionRegions([first, second])
+  if (!region || region.width > maxWidth || region.height > maxHeight) {
+    return null
+  }
+
+  const fillRatio = getCalloutInteriorFillEvidenceRatio(imageData, region)
+  if (fillRatio < 0.12) {
+    return null
+  }
+
+  return {
+    ...region,
+    borderScore: Math.max(first.borderScore, second.borderScore),
+    confidence: Math.max(first.confidence, second.confidence),
+    fillRatio,
+  }
+}
+
+function areStackedSmallBorderedRegionFragments(left: PixelRegion, right: PixelRegion) {
+  if (getHorizontalOverlapRatio(left, right) < 0.82) {
+    return false
+  }
+
+  const verticalGap = Math.max(0, Math.max(left.y, right.y) - Math.min(left.y + left.height, right.y + right.height))
+
+  return verticalGap <= Math.max(3, Math.round(Math.min(left.height, right.height) * 0.24))
+}
+
+function detectStepLabelAnchoredCalloutRegionsFromImageData(
+  imageData: DetectionImageData,
+  stepNumberLabels: readonly StepNumberLabel[],
+  existingRegions: readonly RegionCandidate[] = [],
+) {
+  const labelsNeedingAnchoredSearch = stepNumberLabels.filter((label) =>
+    !existingRegions.some((region) => getStepNumberLabelCalloutScore(label, region) <= 1.15)
+  )
+  if (labelsNeedingAnchoredSearch.length === 0) {
+    return []
+  }
+
+  const minWidth = getMinimumStepLabelAnchoredCalloutRegionWidth(imageData)
+  const horizontalSegments = collectHorizontalBorderSegments(imageData, minWidth)
+  const candidates = labelsNeedingAnchoredSearch.flatMap((label) =>
+    createStepLabelAnchoredCalloutRegionCandidates(imageData, label, horizontalSegments)
+  )
+
   return suppressOverlappingCandidates(candidates)
     .sort((left, right) => left.y - right.y || left.x - right.x)
+}
+
+function mergeStepCalloutRegionCandidates(candidates: readonly RegionCandidate[]) {
+  return suppressOverlappingCandidates(candidates)
+    .sort((left, right) => left.y - right.y || left.x - right.x)
+}
+
+function detectStepNumberLabelsFromImageData(
+  imageData: DetectionImageData,
+  calloutRegions: readonly PixelRegion[] = [],
+): StepNumberLabel[] {
+  const pageRegion = {
+    height: imageData.height,
+    width: imageData.width,
+    x: 0,
+    y: 0,
+  }
+  const excludedRegions = calloutRegions.map((region) =>
+    padRegion(region, imageData.width, imageData.height, 4)
+  )
+  const digitComponents = collectStepNumberTextComponents(imageData, pageRegion, excludedRegions)
+    .filter((component) => isLikelyStepNumberDigitComponent(imageData, component))
+    .map((component) => ({
+      classification: classifyStepNumberGlyph(imageData, component),
+      component,
+    }))
+    .filter((entry): entry is { classification: QuantityGlyphClassification; component: DarkComponent } => {
+      const classification = entry.classification
+      if (!classification) {
+        return false
+      }
+
+      return classification.char !== "x" && classification.confidence >= 0.52
+    })
+    .sort((left, right) =>
+      getRegionCenterY(left.component) - getRegionCenterY(right.component) ||
+      left.component.x - right.component.x
+    )
+
+  if (digitComponents.length === 0) {
+    return []
+  }
+
+  const medianHeight = median(digitComponents.map((entry) => entry.component.height)) ?? 48
+  const lineTolerance = Math.max(16, Math.round(medianHeight * 0.36))
+  const lines: Array<typeof digitComponents> = []
+  for (const digit of digitComponents) {
+    const line = lines.find((candidateLine) =>
+      Math.abs(getRegionCenterY(candidateLine[0]?.component ?? digit.component) - getRegionCenterY(digit.component)) <=
+        lineTolerance
+    )
+    if (line) {
+      line.push(digit)
+    } else {
+      lines.push([digit])
+    }
+  }
+
+  const labels: StepNumberLabel[] = []
+  for (const line of lines) {
+    const sortedLine = [...line].sort((left, right) => left.component.x - right.component.x)
+    const maxDigitGap = Math.max(14, Math.round(medianHeight * 0.32))
+    let group: typeof sortedLine = []
+    for (const digit of sortedLine) {
+      const previous = group.at(-1)
+      if (previous && digit.component.x - (previous.component.x + previous.component.width) > maxDigitGap) {
+        addStepNumberLabel(labels, group)
+        group = []
+      }
+      group.push(digit)
+    }
+    addStepNumberLabel(labels, group)
+  }
+
+  return suppressOverlappingStepNumberLabels(labels)
+    .sort((left, right) => left.region.y - right.region.y || left.region.x - right.region.x)
+}
+
+export function debugDetectStepNumberLabelsFromImageData(
+  imageData: DetectionImageData,
+  calloutRegions: readonly PixelRegion[] = [],
+) {
+  return detectStepNumberLabelsFromImageData(imageData, calloutRegions)
+}
+
+export function debugDetectStepNumberGlyphsFromImageData(
+  imageData: DetectionImageData,
+  calloutRegions: readonly PixelRegion[] = [],
+) {
+  const pageRegion = {
+    height: imageData.height,
+    width: imageData.width,
+    x: 0,
+    y: 0,
+  }
+  const excludedRegions = calloutRegions.map((region) =>
+    padRegion(region, imageData.width, imageData.height, 4)
+  )
+
+  return collectStepNumberTextComponents(imageData, pageRegion, excludedRegions)
+    .filter((component) => isLikelyStepNumberDigitComponent(imageData, component))
+    .map((component) => {
+      const densities = getQuantityGlyphDensities(imageData, component)
+      const templateScores = quantityGlyphTemplates
+        .filter((template) => template.char !== "x")
+        .map((template) => ({
+          char: template.char,
+          confidence: scoreQuantityGlyphTemplate(densities, template.pattern),
+        }))
+        .sort((left, right) => right.confidence - left.confidence)
+
+      return {
+        aspectRatio: component.width / Math.max(1, component.height),
+        classification: classifyStepNumberGlyph(imageData, component),
+        component,
+        densities,
+        templateScores,
+      }
+    })
+}
+
+export function debugClassifyStepNumberGlyphDensities(
+  densities: readonly number[],
+  aspectRatio: number,
+) {
+  return classifyStepNumberGlyphDensities(densities, aspectRatio)
+}
+
+function addStepNumberLabel(
+  labels: StepNumberLabel[],
+  digits: Array<{ classification: QuantityGlyphClassification; component: DarkComponent }>,
+) {
+  if (digits.length === 0 || digits.length > 4) {
+    return
+  }
+  const text = digits.map((digit) => digit.classification.char).join("")
+  const value = Number.parseInt(text, 10)
+  const region = unionRegions(digits.map((digit) => digit.component))
+  if (!region || !Number.isFinite(value) || value <= 0) {
+    return
+  }
+
+  labels.push({
+    confidence: digits.reduce((sum, digit) => sum + digit.classification.confidence, 0) / digits.length,
+    region,
+    value,
+    valueSource: "ocr",
+  })
+}
+
+function classifyStepNumberGlyph(
+  imageData: DetectionImageData,
+  glyphRegion: PixelRegion,
+): QuantityGlyphClassification | null {
+  const aspectRatio = glyphRegion.width / Math.max(1, glyphRegion.height)
+  const densities = getQuantityGlyphDensities(imageData, glyphRegion)
+
+  return classifyStepNumberGlyphDensities(densities, aspectRatio)
+}
+
+function classifyStepNumberGlyphDensities(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const featureClassification = classifyLargeStepNumberGlyphByFeatures(densities, aspectRatio)
+  if (featureClassification) {
+    return featureClassification
+  }
+
+  if (aspectRatio < 0.52) {
+    return { char: "1", confidence: 0.78 }
+  }
+
+  const bestTemplate = quantityGlyphTemplates
+    .filter((template) => template.char !== "x")
+    .map((template) => ({
+      char: template.char,
+      confidence: scoreQuantityGlyphTemplate(densities, template.pattern),
+    }))
+    .sort((left, right) => right.confidence - left.confidence)[0]
+  if (!bestTemplate || bestTemplate.confidence < 0.5) {
+    return null
+  }
+
+  return bestTemplate
+}
+
+function classifyLargeStepNumberGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 2)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeftCorner = getQuantityGridAreaDensity(densities, 0, 0, 2, 2)
+  const rightStem = getQuantityGridAreaDensity(densities, 3, 0, 1, 7)
+  const upperRightStem = getQuantityGridAreaDensity(densities, 3, 0, 1, 4)
+  const lowerRightStem = getQuantityGridAreaDensity(densities, 3, 3, 1, 4)
+  const lowerCrossbar = getQuantityGridAreaDensity(densities, 0, 4, 5, 2)
+  const lowerLeftMiddle = getQuantityGridAreaDensity(densities, 0, 3, 2, 3)
+
+  if (
+    aspectRatio >= 0.5 &&
+    aspectRatio <= 0.95 &&
+    rightStem > 0.76 &&
+    upperRightStem > 0.76 &&
+    lowerRightStem > 0.76 &&
+    lowerCrossbar > 0.5 &&
+    lowerLeftMiddle > 0.36 &&
+    upperLeftCorner < 0.28 &&
+    bottom < 0.6
+  ) {
+    return { char: "4", confidence: 0.84 }
+  }
+
+  const rightUpper = getQuantityGridAreaDensity(densities, 2, 1, 3, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 3, 3)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 3)
+  const center = getQuantityGridAreaDensity(densities, 2, 0, 1, 7)
+
+  if (
+    aspectRatio >= 0.72 &&
+    aspectRatio <= 1.25 &&
+    top > 0.34 &&
+    middle > 0.3 &&
+    bottom > 0.4 &&
+    rightUpper > 0.32 &&
+    lowerLeft > lowerRight + 0.08 &&
+    center > 0.46
+  ) {
+    return { char: "2", confidence: 0.82 }
+  }
+
+  return null
+}
+
+function isStepNumberTextPixel(imageData: DetectionImageData, x: number, y: number) {
+  const dataIndex = ((Math.floor(y) * imageData.width) + Math.floor(x)) * 4
+  const alpha = imageData.data[dataIndex + 3] ?? 255
+  if (alpha < 32) {
+    return false
+  }
+
+  const r = imageData.data[dataIndex] ?? 0
+  const g = imageData.data[dataIndex + 1] ?? 0
+  const b = imageData.data[dataIndex + 2] ?? 0
+  const brightness = (r + g + b) / 3
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b)
+
+  return brightness < 118 && chroma <= 48
+}
+
+function collectStepNumberTextComponents(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  excludedRegions: readonly PixelRegion[] = [],
+) {
+  const boundedRegion = normalizeRegion(region, imageData.width, imageData.height)
+  const width = imageData.width
+  const visited = new Uint8Array(imageData.width * imageData.height)
+  const components: DarkComponent[] = []
+
+  for (let y = boundedRegion.y; y < boundedRegion.y + boundedRegion.height; y += 1) {
+    for (let x = boundedRegion.x; x < boundedRegion.x + boundedRegion.width; x += 1) {
+      const pixelIndex = (y * width) + x
+      if (
+        visited[pixelIndex] ||
+        isPointInsideAnyRegion(x, y, excludedRegions) ||
+        !isStepNumberTextPixel(imageData, x, y)
+      ) {
+        continue
+      }
+
+      const component = collectStepNumberTextComponent(imageData, visited, boundedRegion, pixelIndex, excludedRegions)
+      if (component.count >= 4) {
+        components.push(component)
+      }
+    }
+  }
+
+  return components
+}
+
+function collectStepNumberTextComponent(
+  imageData: DetectionImageData,
+  visited: Uint8Array,
+  bounds: PixelRegion,
+  startIndex: number,
+  excludedRegions: readonly PixelRegion[],
+): DarkComponent {
+  const stack = [startIndex]
+  let count = 0
+  let minX = imageData.width
+  let minY = imageData.height
+  let maxX = 0
+  let maxY = 0
+  visited[startIndex] = 1
+
+  while (stack.length > 0) {
+    const pixelIndex = stack.pop() ?? 0
+    const x = pixelIndex % imageData.width
+    const y = Math.floor(pixelIndex / imageData.width)
+    count += 1
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+
+    addStepNumberTextNeighbor(imageData, visited, stack, pixelIndex - 1, x > bounds.x, excludedRegions)
+    addStepNumberTextNeighbor(imageData, visited, stack, pixelIndex + 1, x < bounds.x + bounds.width - 1, excludedRegions)
+    addStepNumberTextNeighbor(imageData, visited, stack, pixelIndex - imageData.width, y > bounds.y, excludedRegions)
+    addStepNumberTextNeighbor(imageData, visited, stack, pixelIndex + imageData.width, y < bounds.y + bounds.height - 1, excludedRegions)
+    addStepNumberTextNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex - imageData.width - 1,
+      x > bounds.x && y > bounds.y,
+      excludedRegions,
+    )
+    addStepNumberTextNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex - imageData.width + 1,
+      x < bounds.x + bounds.width - 1 && y > bounds.y,
+      excludedRegions,
+    )
+    addStepNumberTextNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex + imageData.width - 1,
+      x > bounds.x && y < bounds.y + bounds.height - 1,
+      excludedRegions,
+    )
+    addStepNumberTextNeighbor(
+      imageData,
+      visited,
+      stack,
+      pixelIndex + imageData.width + 1,
+      x < bounds.x + bounds.width - 1 && y < bounds.y + bounds.height - 1,
+      excludedRegions,
+    )
+  }
+
+  return {
+    count,
+    height: maxY - minY + 1,
+    width: maxX - minX + 1,
+    x: minX,
+    y: minY,
+  }
+}
+
+function addStepNumberTextNeighbor(
+  imageData: DetectionImageData,
+  visited: Uint8Array,
+  stack: number[],
+  pixelIndex: number,
+  isInBounds: boolean,
+  excludedRegions: readonly PixelRegion[],
+) {
+  if (!isInBounds || visited[pixelIndex]) {
+    return
+  }
+
+  const x = pixelIndex % imageData.width
+  const y = Math.floor(pixelIndex / imageData.width)
+  if (isPointInsideAnyRegion(x, y, excludedRegions) || !isStepNumberTextPixel(imageData, x, y)) {
+    return
+  }
+
+  visited[pixelIndex] = 1
+  stack.push(pixelIndex)
+}
+
+function isLikelyStepNumberDigitComponent(imageData: DetectionImageData, component: DarkComponent) {
+  const density = component.count / Math.max(1, component.width * component.height)
+  const minHeight = Math.max(36, Math.round(imageData.height * 0.04))
+  const maxHeight = Math.max(minHeight + 1, Math.round(imageData.height * 0.16))
+  const minWidth = Math.max(9, Math.round(imageData.width * 0.006))
+  const maxWidth = Math.max(minWidth + 1, Math.round(imageData.width * 0.12))
+
+  return (
+    component.height >= minHeight &&
+    component.height <= maxHeight &&
+    component.width >= minWidth &&
+    component.width <= maxWidth &&
+    component.count >= 120 &&
+    density >= 0.18 &&
+    density <= 0.88
+  )
+}
+
+function suppressOverlappingStepNumberLabels(labels: readonly StepNumberLabel[]) {
+  const selected: StepNumberLabel[] = []
+  for (const label of [...labels].sort((left, right) =>
+    right.confidence - left.confidence ||
+    String(right.value).length - String(left.value).length ||
+    left.region.y - right.region.y ||
+    left.region.x - right.region.x
+  )) {
+    if (selected.some((existing) => getIntersectionOverUnion(existing.region, label.region) > 0.6)) {
+      continue
+    }
+    selected.push(label)
+  }
+
+  return selected
+}
+
+function rejectStepNumberLabelsInsideCalloutRegions(
+  labels: readonly StepNumberLabel[],
+  calloutRegions: readonly PixelRegion[],
+  imageData: DetectionImageData,
+) {
+  return labels.filter((label) =>
+    !calloutRegions.some((region) =>
+      isStepNumberLabelInsideCalloutRegion(label, padRegion(region, imageData.width, imageData.height, 2)) &&
+      !isStepNumberLabelInCalloutHeader(label, region)
+    )
+  )
+}
+
+function isStepNumberLabelInsideCalloutRegion(label: StepNumberLabel, calloutRegion: PixelRegion) {
+  const centerX = getRegionCenterX(label.region)
+  const centerY = getRegionCenterY(label.region)
+  if (isPointInsideRegion(centerX, centerY, calloutRegion)) {
+    return true
+  }
+
+  const intersection = intersectRegions(label.region, calloutRegion)
+  if (!intersection) {
+    return false
+  }
+
+  const labelArea = label.region.width * label.region.height
+  const intersectionArea = intersection.width * intersection.height
+
+  return intersectionArea / Math.max(1, labelArea) >= 0.35
+}
+
+function isStepNumberLabelInCalloutHeader(label: StepNumberLabel, calloutRegion: PixelRegion) {
+  return (
+    isStepNumberLabelNearCalloutRegion(label, calloutRegion) &&
+    label.region.x <= calloutRegion.x + Math.max(label.region.width * 1.2, calloutRegion.width * 0.18) &&
+    label.region.y <= calloutRegion.y + Math.max(label.region.height * 1.4, calloutRegion.height * 0.28)
+  )
+}
+
+function createStepLabelAnchoredCalloutRegionCandidates(
+  imageData: DetectionImageData,
+  label: StepNumberLabel,
+  horizontalSegments: readonly HorizontalBorderSegment[],
+) {
+  const minWidth = getMinimumStepLabelAnchoredCalloutRegionWidth(imageData)
+  const minHeight = getMinimumStepCalloutRegionHeight(imageData)
+  const maxHeight = getMaximumStepCalloutRegionHeight(imageData)
+  const searchTop = label.region.y - Math.max(label.region.height * 1.4, imageData.height * 0.06)
+  const searchBottom = label.region.y + label.region.height + maxHeight
+  const searchLeft = Math.max(0, label.region.x - Math.max(label.region.width * 2.2, imageData.width * 0.04))
+  const searchRight = imageData.width - Math.max(8, imageData.width * 0.02)
+  const nearbySegments = horizontalSegments.filter((segment) =>
+    segment.y >= searchTop &&
+    segment.y <= searchBottom &&
+    segment.x + segment.width >= label.region.x + label.region.width &&
+    segment.x <= searchRight &&
+    segment.x + segment.width >= searchLeft + minWidth
+  )
+  const candidates: RegionCandidate[] = []
+
+  for (const topSegment of nearbySegments) {
+    if (topSegment.y > getRegionCenterY(label.region) + label.region.height * 1.25) {
+      continue
+    }
+
+    for (const bottomSegment of nearbySegments) {
+      const height = bottomSegment.y - topSegment.y + bottomSegment.height
+      if (height < minHeight || height > maxHeight) {
+        continue
+      }
+
+      const overlap = getHorizontalOverlapRatio(topSegment, bottomSegment)
+      if (overlap < 0.7) {
+        continue
+      }
+
+      const rawRegion = createRegionFromBorderSegments(topSegment, bottomSegment, imageData)
+      const candidate = createStepLabelAnchoredRegionCandidate(imageData, label, rawRegion)
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+  }
+
+  return candidates
+}
+
+function createRegionFromBorderSegments(
+  topSegment: HorizontalBorderSegment,
+  bottomSegment: HorizontalBorderSegment,
+  imageData: DetectionImageData,
+) {
+  const x = Math.min(topSegment.x, bottomSegment.x)
+  const y = Math.min(topSegment.y, bottomSegment.y)
+  const right = Math.max(topSegment.x + topSegment.width, bottomSegment.x + bottomSegment.width)
+  const bottom = Math.max(topSegment.y + topSegment.height, bottomSegment.y + bottomSegment.height)
+
+  return normalizeRegion({
+    height: bottom - y,
+    width: right - x,
+    x,
+    y,
+  }, imageData.width, imageData.height)
+}
+
+function createStepLabelAnchoredRegionCandidate(
+  imageData: DetectionImageData,
+  label: StepNumberLabel,
+  rawRegion: PixelRegion,
+): RegionCandidate | null {
+  const minWidth = getMinimumStepLabelAnchoredCalloutRegionWidth(imageData)
+  const minHeight = getMinimumStepCalloutRegionHeight(imageData)
+  const maxWidth = getMaximumStepCalloutRegionWidth(imageData)
+  const maxHeight = getMaximumStepCalloutRegionHeight(imageData)
+  if (
+    rawRegion.width < minWidth ||
+    rawRegion.height < minHeight ||
+    rawRegion.width > maxWidth ||
+    rawRegion.height > maxHeight
+  ) {
+    return null
+  }
+
+  const searchRadius = Math.max(4, Math.round(Math.min(imageData.width, imageData.height) * 0.008))
+  const region = snapRegionToDarkBorder(imageData, rawRegion, searchRadius)
+  if (!isStepNumberLabelNearCalloutRegion(label, region)) {
+    return null
+  }
+
+  const labelScore = getStepNumberLabelCalloutScore(label, region)
+  if (labelScore > 1.35) {
+    return null
+  }
+
+  const borderScore = getRegionBorderScore(imageData, region)
+  if (borderScore < 0.2 || !hasStepLabelAnchoredRectangleEvidence(imageData, region)) {
+    return null
+  }
+
+  if (!hasStepLabelAnchoredInteriorEvidence(imageData, region, label.region)) {
+    return null
+  }
+
+  if (!hasStepLabelAnchoredPartItemEvidence(imageData, region)) {
+    return null
+  }
+
+  const confidence = clamp(0.26 + (borderScore * 0.36) + (label.confidence * 0.14) - (labelScore * 0.05), 0.18, 0.5)
+
+  return {
+    ...region,
+    borderScore,
+    confidence,
+    fillRatio: 0,
+  }
+}
+
+function isStepNumberLabelNearCalloutRegion(label: StepNumberLabel, region: PixelRegion) {
+  const labelCenterX = getRegionCenterX(label.region)
+  const labelCenterY = getRegionCenterY(label.region)
+  const verticalSlack = Math.max(label.region.height * 1.35, region.height * 0.18)
+  const horizontallyNearLeftSide = label.region.x <= region.x + region.width * 0.36
+  const verticallyNearRegion =
+    labelCenterY >= region.y - verticalSlack &&
+    labelCenterY <= region.y + region.height + verticalSlack
+  const notFarRight = labelCenterX <= region.x + region.width * 0.48
+
+  return horizontallyNearLeftSide && verticallyNearRegion && notFarRight
+}
+
+function hasStepLabelAnchoredRectangleEvidence(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  pixelMatcher: PixelMatcher = isDarkPixel,
+) {
+  const left = getVerticalDarkCoverage(imageData, region.x, region.y, region.y + region.height - 1, pixelMatcher)
+  const right = getVerticalDarkCoverage(
+    imageData,
+    region.x + region.width - 1,
+    region.y,
+    region.y + region.height - 1,
+    pixelMatcher,
+  )
+  const top = getHorizontalDarkCoverage(imageData, region.y, region.x, region.x + region.width - 1, pixelMatcher)
+  const bottom = getHorizontalDarkCoverage(
+    imageData,
+    region.y + region.height - 1,
+    region.x,
+    region.x + region.width - 1,
+    pixelMatcher,
+  )
+
+  return (
+    top >= 0.24 &&
+    bottom >= 0.24 &&
+    left + right >= 0.26 &&
+    Math.max(left, right) >= 0.16
+  )
+}
+
+function hasStepLabelAnchoredInteriorEvidence(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const inset = Math.max(4, Math.round(Math.min(region.width, region.height) * 0.035))
+  const interior = normalizeRegion({
+    height: region.height - inset * 2,
+    width: region.width - inset * 2,
+    x: region.x + inset,
+    y: region.y + inset,
+  }, imageData.width, imageData.height)
+  let darkPixels = 0
+  let sampledPixels = 0
+  const step = Math.max(1, Math.round(Math.min(region.width, region.height) * 0.018))
+
+  for (let y = interior.y; y < interior.y + interior.height; y += step) {
+    for (let x = interior.x; x < interior.x + interior.width; x += step) {
+      if (isPointInsideRegion(x, y, labelRegion)) {
+        continue
+      }
+      sampledPixels += 1
+      if (isDarkPixel(imageData, x, y)) {
+        darkPixels += 1
+      }
+    }
+  }
+
+  return (
+    darkPixels >= 4 &&
+    darkPixels / Math.max(1, sampledPixels) >= 0.002 &&
+    hasStepLabelAnchoredQuantityEvidence(imageData, interior)
+  )
+}
+
+function hasStepLabelAnchoredQuantityEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  return getReadableQuantityEvidenceRegions(imageData, region).length > 0
+}
+
+function getReadableQuantityEvidenceRegions(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  minConfidence = 0.58,
+) {
+  return collectDarkComponents(imageData, region, isQuantityTextPixel)
+    .filter((component) => isLikelyQuantityLabelComponent(imageData, component))
+    .flatMap((component) => {
+      const readableRegion = expandRegion(component, imageData, Math.max(6, component.height))
+      const quantity = readQuantityFromImageData(imageData, readableRegion)
+
+      return quantity.value && quantity.confidence >= minConfidence ? [readableRegion] : []
+    })
+}
+
+function hasStepLabelAnchoredPartItemEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  return hasStepCalloutPartItemDetectionEvidence(cropDetectionImageDataRegion(imageData, region))
+}
+
+function cropDetectionImageDataRegion(imageData: DetectionImageData, region: PixelRegion): DetectionImageData {
+  const boundedRegion = normalizeRegion(region, imageData.width, imageData.height)
+  const data = new Uint8ClampedArray(boundedRegion.width * boundedRegion.height * 4)
+
+  for (let y = 0; y < boundedRegion.height; y += 1) {
+    for (let x = 0; x < boundedRegion.width; x += 1) {
+      const sourceIndex = (((boundedRegion.y + y) * imageData.width) + boundedRegion.x + x) * 4
+      const targetIndex = ((y * boundedRegion.width) + x) * 4
+      data[targetIndex] = imageData.data[sourceIndex] ?? 0
+      data[targetIndex + 1] = imageData.data[sourceIndex + 1] ?? 0
+      data[targetIndex + 2] = imageData.data[sourceIndex + 2] ?? 0
+      data[targetIndex + 3] = imageData.data[sourceIndex + 3] ?? 255
+    }
+  }
+
+  return {
+    data,
+    height: boundedRegion.height,
+    width: boundedRegion.width,
+  }
+}
+
+function collectHorizontalBorderSegments(
+  imageData: DetectionImageData,
+  minWidth: number,
+  {
+    maxGap = 2,
+    minDarkRatio = 0.58,
+    pixelMatcher = isDarkPixel,
+  }: {
+    maxGap?: number
+    minDarkRatio?: number
+    pixelMatcher?: PixelMatcher
+  } = {},
+) {
+  const rawSegments: HorizontalBorderSegment[] = []
+
+  for (let y = 0; y < imageData.height; y += 1) {
+    let runStart: number | null = null
+    let darkPixels = 0
+    let gap = 0
+
+    for (let x = 0; x < imageData.width; x += 1) {
+      if (pixelMatcher(imageData, x, y)) {
+        runStart ??= x
+        darkPixels += 1
+        gap = 0
+        continue
+      }
+
+      if (runStart !== null && gap < maxGap) {
+        gap += 1
+        continue
+      }
+
+      if (runStart !== null) {
+        addHorizontalBorderSegment(rawSegments, runStart, y, x - runStart - gap, darkPixels, minWidth, minDarkRatio)
+      }
+      runStart = null
+      darkPixels = 0
+      gap = 0
+    }
+
+    if (runStart !== null) {
+      addHorizontalBorderSegment(
+        rawSegments,
+        runStart,
+        y,
+        imageData.width - runStart - gap,
+        darkPixels,
+        minWidth,
+        minDarkRatio,
+      )
+    }
+  }
+
+  return mergeNearbyHorizontalBorderSegments(rawSegments)
+}
+
+function addHorizontalBorderSegment(
+  segments: HorizontalBorderSegment[],
+  x: number,
+  y: number,
+  width: number,
+  darkPixels: number,
+  minWidth: number,
+  minDarkRatio = 0.58,
+) {
+  if (width < minWidth || darkPixels / Math.max(1, width) < minDarkRatio) {
+    return
+  }
+
+  segments.push({
+    darkRatio: darkPixels / Math.max(1, width),
+    height: 1,
+    width,
+    x,
+    y,
+  })
+}
+
+function mergeNearbyHorizontalBorderSegments(segments: readonly HorizontalBorderSegment[]) {
+  const merged: HorizontalBorderSegment[] = []
+
+  for (const segment of [...segments].sort((left, right) => left.y - right.y || left.x - right.x)) {
+    const existing = merged.find((candidate) =>
+      Math.abs(candidate.y + candidate.height - segment.y) <= 2 &&
+      getHorizontalOverlapRatio(candidate, segment) >= 0.86
+    )
+    if (!existing) {
+      merged.push({ ...segment })
+      continue
+    }
+
+    const x = Math.min(existing.x, segment.x)
+    const right = Math.max(existing.x + existing.width, segment.x + segment.width)
+    const y = Math.min(existing.y, segment.y)
+    const bottom = Math.max(existing.y + existing.height, segment.y + segment.height)
+    existing.darkRatio = Math.max(existing.darkRatio, segment.darkRatio)
+    existing.height = bottom - y
+    existing.width = right - x
+    existing.x = x
+    existing.y = y
+  }
+
+  return merged
+}
+
+function getMinimumStepCalloutRegionWidth(imageData: DetectionImageData) {
+  return Math.max(48, imageData.width * 0.08)
+}
+
+function getMinimumSmallStepCalloutRegionWidth(imageData: DetectionImageData) {
+  return Math.max(18, imageData.width * 0.01)
+}
+
+function getMinimumStepLabelAnchoredCalloutRegionWidth(imageData: DetectionImageData) {
+  return Math.max(120, imageData.width * 0.12)
+}
+
+function getMinimumStepCalloutRegionHeight(imageData: DetectionImageData) {
+  return Math.max(36, imageData.height * 0.05)
+}
+
+function getMinimumSmallStepCalloutRegionHeight(imageData: DetectionImageData) {
+  return Math.max(18, imageData.height * 0.01)
+}
+
+function getMaximumStepCalloutRegionWidth(imageData: DetectionImageData) {
+  return imageData.width * 0.92
+}
+
+function getMaximumStepCalloutRegionHeight(imageData: DetectionImageData) {
+  return imageData.height * 0.58
+}
+
+function normalizeStepNumberLabelsForSequence(
+  labels: readonly StepNumberLabel[],
+  fallbackStart: number,
+) {
+  void fallbackStart
+
+  return [...labels].sort((left, right) => left.region.y - right.region.y || left.region.x - right.region.x)
+}
+
+export function debugNormalizeStepNumberLabelValuesForSequence(values: readonly number[], fallbackStart: number) {
+  return normalizeStepNumberLabelsForSequence(
+    values.map((value, index) => ({
+      confidence: 0.9,
+      region: {
+        height: 40,
+        width: 30,
+        x: index * 48,
+        y: index * 64,
+      },
+      value,
+      valueSource: "ocr" as const,
+    })),
+    fallbackStart,
+  ).map((label) => ({
+    rawValue: label.rawValue,
+    value: label.value,
+    valueSource: label.valueSource ?? "ocr",
+  }))
+}
+
+export function debugSelectStepNumberLabelValuesForSequence(values: readonly number[], fallbackStart: number) {
+  const labels = values.map((value, index) => ({
+    confidence: 0.9,
+    region: {
+      height: 40,
+      width: 30,
+      x: index * 48,
+      y: index * 64,
+    },
+    value,
+    valueSource: "ocr" as const,
+  }))
+  return selectSequenceStepNumberLabels(
+    stabilizeConsecutiveStepNumberLabelRun(
+      normalizeStepNumberLabelsForSequence(labels, fallbackStart),
+      fallbackStart,
+    ),
+    fallbackStart,
+  ).map((label) => ({
+    rawValue: label.rawValue,
+    value: label.value,
+    valueSource: label.valueSource ?? "ocr",
+  }))
+}
+
+function stabilizeConsecutiveStepNumberLabelRun(
+  labels: readonly StepNumberLabel[],
+  fallbackStart: number,
+) {
+  const rawValues = labels
+    .map((label) => label.rawValue ?? label.value)
+    .filter((value) => Number.isFinite(value))
+  const rawRun = getConsecutiveNumberRun(rawValues)
+  if (!rawRun || rawRun.length < 3 || rawRun[0] !== fallbackStart - 1) {
+    return labels
+  }
+
+  const rawRunValues = new Set(rawRun)
+  return labels.map((label) => {
+    const rawValue = label.rawValue ?? label.value
+    if (!rawRunValues.has(rawValue)) {
+      return label
+    }
+
+    const { rawValue: ignoredRawValue, ...rest } = label
+    void ignoredRawValue
+    return {
+      ...rest,
+      value: rawValue,
+      valueSource: "ocr" as const,
+    }
+  })
+}
+
+function getConsecutiveNumberRun(values: readonly number[]) {
+  const sortedValues = [...new Set(values)].sort((left, right) => left - right)
+  let bestRun: number[] = []
+  let currentRun: number[] = []
+
+  for (const value of sortedValues) {
+    const previousValue = currentRun.at(-1)
+    if (previousValue === undefined || value === previousValue + 1) {
+      currentRun.push(value)
+    } else {
+      if (currentRun.length > bestRun.length) {
+        bestRun = currentRun
+      }
+      currentRun = [value]
+    }
+  }
+
+  return currentRun.length > bestRun.length ? currentRun : bestRun
+}
+
+function selectSequenceStepNumberLabels(
+  labels: readonly StepNumberLabel[],
+  fallbackStart: number,
+) {
+  void fallbackStart
+
+  return [...labels].sort((left, right) => left.region.y - right.region.y || left.region.x - right.region.x)
+}
+
+function assignCalloutRegionsFromStepNumberLabels(
+  regions: readonly RegionCandidate[],
+  stepNumberLabels: readonly StepNumberLabel[],
+  fallbackStart: number,
+) {
+  const assignedStepIndexes = new Map<number, number>()
+  const assignedStepLabels = new Map<number, StepNumberLabel>()
+  const usedRegionIndexes = new Set<number>()
+  const labelsByPosition = [...stepNumberLabels].sort((left, right) =>
+    left.region.y - right.region.y ||
+    left.region.x - right.region.x
+  )
+
+  for (const label of labelsByPosition) {
+    const regionIndex = getBestCalloutRegionIndexForStepNumberLabel(label, regions, usedRegionIndexes)
+    if (regionIndex !== null) {
+      usedRegionIndexes.add(regionIndex)
+      assignedStepIndexes.set(regionIndex, label.value)
+      assignedStepLabels.set(regionIndex, label)
+    }
+  }
+
+  const anchoredStepIndexes = new Set(assignedStepIndexes.values())
+  let nextFallbackStepIndex = fallbackStart
+  return regions.map((region, regionIndex): StepAnchoredCalloutRegion => {
+    const assignedStepIndex = assignedStepIndexes.get(regionIndex)
+    if (assignedStepIndex !== undefined) {
+      return {
+        region,
+        stepLabel: assignedStepLabels.get(regionIndex),
+        stepIndex: assignedStepIndex,
+      }
+    }
+
+    while (anchoredStepIndexes.has(nextFallbackStepIndex)) {
+      nextFallbackStepIndex += 1
+    }
+    const stepIndex = nextFallbackStepIndex
+    nextFallbackStepIndex += 1
+
+    return {
+      region,
+      stepIndex,
+    }
+  })
+}
+
+function getBestCalloutRegionIndexForStepNumberLabel(
+  label: StepNumberLabel,
+  regions: readonly PixelRegion[],
+  usedRegionIndexes: ReadonlySet<number>,
+) {
+  let bestIndex: number | null = null
+  let bestScore = Number.POSITIVE_INFINITY
+  for (const [index, region] of regions.entries()) {
+    if (usedRegionIndexes.has(index)) {
+      continue
+    }
+    const score = getStepNumberLabelCalloutScore(label, region)
+    if (score < bestScore) {
+      bestScore = score
+      bestIndex = index
+    }
+  }
+
+  return bestScore <= 1.15 ? bestIndex : null
+}
+
+function getStepNumberLabelCalloutScore(label: StepNumberLabel, region: PixelRegion) {
+  const xDistance = Math.abs(getRegionCenterX(label.region) - getRegionCenterX(region)) / Math.max(1, region.width)
+  const yDistance = Math.abs(getRegionCenterY(label.region) - getRegionCenterY(region)) / Math.max(1, region.height)
+  const verticalOverlap = getAxisOverlap(
+    label.region.y,
+    label.region.y + label.region.height,
+    region.y,
+    region.y + region.height,
+  ) / Math.max(1, Math.min(label.region.height, region.height))
+  const isLeftAligned = label.region.x + label.region.width <= region.x + Math.max(24, region.width * 0.18)
+  const isNearTop = label.region.y <= region.y + region.height * 0.28
+
+  return (
+    (xDistance * 0.52) +
+    (yDistance * 0.78) -
+    (verticalOverlap * 0.55) -
+    (isLeftAligned ? 0.24 : 0) -
+    (isNearTop ? 0.18 : 0) -
+    (label.confidence * 0.18)
+  )
+}
+
+function getAxisOverlap(leftStart: number, leftEnd: number, rightStart: number, rightEnd: number) {
+  return Math.max(0, Math.min(leftEnd, rightEnd) - Math.max(leftStart, rightStart))
+}
+
+function getNextFallbackStepIndex(
+  currentFallbackStepIndex: number,
+  stepNumberLabels: readonly StepNumberLabel[],
+  pageCallouts: readonly DetectedStepCallout[],
+) {
+  const maxPageStepIndex = Math.max(
+    currentFallbackStepIndex - 1,
+    ...stepNumberLabels.map((label) => label.value),
+    ...pageCallouts.map((callout) => callout.stepIndex),
+  )
+
+  return maxPageStepIndex + 1
+}
+
+function createDetectedStepNumberLabel(
+  canvas: HTMLCanvasElement,
+  pageNumber: number,
+  label: StepNumberLabel,
+  indexOnPage: number,
+): DetectedStepNumberLabel {
+  const paddedRegion = padRegion(label.region, canvas.width, canvas.height, cropPaddingPixels)
+
+  return {
+    confidence: label.confidence,
+    crop: cropCanvasRegion(canvas, paddedRegion),
+    id: `step-label:p${pageNumber}:r${indexOnPage}:x${paddedRegion.x}:y${paddedRegion.y}:w${paddedRegion.width}:h${paddedRegion.height}:v${label.value}`,
+    indexOnPage,
+    pageNumber,
+    rawValue: label.rawValue,
+    sourceRegion: {
+      height: paddedRegion.height,
+      unit: "step_pixel",
+      width: paddedRegion.width,
+      x: paddedRegion.x,
+      y: paddedRegion.y,
+    },
+    value: label.value,
+    valueSource: label.valueSource ?? "ocr",
+  }
 }
 
 export function detectStepCalloutPartItemRegionsFromImageData(imageData: DetectionImageData): StepCalloutPartItemRegion[] {
@@ -551,7 +2100,23 @@ export function debugDetectStepCalloutPartItemRegionsFromImageData(imageData: De
     })),
     components: debugState.quantityComponents,
     likelyComponents: debugState.likelyQuantityComponents,
+    rawRegions: debugState.regions,
     regions: sortPartItemRegions(suppressOverlappingPartItemRegions(debugState.regions)),
+    zoneResults: debugState.zoneResults.map((zoneResult) => ({
+      anchor: {
+        componentCount: zoneResult.anchor.componentCount,
+        quantity: zoneResult.anchor.quantity,
+        region: zoneResult.anchor.region,
+        score: zoneResult.anchor.score,
+      },
+      expandedPartRegion: zoneResult.expandedPartRegion,
+      ownedPartRegion: zoneResult.ownedPartRegion,
+      partRegion: zoneResult.partRegion,
+      rawPartRegion: zoneResult.rawPartRegion,
+      reason: zoneResult.reason,
+      region: zoneResult.region,
+      searchRegion: zoneResult.searchRegion,
+    })),
     zones: debugState.zones.map((zone) => ({
       anchor: {
         componentCount: zone.anchor.componentCount,
@@ -568,7 +2133,42 @@ export function debugReadStepCalloutQuantityFromImageData(imageData: DetectionIm
   return readQuantityFromImageData(imageData, region)
 }
 
+export function debugReadStepCalloutQuantityGlyphsFromImageData(imageData: DetectionImageData, region: PixelRegion) {
+  const textRegion = trimRegionToQuantityText(imageData, region)
+  const digitRunRegion = getQuantityDigitRunRegion(imageData, region)
+  const glyphs = digitRunRegion ? getQuantityGlyphRegions(imageData, digitRunRegion) : []
+  const textGlyphs = textRegion ? getQuantityGlyphRegions(imageData, textRegion) : []
+
+  return {
+    digitRunRegion,
+    glyphs: glyphs.map((glyph) => ({
+      classification: classifyQuantityGlyph(imageData, glyph),
+      densities: getQuantityGlyphDensities(imageData, glyph),
+      region: glyph,
+    })),
+    quantity: readQuantityFromImageData(imageData, region),
+    textRegion,
+    textGlyphs: textGlyphs.map((glyph) => ({
+      classification: classifyQuantityGlyph(imageData, glyph),
+      isMarker: isLikelyQuantityMarkerRegion(imageData, glyph),
+      region: glyph,
+    })),
+  }
+}
+
 function createStepCalloutPartItemRegionCandidates(imageData: DetectionImageData) {
+  if (!hasStepCalloutPartItemDetectionEvidence(imageData)) {
+    return {
+      likelyQuantityComponents: [],
+      quantityAnchorCandidates: [],
+      quantityAnchors: [],
+      quantityComponents: [],
+      regions: [],
+      zoneResults: [],
+      zones: [],
+    }
+  }
+
   const background = sampleCalloutBackground(imageData)
   const foregroundMask = createCalloutItemForegroundMask(imageData, background)
   const interiorRegion = getCalloutInteriorRegion(imageData)
@@ -587,16 +2187,24 @@ function createStepCalloutPartItemRegionCandidates(imageData: DetectionImageData
       quantityAnchors,
       quantityComponents,
       regions: [],
+      zoneResults: [],
       zones: [],
     }
   }
 
   const regions: StepCalloutPartItemRegion[] = []
   const zones = createQuantityLabelAnchorZones(quantityAnchors, interiorRegion)
+  const zoneResults: Array<QuantityAnchorPartRegionResult & QuantityLabelAnchorZone> = []
+  const partMask = createQuantityAnchorPartForegroundMask(imageData, foregroundMask, quantityAnchors)
 
   for (const zone of zones) {
-    const partMask = createQuantityAnchorPartForegroundMask(imageData, foregroundMask, quantityAnchors)
-    const partRegion = findPartRegionForQuantityAnchor(imageData, partMask, zone, quantityAnchors)
+    const partRegionResult = findPartRegionCandidateForQuantityAnchor(imageData, partMask, zone, quantityAnchors)
+    const partRegion = partRegionResult.partRegion
+    zoneResults.push({
+      ...partRegionResult,
+      anchor: zone.anchor,
+      region: zone.region,
+    })
     if (!partRegion) {
       continue
     }
@@ -622,8 +2230,140 @@ function createStepCalloutPartItemRegionCandidates(imageData: DetectionImageData
     quantityAnchors,
     quantityComponents,
     regions,
+    zoneResults,
     zones,
   }
+}
+
+function createStepCalloutProgressPublisher(onProgress?: (progress: StepCalloutDetectionProgress) => void) {
+  let lastPublishedAt = Number.NEGATIVE_INFINITY
+  let lastPublishedProgress = Number.NEGATIVE_INFINITY
+
+  return (progress: StepCalloutDetectionProgress, { force = false }: { force?: boolean } = {}) => {
+    if (!onProgress) {
+      return
+    }
+
+    const now = getNowMs()
+    const shouldPublish = force ||
+      now - lastPublishedAt >= stepCalloutProgressMinIntervalMs ||
+      progress.progress - lastPublishedProgress >= stepCalloutProgressMinDelta
+
+    if (!shouldPublish) {
+      return
+    }
+
+    lastPublishedAt = now
+    lastPublishedProgress = progress.progress
+    onProgress(progress)
+  }
+}
+
+function createStepCalloutProgressTimingFields({
+  detectionStartedAt,
+  pageTimings,
+  scannedPageCount,
+  targetPageCount,
+}: {
+  detectionStartedAt: number
+  pageTimings: readonly StepCalloutDetectionPageTiming[]
+  scannedPageCount: number
+  targetPageCount: number
+}): Pick<StepCalloutDetectionProgress, "averagePageMs" | "elapsedMs" | "estimatedRemainingMs"> {
+  const elapsedMs = Math.round(getElapsedMs(detectionStartedAt))
+  const averagePageMs = getAverageStepCalloutPageMs(pageTimings)
+  const remainingPageCount = Math.max(0, targetPageCount - scannedPageCount)
+
+  return {
+    averagePageMs,
+    elapsedMs,
+    estimatedRemainingMs: averagePageMs === null ? null : Math.round(averagePageMs * remainingPageCount),
+  }
+}
+
+function createEmptyStepCalloutDetectionPageTiming(pageNumber: number): StepCalloutDetectionPageTiming {
+  return {
+    calloutCount: 0,
+    calloutExtractionMs: 0,
+    pageLoadMs: 0,
+    pageNumber,
+    regionDetectionMs: 0,
+    renderMs: 0,
+    stepLabelCount: 0,
+    stepLabelDetectionMs: 0,
+    textLayerMs: 0,
+    totalMs: 0,
+  }
+}
+
+function roundStepCalloutDetectionPageTiming(
+  timing: StepCalloutDetectionPageTiming,
+): StepCalloutDetectionPageTiming {
+  return {
+    calloutCount: timing.calloutCount,
+    calloutExtractionMs: Math.round(timing.calloutExtractionMs),
+    pageLoadMs: Math.round(timing.pageLoadMs),
+    pageNumber: timing.pageNumber,
+    regionDetectionMs: Math.round(timing.regionDetectionMs),
+    renderMs: Math.round(timing.renderMs),
+    stepLabelCount: timing.stepLabelCount,
+    stepLabelDetectionMs: Math.round(timing.stepLabelDetectionMs),
+    textLayerMs: Math.round(timing.textLayerMs),
+    totalMs: Math.round(timing.totalMs),
+  }
+}
+
+function createStepCalloutDetectionTimings({
+  bomMatchMs,
+  detectionStartedAt,
+  localImageMatchMs,
+  pageTimings,
+}: {
+  bomMatchMs: number
+  detectionStartedAt: number
+  localImageMatchMs: number
+  pageTimings: readonly StepCalloutDetectionPageTiming[]
+}): StepCalloutDetectionTimings {
+  const pages = pageTimings.map(roundStepCalloutDetectionPageTiming)
+
+  return {
+    averagePageMs: getAverageStepCalloutPageMs(pages),
+    bomMatchMs: Math.round(bomMatchMs),
+    calloutExtractionMs: sumStepCalloutPageTiming(pages, "calloutExtractionMs"),
+    localImageMatchMs: Math.round(localImageMatchMs),
+    pageLoadMs: sumStepCalloutPageTiming(pages, "pageLoadMs"),
+    pageScanMs: sumStepCalloutPageTiming(pages, "totalMs"),
+    pages,
+    regionDetectionMs: sumStepCalloutPageTiming(pages, "regionDetectionMs"),
+    renderMs: sumStepCalloutPageTiming(pages, "renderMs"),
+    stepLabelDetectionMs: sumStepCalloutPageTiming(pages, "stepLabelDetectionMs"),
+    textLayerMs: sumStepCalloutPageTiming(pages, "textLayerMs"),
+    totalMs: Math.round(getElapsedMs(detectionStartedAt)),
+  }
+}
+
+function getAverageStepCalloutPageMs(pageTimings: readonly StepCalloutDetectionPageTiming[]) {
+  if (pageTimings.length === 0) {
+    return null
+  }
+
+  return Math.round(sumStepCalloutPageTiming(pageTimings, "totalMs") / pageTimings.length)
+}
+
+function sumStepCalloutPageTiming(
+  pageTimings: readonly StepCalloutDetectionPageTiming[],
+  field: keyof Pick<
+    StepCalloutDetectionPageTiming,
+    | "calloutExtractionMs"
+    | "pageLoadMs"
+    | "regionDetectionMs"
+    | "renderMs"
+    | "stepLabelDetectionMs"
+    | "textLayerMs"
+    | "totalMs"
+  >,
+) {
+  return Math.round(pageTimings.reduce((sum, timing) => sum + timing[field], 0))
 }
 
 function createStepCalloutDetectionResult({
@@ -632,12 +2372,16 @@ function createStepCalloutDetectionResult({
   excludedPages,
   maxPages,
   pageNumbers,
+  stepLabels = [],
+  timings,
 }: {
   callouts: DetectedStepCallout[]
   document: PdfReadableDocument
   excludedPages: ReadonlySet<number>
   maxPages: number | null
   pageNumbers: readonly number[]
+  stepLabels?: DetectedStepNumberLabel[]
+  timings?: StepCalloutDetectionTimings
 }): StepCalloutDetectionResult {
   return {
     callouts,
@@ -648,6 +2392,8 @@ function createStepCalloutDetectionResult({
     skippedBomPageNumbers: [...excludedPages].filter((pageNumber) => pageNumber >= 1 && pageNumber <= document.numPages)
       .sort((left, right) => left - right),
     status: callouts.length > 0 ? "detected" : "empty",
+    stepLabels,
+    timings,
   }
 }
 
@@ -786,14 +2532,18 @@ function createRegionCandidate(
   component: PixelRegion & { count: number },
 ): RegionCandidate | null {
   const imageArea = imageData.width * imageData.height
-  const minWidth = Math.max(48, imageData.width * 0.08)
-  const minHeight = Math.max(36, imageData.height * 0.05)
-  const maxWidth = imageData.width * 0.92
-  const maxHeight = imageData.height * 0.58
+  const standardMinWidth = getMinimumStepCalloutRegionWidth(imageData)
+  const standardMinHeight = getMinimumStepCalloutRegionHeight(imageData)
+  const minWidth = getMinimumSmallStepCalloutRegionWidth(imageData)
+  const minHeight = getMinimumSmallStepCalloutRegionHeight(imageData)
+  const maxWidth = getMaximumStepCalloutRegionWidth(imageData)
+  const maxHeight = getMaximumStepCalloutRegionHeight(imageData)
   const rawArea = component.width * component.height
+  const isBelowStandardSize = component.width < standardMinWidth || component.height < standardMinHeight
+  const minimumFillPixelRatio = isBelowStandardSize ? 0.0002 : 0.003
 
   if (
-    component.count < imageArea * 0.003 ||
+    component.count < Math.max(80, imageArea * minimumFillPixelRatio) ||
     component.width < minWidth ||
     component.height < minHeight ||
     component.width > maxWidth ||
@@ -811,7 +2561,15 @@ function createRegionCandidate(
   const borderSearchRadius = Math.max(4, Math.round(Math.min(imageData.width, imageData.height) * 0.008))
   const borderedRegion = snapRegionToDarkBorder(imageData, expandRegion(component, imageData, borderSearchRadius), borderSearchRadius)
   const borderScore = getRegionBorderScore(imageData, borderedRegion)
-  if (borderScore < 0.22) {
+  const isSmallCalloutCandidate =
+    borderedRegion.width < standardMinWidth || borderedRegion.height < standardMinHeight
+  if (borderScore < (isSmallCalloutCandidate ? 0.3 : 0.22)) {
+    return null
+  }
+  if (!hasCalloutInteriorFillEvidenceForRegion(imageData, borderedRegion)) {
+    return null
+  }
+  if (isSmallCalloutCandidate && !hasSmallStepCalloutAcceptanceEvidence(imageData, borderedRegion)) {
     return null
   }
 
@@ -823,6 +2581,267 @@ function createRegionCandidate(
     confidence,
     fillRatio,
   }
+}
+
+function createSmallBorderedStepCalloutRegionCandidate(
+  imageData: DetectionImageData,
+  rawRegion: PixelRegion,
+  maxWidth: number,
+  maxHeight: number,
+): RegionCandidate | null {
+  const minWidth = getMinimumSmallStepCalloutRegionWidth(imageData)
+  const minHeight = getMinimumSmallStepCalloutRegionHeight(imageData)
+  const standardMinWidth = getMinimumStepCalloutRegionWidth(imageData)
+  const standardMinHeight = getMinimumStepCalloutRegionHeight(imageData)
+  const searchRadius = Math.max(3, Math.round(Math.min(imageData.width, imageData.height) * 0.005))
+  const region = snapRegionToDarkBorder(imageData, rawRegion, searchRadius)
+  const isSmallRegion = region.width < standardMinWidth || region.height < standardMinHeight
+
+  if (
+    !isSmallRegion ||
+    region.width < minWidth ||
+    region.height < minHeight ||
+    region.width > maxWidth ||
+    region.height > maxHeight
+  ) {
+    return null
+  }
+
+  const borderScore = getRegionBorderScore(imageData, region, isSoftStepCalloutBorderPixel)
+  if (borderScore < 0.28 || !hasStepLabelAnchoredRectangleEvidence(imageData, region, isSoftStepCalloutBorderPixel)) {
+    return null
+  }
+
+  const fillRatio = getCalloutInteriorFillEvidenceRatio(imageData, region)
+  const blueFillRatio = getBlueCalloutInteriorFillEvidenceRatio(imageData, region)
+  const hasQuantityLabelEvidence = hasSmallStepCalloutQuantityLabelEvidence(imageData, region)
+  const hasNearbyStepGlyphEvidence = hasNearbyStepNumberGlyphEvidence(imageData, region)
+  const hasStrongRectangleEvidence = borderScore >= 0.72 || fillRatio >= 0.62
+  if (
+    fillRatio < 0.12 ||
+    blueFillRatio < getMinimumSmallStepCalloutBlueFillRatio(region) ||
+    (!hasQuantityLabelEvidence && (!hasNearbyStepGlyphEvidence || !hasStrongRectangleEvidence)) ||
+    (hasQuantityLabelEvidence && !hasStrongRectangleEvidence && !hasNearbyStepGlyphEvidence)
+  ) {
+    return null
+  }
+
+  const confidence = clamp(0.18 + (fillRatio * 0.24) + (borderScore * 0.58), 0, 1)
+
+  return {
+    ...region,
+    borderScore,
+    confidence,
+    fillRatio,
+  }
+}
+
+function hasCalloutInteriorFillEvidenceForRegion(imageData: DetectionImageData, region: PixelRegion) {
+  return getCalloutInteriorFillEvidenceRatio(imageData, region) >= 0.12
+}
+
+function getCalloutInteriorFillEvidenceRatio(imageData: DetectionImageData, region: PixelRegion) {
+  const inset = Math.max(3, Math.round(Math.min(region.width, region.height) * 0.04))
+  const interior = normalizeRegion({
+    height: region.height - inset * 2,
+    width: region.width - inset * 2,
+    x: region.x + inset,
+    y: region.y + inset,
+  }, imageData.width, imageData.height)
+  let fillPixels = 0
+  let sampledPixels = 0
+  const step = Math.max(1, Math.round(Math.min(region.width, region.height) * 0.018))
+
+  for (let y = interior.y; y < interior.y + interior.height; y += step) {
+    for (let x = interior.x; x < interior.x + interior.width; x += step) {
+      sampledPixels += 1
+      if (isLikelyCalloutInteriorFillPixel(imageData, x, y)) {
+        fillPixels += 1
+      }
+    }
+  }
+
+  return fillPixels / Math.max(1, sampledPixels)
+}
+
+function getBlueCalloutInteriorFillEvidenceRatio(imageData: DetectionImageData, region: PixelRegion) {
+  const inset = Math.max(3, Math.round(Math.min(region.width, region.height) * 0.04))
+  const interior = normalizeRegion({
+    height: region.height - inset * 2,
+    width: region.width - inset * 2,
+    x: region.x + inset,
+    y: region.y + inset,
+  }, imageData.width, imageData.height)
+  let fillPixels = 0
+  let sampledPixels = 0
+  const step = Math.max(1, Math.round(Math.min(region.width, region.height) * 0.018))
+
+  for (let y = interior.y; y < interior.y + interior.height; y += step) {
+    for (let x = interior.x; x < interior.x + interior.width; x += step) {
+      sampledPixels += 1
+      if (isLikelyBlueCalloutInteriorFillPixel(imageData, x, y)) {
+        fillPixels += 1
+      }
+    }
+  }
+
+  return fillPixels / Math.max(1, sampledPixels)
+}
+
+function hasSmallStepCalloutBlueFillEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  return getBlueCalloutInteriorFillEvidenceRatio(imageData, region) >= getMinimumSmallStepCalloutBlueFillRatio(region)
+}
+
+function getMinimumSmallStepCalloutBlueFillRatio(region: PixelRegion) {
+  return region.width * region.height < 9_000 ? 0.08 : 0.1
+}
+
+function isLikelyBlueCalloutInteriorFillPixel(imageData: DetectionImageData, x: number, y: number) {
+  const dataIndex = ((Math.floor(y) * imageData.width) + Math.floor(x)) * 4
+  const alpha = imageData.data[dataIndex + 3] ?? 255
+  if (alpha < 32) {
+    return false
+  }
+
+  const r = imageData.data[dataIndex] ?? 0
+  const g = imageData.data[dataIndex + 1] ?? 0
+  const b = imageData.data[dataIndex + 2] ?? 0
+  const brightness = (r + g + b) / 3
+
+  return (
+    brightness >= 185 &&
+    brightness <= 252 &&
+    b > r + 8 &&
+    g > r + 6 &&
+    b >= g - 8
+  )
+}
+
+function hasSmallStepCalloutAcceptanceEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  const hasCalloutContext = (
+    hasSmallStepCalloutQuantityLabelEvidence(imageData, region) ||
+    hasNearbyStepNumberGlyphEvidence(imageData, region)
+  )
+
+  return hasCalloutContext &&
+    hasSmallStepCalloutBlueFillEvidence(imageData, region) &&
+    hasSmallStepCalloutPartItemRegionEvidence(imageData, region)
+}
+
+function hasSmallStepCalloutPartItemRegionEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  const croppedRegion = padRegion(region, imageData.width, imageData.height, 1)
+
+  return detectStepCalloutPartItemRegionsFromImageData(cropDetectionImageDataRegion(imageData, croppedRegion)).length > 0
+}
+
+function hasSmallStepCalloutQuantityLabelEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  const interior = getSmallStepCalloutInteriorRegion(imageData, region)
+  const labelRegion = normalizeRegion({
+    height: Math.max(1, Math.round(interior.height * 0.58)),
+    width: interior.width,
+    x: interior.x,
+    y: interior.y + Math.floor(interior.height * 0.42),
+  }, imageData.width, imageData.height)
+
+  return (
+    getReadableQuantityEvidenceRegions(imageData, labelRegion, 0.45).length > 0 ||
+    hasQuantityDelimiterEvidence(imageData, labelRegion)
+  )
+}
+
+function hasNearbyStepNumberGlyphEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  const horizontalPadding = Math.max(90, Math.round(region.width * 2.8))
+  const verticalPaddingAbove = Math.max(48, Math.round(region.height * 1.55))
+  const verticalPaddingBelow = Math.max(10, Math.round(region.height * 0.35))
+  const searchRegion = normalizeRegion({
+    height: region.height + verticalPaddingAbove + verticalPaddingBelow,
+    width: region.width + horizontalPadding + Math.max(12, Math.round(region.width * 0.4)),
+    x: region.x - horizontalPadding,
+    y: region.y - verticalPaddingAbove,
+  }, imageData.width, imageData.height)
+  const excludedRegion = expandRegion(region, imageData, 3)
+  const minHeight = Math.max(13, Math.round(region.height * 0.48))
+  const minWidth = Math.max(5, Math.round(region.width * 0.1))
+  const minCount = Math.max(18, Math.round(minHeight * minWidth * 0.5))
+
+  return collectDarkComponents(imageData, searchRegion, isDarkPixel)
+    .some((component) => {
+      if (intersectRegions(component, excludedRegion)) {
+        return false
+      }
+
+      const centerY = getRegionCenterY(component)
+      const verticallyNearCalloutTop = centerY <= region.y + region.height * 0.55
+      const horizontallyNearCallout = component.x <= region.x + region.width * 1.35
+      const isLargeGlyph =
+        component.height >= minHeight &&
+        component.width >= minWidth &&
+        component.count >= minCount &&
+        component.count / Math.max(1, component.width * component.height) >= 0.18
+
+      return verticallyNearCalloutTop && horizontallyNearCallout && isLargeGlyph
+    })
+}
+
+function getSmallStepCalloutInteriorRegion(imageData: DetectionImageData, region: PixelRegion) {
+  const inset = Math.max(3, Math.round(Math.min(region.width, region.height) * 0.06))
+
+  return normalizeRegion({
+    height: region.height - inset * 2,
+    width: region.width - inset * 2,
+    x: region.x + inset,
+    y: region.y + inset,
+  }, imageData.width, imageData.height)
+}
+
+function hasQuantityDelimiterEvidence(imageData: DetectionImageData, region: PixelRegion) {
+  const components = collectDarkComponents(imageData, region, isQuantityTextPixel)
+    .filter((component) =>
+      component.height >= Math.max(4, Math.round(region.height * 0.12)) &&
+      component.width >= 2 &&
+      component.count >= 4
+    )
+  if (components.length < 2) {
+    return false
+  }
+
+  const medianHeight = median(components.map((component) => component.height)) ?? 6
+  const lineTolerance = Math.max(4, Math.round(medianHeight * 0.85))
+  const maxComponentGap = Math.max(5, Math.round(medianHeight * 1.35))
+  const lines: DarkComponent[][] = []
+
+  for (const component of [...components].sort((left, right) => getRegionCenterY(left) - getRegionCenterY(right))) {
+    const line = lines.find((candidateLine) =>
+      Math.abs(getQuantityComponentLineCenterY(candidateLine) - getRegionCenterY(component)) <= lineTolerance
+    )
+    if (line) {
+      line.push(component)
+    } else {
+      lines.push([component])
+    }
+  }
+
+  for (const line of lines) {
+    const sortedLine = [...line].sort((left, right) => left.x - right.x || left.y - right.y)
+    for (let markerIndex = 1; markerIndex < sortedLine.length; markerIndex += 1) {
+      const marker = sortedLine[markerIndex]
+      const previous = sortedLine[markerIndex - 1]
+      if (!marker || !previous) {
+        continue
+      }
+
+      const gap = marker.x - (previous.x + previous.width)
+      if (
+        gap <= maxComponentGap * 2 &&
+        getVerticalOverlapRatio(marker, previous) >= 0.2 &&
+        isLikelyQuantityMarkerRegion(imageData, expandRegion(marker, imageData, 1))
+      ) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 function snapRegionToDarkBorder(imageData: DetectionImageData, region: PixelRegion, searchRadius: number): PixelRegion {
@@ -893,21 +2912,38 @@ function findBestHorizontalBorder(
   return bestCoverage >= 0.28 ? bestY : null
 }
 
-function getRegionBorderScore(imageData: DetectionImageData, region: PixelRegion) {
-  const left = getVerticalDarkCoverage(imageData, region.x, region.y, region.y + region.height - 1)
-  const right = getVerticalDarkCoverage(imageData, region.x + region.width - 1, region.y, region.y + region.height - 1)
-  const top = getHorizontalDarkCoverage(imageData, region.y, region.x, region.x + region.width - 1)
+function getRegionBorderScore(
+  imageData: DetectionImageData,
+  region: PixelRegion,
+  pixelMatcher: PixelMatcher = isDarkPixel,
+) {
+  const left = getVerticalDarkCoverage(imageData, region.x, region.y, region.y + region.height - 1, pixelMatcher)
+  const right = getVerticalDarkCoverage(
+    imageData,
+    region.x + region.width - 1,
+    region.y,
+    region.y + region.height - 1,
+    pixelMatcher,
+  )
+  const top = getHorizontalDarkCoverage(imageData, region.y, region.x, region.x + region.width - 1, pixelMatcher)
   const bottom = getHorizontalDarkCoverage(
     imageData,
     region.y + region.height - 1,
     region.x,
     region.x + region.width - 1,
+    pixelMatcher,
   )
 
   return (left + right + top + bottom) / 4
 }
 
-function getVerticalDarkCoverage(imageData: DetectionImageData, x: number, startY: number, endY: number) {
+function getVerticalDarkCoverage(
+  imageData: DetectionImageData,
+  x: number,
+  startY: number,
+  endY: number,
+  pixelMatcher: PixelMatcher = isDarkPixel,
+) {
   let darkPixels = 0
   let totalPixels = 0
   const boundedStartY = Math.max(0, Math.floor(startY))
@@ -915,7 +2951,7 @@ function getVerticalDarkCoverage(imageData: DetectionImageData, x: number, start
 
   for (let y = boundedStartY; y <= boundedEndY; y += 1) {
     totalPixels += 1
-    if (isDarkPixel(imageData, x, y)) {
+    if (pixelMatcher(imageData, x, y)) {
       darkPixels += 1
     }
   }
@@ -923,7 +2959,13 @@ function getVerticalDarkCoverage(imageData: DetectionImageData, x: number, start
   return totalPixels === 0 ? 0 : darkPixels / totalPixels
 }
 
-function getHorizontalDarkCoverage(imageData: DetectionImageData, y: number, startX: number, endX: number) {
+function getHorizontalDarkCoverage(
+  imageData: DetectionImageData,
+  y: number,
+  startX: number,
+  endX: number,
+  pixelMatcher: PixelMatcher = isDarkPixel,
+) {
   let darkPixels = 0
   let totalPixels = 0
   const boundedStartX = Math.max(0, Math.floor(startX))
@@ -931,7 +2973,7 @@ function getHorizontalDarkCoverage(imageData: DetectionImageData, y: number, sta
 
   for (let x = boundedStartX; x <= boundedEndX; x += 1) {
     totalPixels += 1
-    if (isDarkPixel(imageData, x, y)) {
+    if (pixelMatcher(imageData, x, y)) {
       darkPixels += 1
     }
   }
@@ -951,6 +2993,21 @@ function isDarkPixel(imageData: DetectionImageData, x: number, y: number) {
   const b = imageData.data[dataIndex + 2] ?? 0
 
   return (r + g + b) / 3 < 90
+}
+
+function isSoftStepCalloutBorderPixel(imageData: DetectionImageData, x: number, y: number) {
+  const dataIndex = ((Math.floor(y) * imageData.width) + Math.floor(x)) * 4
+  const alpha = imageData.data[dataIndex + 3] ?? 255
+  if (alpha < 32) {
+    return false
+  }
+
+  const r = imageData.data[dataIndex] ?? 0
+  const g = imageData.data[dataIndex + 1] ?? 0
+  const b = imageData.data[dataIndex + 2] ?? 0
+  const brightness = (r + g + b) / 3
+
+  return brightness < 142
 }
 
 function isQuantityTextPixel(imageData: DetectionImageData, x: number, y: number) {
@@ -1020,7 +3077,12 @@ function samplePageBackground(imageData: DetectionImageData): ColorSample {
 function suppressOverlappingCandidates(candidates: readonly RegionCandidate[]) {
   const selected: RegionCandidate[] = []
   for (const candidate of [...candidates].sort((left, right) => right.confidence - left.confidence)) {
-    if (selected.some((existing) => getIntersectionOverUnion(existing, candidate) > 0.65)) {
+    const duplicateIndex = selected.findIndex((existing) => areDuplicativeRegionCandidates(existing, candidate))
+    if (duplicateIndex >= 0) {
+      const existing = selected[duplicateIndex]
+      if (existing && isBetterDuplicateRegionCandidate(candidate, existing)) {
+        selected[duplicateIndex] = candidate
+      }
       continue
     }
 
@@ -1028,6 +3090,33 @@ function suppressOverlappingCandidates(candidates: readonly RegionCandidate[]) {
   }
 
   return selected
+}
+
+function areDuplicativeRegionCandidates(left: PixelRegion, right: PixelRegion) {
+  if (getIntersectionOverUnion(left, right) > 0.65) {
+    return true
+  }
+
+  const intersection = intersectRegions(left, right)
+  if (!intersection) {
+    return false
+  }
+
+  const intersectionArea = intersection.width * intersection.height
+  const smallerArea = Math.min(left.width * left.height, right.width * right.height)
+
+  return intersectionArea / Math.max(1, smallerArea) >= 0.82
+}
+
+function isBetterDuplicateRegionCandidate(candidate: RegionCandidate, existing: RegionCandidate) {
+  const candidateArea = candidate.width * candidate.height
+  const existingArea = existing.width * existing.height
+
+  if (candidateArea >= existingArea * 1.2 && candidate.confidence >= existing.confidence - 0.08) {
+    return true
+  }
+
+  return candidate.confidence > existing.confidence + 0.04
 }
 
 function getIntersectionOverUnion(left: PixelRegion, right: PixelRegion) {
@@ -1112,8 +3201,15 @@ function detectStepCalloutPartItemsFromCanvas(
       region,
       detectedRegions,
     )
-    const partDisplayRegion = padPartRegion(
+    const ownedPartRegion = constrainOwnedPartContentRegionToDetectedPart(
       ownedPartContent.region,
+      region,
+      canvas.width,
+      canvas.height,
+      interiorRegion,
+    )
+    const partDisplayRegion = padPartRegion(
+      ownedPartRegion,
       canvas.width,
       canvas.height,
       itemCropPaddingPixels,
@@ -1121,11 +3217,11 @@ function detectStepCalloutPartItemsFromCanvas(
     )
     const detectedColor = detectPartColorFromImageData(
       imageData,
-      ownedPartContent.region,
+      ownedPartRegion,
       background,
       quantityGlyphExclusionRegions,
     )
-    const feature = createStepPartImageFeature(imageData, ownedPartContent.region, quantityGlyphExclusionRegions)
+    const feature = createStepPartImageFeature(imageData, ownedPartRegion, quantityGlyphExclusionRegions)
     const itemId = `${calloutIdPrefix}:item${index + 1}:x${itemSourceRegion.x}:y${itemSourceRegion.y}:w${itemSourceRegion.width}:h${itemSourceRegion.height}`
     partFeatureEntries.push({
       calloutIndex,
@@ -1150,7 +3246,7 @@ function detectStepCalloutPartItemsFromCanvas(
         background,
         ownedPartContent.foregroundMask,
       ),
-      partRegion: toPageSourceRegion(ownedPartContent.region, pageOffsetX, pageOffsetY),
+      partRegion: toPageSourceRegion(ownedPartRegion, pageOffsetX, pageOffsetY),
       quantityLabel: {
         crop: cropCanvasRegion(canvas, quantityRegion),
         region: quantitySourceRegion,
@@ -4367,7 +6463,7 @@ function readQuantityFromNativeTextItems(
     .map((item) => item.text)
     .join("")
     .replace(/\s+/g, "")
-  const match = /^(\d{1,3})x$/i.exec(text)
+  const match = /^(\d+)x$/i.exec(text)
   if (!match) {
     return null
   }
@@ -4440,6 +6536,13 @@ function readQuantityFromImageData(imageData: DetectionImageData, quantityRegion
       value: null,
     }
   }
+  if (isSingleDigitQuantityEmbeddedInNoisyTextRegion(textRegion, glyphs, selectedQuantity)) {
+    return {
+      confidence: 0,
+      text: null,
+      value: null,
+    }
+  }
 
   const { confidence, text, value } = selectedQuantity
 
@@ -4450,12 +6553,33 @@ function readQuantityFromImageData(imageData: DetectionImageData, quantityRegion
   }
 }
 
+function isSingleDigitQuantityEmbeddedInNoisyTextRegion(
+  textRegion: PixelRegion | null,
+  glyphs: readonly PixelRegion[],
+  quantity: QuantityEstimate,
+) {
+  if (!textRegion || !quantity.text || quantity.text.length !== 1 || glyphs.length === 0) {
+    return false
+  }
+
+  const digitRegion = unionRegions(glyphs.slice(0, quantity.text.length))
+  if (!digitRegion) {
+    return false
+  }
+
+  return (
+    digitRegion.height <= 10 &&
+    textRegion.height >= digitRegion.height + 5 &&
+    digitRegion.height / Math.max(1, textRegion.height) < 0.72
+  )
+}
+
 function isPlausibleCalloutQuantityText(text: string | null, value: number | null) {
   if (!Number.isInteger(value) || value == null || value <= 0) {
     return false
   }
 
-  return value <= 24
+  return true
 }
 
 function readQuantityFromGlyphRegions(
@@ -4478,15 +6602,13 @@ function readQuantityFromGlyphRegions(
       continue
     }
 
-    if (digits.length > 0 && classification.confidence < 0.68) {
+    const minContinuationConfidence = classification.char === "0" ? 0.6 : 0.68
+    if (digits.length > 0 && classification.confidence < minContinuationConfidence) {
       break
     }
 
     digits.push(classification.char)
     confidences.push(classification.confidence)
-    if (digits.length >= 3) {
-      break
-    }
   }
 
   const text = digits.join("")
@@ -4663,9 +6785,6 @@ function getTrailingQuantityDigitRunRegion(
 
     digitGlyphs.unshift(glyph)
     nextLeftEdge = glyph.x
-    if (digitGlyphs.length >= 3) {
-      break
-    }
   }
 
   const digitRegion = digitGlyphs.length > 0 ? unionRegions(digitGlyphs) : null
@@ -5065,6 +7184,11 @@ function classifyQuantityGlyph(
   const featureClassification = classifyQuantityGlyphByFeatures(densities, aspectRatio)
   const oneTemplate = templateScores.find((template) => template.char === "1")
   const oneFeatureClassification = classifyOneQuantityGlyphByFeatures(densities, aspectRatio)
+  const zeroFeatureClassification = classifyZeroQuantityGlyphByFeatures(densities, aspectRatio)
+  const twoFeatureClassification = classifyTwoQuantityGlyphByFeatures(densities, aspectRatio)
+  const fiveFeatureClassification = classifyFiveQuantityGlyphByFeatures(densities, aspectRatio)
+  const sevenFeatureClassification = classifySevenQuantityGlyphByFeatures(densities, aspectRatio)
+  const eightFeatureClassification = classifyEightQuantityGlyphByFeatures(densities, aspectRatio)
   const nineFeatureClassification = classifyNineQuantityGlyphByFeatures(densities, aspectRatio)
   const sixFeatureClassification = classifySixQuantityGlyphByFeatures(densities, aspectRatio)
   const fourFeatureClassification = featureClassification?.char === "4" ? featureClassification : null
@@ -5088,11 +7212,59 @@ function classifyQuantityGlyph(
   }
 
   if (
+    sevenFeatureClassification &&
+    bestTemplate.char === "7" &&
+    sevenFeatureClassification.confidence >= bestTemplate.confidence - 0.12
+  ) {
+    return sevenFeatureClassification
+  }
+
+  if (
+    twoFeatureClassification &&
+    ["2", "6", "7"].includes(bestTemplate.char) &&
+    twoFeatureClassification.confidence >= bestTemplate.confidence - 0.18
+  ) {
+    return twoFeatureClassification
+  }
+
+  if (
+    zeroFeatureClassification &&
+    ["0", "4", "6", "8", "9"].includes(bestTemplate.char) &&
+    zeroFeatureClassification.confidence >= bestTemplate.confidence - 0.18
+  ) {
+    return zeroFeatureClassification
+  }
+
+  if (
+    fiveFeatureClassification &&
+    ["4", "5", "6", "9"].includes(bestTemplate.char) &&
+    fiveFeatureClassification.confidence >= bestTemplate.confidence - 0.16
+  ) {
+    return fiveFeatureClassification
+  }
+
+  if (
     nineFeatureClassification &&
-    (bestTemplate.char === "9" || bestTemplate.char === "6") &&
+    ["3", "4", "8", "9"].includes(bestTemplate.char) &&
     nineFeatureClassification.confidence >= bestTemplate.confidence - 0.18
   ) {
     return nineFeatureClassification
+  }
+
+  if (
+    sixFeatureClassification &&
+    isLeftWeightedSixQuantityGlyph(densities) &&
+    sixFeatureClassification.confidence >= bestTemplate.confidence - 0.18
+  ) {
+    return sixFeatureClassification
+  }
+
+  if (
+    eightFeatureClassification &&
+    ["0", "2", "5", "6", "8", "9"].includes(bestTemplate.char) &&
+    eightFeatureClassification.confidence >= bestTemplate.confidence - 0.16
+  ) {
+    return eightFeatureClassification
   }
 
   if (
@@ -5246,6 +7418,10 @@ function classifyQuantityGlyph(
     }
   }
 
+  if (bestTemplate.char === "6" && !hasPlausibleSixQuantityLoopBalance(densities)) {
+    return null
+  }
+
   if (bestTemplate.confidence < 0.52) {
     return null
   }
@@ -5295,6 +7471,142 @@ function classifyOneQuantityGlyphByFeatures(
     bottom < 0.58
   ) {
     return { char: "1", confidence: 0.74 }
+  }
+
+  return null
+}
+
+function classifyZeroQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+  const center = getQuantityGridAreaDensity(densities, 2, 2, 1, 3)
+
+  if (
+    aspectRatio >= 0.5 &&
+    top > 0.34 &&
+    middle < 0.44 &&
+    bottom > 0.34 &&
+    center < 0.08 &&
+    Math.min(upperLeft, upperRight, lowerLeft, lowerRight) > 0.26
+  ) {
+    return { char: "0", confidence: 0.78 }
+  }
+
+  return null
+}
+
+function classifyTwoQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+
+  if (
+    aspectRatio >= 0.5 &&
+    top > 0.32 &&
+    middle > 0.12 &&
+    bottom > 0.32 &&
+    upperRight > 0.25 &&
+    lowerLeft > 0.22 &&
+    lowerRight < 0.16 &&
+    (upperLeft > 0.12 || bottom > 0.36)
+  ) {
+    return { char: "2", confidence: 0.78 }
+  }
+
+  return null
+}
+
+function classifyFiveQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+
+  if (
+    aspectRatio >= 0.5 &&
+    top > 0.34 &&
+    middle > 0.28 &&
+    bottom > 0.34 &&
+    upperLeft > 0.42 &&
+    upperRight < Math.max(0.25, upperLeft * 0.55) &&
+    lowerRight > 0.32 &&
+    lowerLeft < upperLeft * 0.78
+  ) {
+    return { char: "5", confidence: 0.8 }
+  }
+
+  return null
+}
+
+function classifySevenQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+  const center = getQuantityGridAreaDensity(densities, 2, 2, 1, 3)
+
+  if (
+    aspectRatio >= 0.5 &&
+    top > 0.36 &&
+    bottom < 0.3 &&
+    upperLeft < 0.14 &&
+    upperRight > 0.3 &&
+    lowerRight < 0.16 &&
+    center > 0.38
+  ) {
+    return { char: "7", confidence: 0.82 }
+  }
+
+  return null
+}
+
+function classifyEightQuantityGlyphByFeatures(
+  densities: readonly number[],
+  aspectRatio: number,
+): QuantityGlyphClassification | null {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const middle = getQuantityGridAreaDensity(densities, 0, 3, 5, 1)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+  const center = getQuantityGridAreaDensity(densities, 2, 2, 1, 3)
+
+  if (
+    aspectRatio >= 0.52 &&
+    top > 0.38 &&
+    middle > 0.45 &&
+    bottom > 0.4 &&
+    Math.min(upperLeft, upperRight, lowerLeft, lowerRight) > 0.35 &&
+    center > 0.16
+  ) {
+    return { char: "8", confidence: 0.8 }
   }
 
   return null
@@ -5425,6 +7737,7 @@ function classifyQuantityGlyphByFeatures(
 
   if (
     aspectRatio >= 0.45 &&
+    hasPlausibleSixQuantityLoopBalance(densities) &&
     top > 0.16 &&
     middle > 0.12 &&
     bottom > 0.16 &&
@@ -5451,6 +7764,21 @@ function classifyNineQuantityGlyphByFeatures(
   const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
   const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
   const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+  const hasOpenLowerLeftTail = lowerLeft < Math.max(0.14, lowerRight * 0.72)
+  const hasLowerCourtyardNineTail =
+    upperLeft >= lowerLeft * 1.55 &&
+    lowerRight >= lowerLeft * 1.05 &&
+    lowerLeft <= 0.34
+  const hasRightOpenLowerCourtyardNineTail =
+    upperLeft > upperRight + 0.08 &&
+    lowerRight >= lowerLeft - 0.01 &&
+    lowerLeft <= 0.46 &&
+    upperRight <= 0.46
+  const isRightWeightedOpenFour =
+    upperRight > upperLeft + 0.08 &&
+    lowerLeft <= 0.06 &&
+    middle <= 0.32 &&
+    bottom <= 0.34
 
   if (
     aspectRatio >= 0.45 &&
@@ -5462,8 +7790,9 @@ function classifyNineQuantityGlyphByFeatures(
     upperRight > 0.08 &&
     lowerRight > 0.08 &&
     upperLeft >= upperRight * 0.58 &&
-    upperLeft >= lowerLeft * 1.45 &&
-    lowerLeft < Math.max(0.14, lowerRight * 0.72)
+    !isRightWeightedOpenFour &&
+    (upperLeft >= lowerLeft * 1.45 || hasRightOpenLowerCourtyardNineTail) &&
+    (hasOpenLowerLeftTail || hasLowerCourtyardNineTail || hasRightOpenLowerCourtyardNineTail)
   ) {
     return { char: "9", confidence: 0.78 }
   }
@@ -5485,6 +7814,7 @@ function classifySixQuantityGlyphByFeatures(
 
   if (
     aspectRatio >= 0.45 &&
+    hasPlausibleSixQuantityLoopBalance(densities) &&
     top > 0.14 &&
     middle > 0.1 &&
     bottom > 0.14 &&
@@ -5499,6 +7829,29 @@ function classifySixQuantityGlyphByFeatures(
   }
 
   return null
+}
+
+function hasPlausibleSixQuantityLoopBalance(densities: readonly number[]) {
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+
+  return (
+    top >= 0.28 &&
+    bottom >= 0.26 &&
+    bottom <= Math.max(0.62, top * 1.8)
+  )
+}
+
+function isLeftWeightedSixQuantityGlyph(densities: readonly number[]) {
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+
+  return (
+    upperLeft >= upperRight * 1.35 &&
+    lowerLeft >= lowerRight * 1.3
+  )
 }
 
 function getQuantityGridAreaDensity(
@@ -6105,6 +8458,51 @@ function sampleCalloutBackground(imageData: DetectionImageData): ColorSample {
   }
 }
 
+function hasStepCalloutPartItemDetectionEvidence(imageData: DetectionImageData) {
+  if (detectCalloutBorderInteriorRegion(imageData)) {
+    return true
+  }
+
+  const margin = getCalloutInteriorMargin(imageData)
+  const region = normalizeRegion({
+    height: imageData.height - margin * 2,
+    width: imageData.width - margin * 2,
+    x: margin,
+    y: margin,
+  }, imageData.width, imageData.height)
+  let calloutFillPixels = 0
+  let sampledPixels = 0
+  const step = Math.max(1, Math.round(Math.min(imageData.width, imageData.height) * 0.01))
+
+  for (let y = region.y; y < region.y + region.height; y += step) {
+    for (let x = region.x; x < region.x + region.width; x += step) {
+      sampledPixels += 1
+      if (isLikelyCalloutInteriorFillPixel(imageData, x, y)) {
+        calloutFillPixels += 1
+      }
+    }
+  }
+
+  return calloutFillPixels / Math.max(1, sampledPixels) >= 0.24
+}
+
+function isLikelyCalloutInteriorFillPixel(imageData: DetectionImageData, x: number, y: number) {
+  const dataIndex = ((Math.floor(y) * imageData.width) + Math.floor(x)) * 4
+  const alpha = imageData.data[dataIndex + 3] ?? 255
+  if (alpha < 32) {
+    return false
+  }
+
+  const r = imageData.data[dataIndex] ?? 0
+  const g = imageData.data[dataIndex + 1] ?? 0
+  const b = imageData.data[dataIndex + 2] ?? 0
+  const brightness = (r + g + b) / 3
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b)
+  const isWarmModelPanel = brightness > 185 && r > b + 18 && g > b + 8
+
+  return !isWarmModelPanel && brightness >= 185 && brightness <= 252 && chroma >= 6
+}
+
 function getCalloutInteriorMargin(imageData: DetectionImageData) {
   return Math.max(8, Math.round(Math.min(imageData.width, imageData.height) * 0.03))
 }
@@ -6382,7 +8780,10 @@ function createQuantityLabelAnchorCandidates(
               foregroundMask,
               1,
             )
-            if (looseOneBackgroundCandidate?.quantity.value === 1) {
+            if (
+              looseOneBackgroundCandidate &&
+              isLooseBusyBackgroundQuantityAnchorCandidate(looseOneBackgroundCandidate)
+            ) {
               busyBackgroundAnchors.push(looseOneBackgroundCandidate)
             }
           }
@@ -6396,7 +8797,10 @@ function createQuantityLabelAnchorCandidates(
     left.maxBackgroundForegroundRatio - right.maxBackgroundForegroundRatio ||
     right.score - left.score
   )) {
-    if (isSupportedBusyBackgroundQuantityAnchor(anchor, [...anchors, ...supportedBusyBackgroundAnchors])) {
+    if (
+      isSupportedBusyBackgroundQuantityAnchor(anchor, [...anchors, ...supportedBusyBackgroundAnchors]) ||
+      isSupportedIsolatedLooseQuantityAnchor(imageData, foregroundMask, anchor, interiorRegion)
+    ) {
       supportedBusyBackgroundAnchors.push(anchor)
     }
   }
@@ -6408,11 +8812,83 @@ function createQuantityLabelAnchorCandidates(
 
   return [
     ...supportedAnchors,
-    ...createRowSupportedLooseOneLabelAnchors(imageData, components, interiorRegion, supportedAnchors),
+    ...createRowSupportedLooseLabelAnchors(imageData, components, interiorRegion, supportedAnchors),
   ]
 }
 
-function createRowSupportedLooseOneLabelAnchors(
+function isLooseBusyBackgroundQuantityAnchorCandidate(candidate: QuantityLabelAnchor) {
+  const value = candidate.quantity.value
+  if (!value) {
+    return false
+  }
+
+  if (value === 1) {
+    return true
+  }
+
+  return (
+    value <= 9 &&
+    candidate.componentCount === 2 &&
+    candidate.quantity.confidence >= 0.78 &&
+    candidate.region.width <= candidate.region.height * 1.8
+  )
+}
+
+function isSupportedIsolatedLooseQuantityAnchor(
+  imageData: DetectionImageData,
+  foregroundMask: Uint8Array,
+  candidate: QuantityLabelAnchor,
+  interiorRegion: PixelRegion,
+) {
+  const value = candidate.quantity.value
+  if (
+    !value ||
+    value > 9 ||
+    candidate.componentCount !== 2 ||
+    candidate.quantity.confidence < 0.78 ||
+    candidate.region.width > candidate.region.height * 1.8
+  ) {
+    return false
+  }
+
+  const partSearchRegion = intersectRegions(
+    normalizeRegion({
+      height: Math.max(1, candidate.region.y - interiorRegion.y + Math.round(candidate.region.height * 0.7)),
+      width: Math.max(candidate.region.width * 2, candidate.region.height * 5),
+      x: Math.round(
+        getRegionCenterX(candidate.region) - Math.max(candidate.region.width, candidate.region.height * 2.5),
+      ),
+      y: interiorRegion.y,
+    }, imageData.width, imageData.height),
+    interiorRegion,
+  )
+  if (!partSearchRegion) {
+    return false
+  }
+
+  const partMask = new Uint8Array(foregroundMask)
+  const labelExclusionRegion = expandRegion(
+    candidate.region,
+    imageData,
+    Math.max(1, Math.round(candidate.region.height * 0.18)),
+  )
+  for (let y = labelExclusionRegion.y; y < labelExclusionRegion.y + labelExclusionRegion.height; y += 1) {
+    for (let x = labelExclusionRegion.x; x < labelExclusionRegion.x + labelExclusionRegion.width; x += 1) {
+      partMask[(y * imageData.width) + x] = 0
+    }
+  }
+
+  return collectMaskComponents(partMask, imageData.width, imageData.height, partSearchRegion)
+    .some((component) => (
+      component.count >= Math.max(14, candidate.region.height * 1.1) &&
+      component.y < candidate.region.y &&
+      component.y + component.height <= candidate.region.y + Math.max(2, candidate.region.height * 0.18) &&
+      component.width >= Math.max(4, Math.round(candidate.region.height * 0.35)) &&
+      component.height >= Math.max(4, Math.round(candidate.region.height * 0.35))
+    ))
+}
+
+function createRowSupportedLooseLabelAnchors(
   imageData: DetectionImageData,
   components: readonly DarkComponent[],
   interiorRegion: PixelRegion,
@@ -6455,8 +8931,7 @@ function createRowSupportedLooseOneLabelAnchors(
       const textRegion = trimRegionToQuantityDisplayText(imageData, expandRegion(region, imageData, 2)) ??
         trimRegionToQuantityText(imageData, expandRegion(region, imageData, 2))
       if (
-        quantity.value !== 1 ||
-        quantity.confidence < 0.8 ||
+        !isRowSupportedLooseQuantity(quantity) ||
         !textRegion ||
         !isQuantityLabelInsideInterior(textRegion, interiorRegion)
       ) {
@@ -6490,6 +8965,18 @@ function createRowSupportedLooseOneLabelAnchors(
   return anchors
 }
 
+function isRowSupportedLooseQuantity(quantity: QuantityEstimate) {
+  if (!quantity.value) {
+    return false
+  }
+
+  if (quantity.value === 1) {
+    return quantity.confidence >= 0.78
+  }
+
+  return quantity.value <= 9 && quantity.confidence >= 0.78
+}
+
 function hasNearbyRowSupportedQuantityAnchor(
   candidate: QuantityLabelAnchor,
   anchors: readonly QuantityLabelAnchor[],
@@ -6519,7 +9006,6 @@ function isSupportedBusyBackgroundQuantityAnchor(
 ) {
   if (
     !candidate.quantity.value ||
-    candidate.quantity.value > 9 ||
     candidate.componentCount < 2 ||
     strictAnchors.some((anchor) => areQuantityLabelAnchorsDuplicative(anchor, candidate))
   ) {
@@ -6531,14 +9017,40 @@ function isSupportedBusyBackgroundQuantityAnchor(
     .filter((anchor) => Math.abs(getRegionCenterY(anchor.region) - getRegionCenterY(candidate.region)) <= rowTolerance)
     .sort((left, right) => getRegionCenterX(left.region) - getRegionCenterX(right.region))
 
+  if (candidate.quantity.value > 9) {
+    const medianRowHeight = median(rowAnchors.map((anchor) => anchor.region.height)) ?? candidate.region.height
+    const nearestRowAnchorDistance = rowAnchors.length > 0
+      ? Math.min(...rowAnchors.map((anchor) => Math.abs(getRegionCenterX(anchor.region) - getRegionCenterX(candidate.region))))
+      : Number.POSITIVE_INFINITY
+
+    return (
+      candidate.maxBackgroundForegroundRatio <= 0.3 &&
+      candidate.componentCount >= 3 &&
+      candidate.quantity.confidence >= 0.76 &&
+      candidate.region.height <= medianRowHeight * 1.45 &&
+      candidate.region.width <= candidate.region.height * 3.2 &&
+      rowAnchors.length >= 2 &&
+      nearestRowAnchorDistance <= Math.max(candidate.region.height * 8, candidate.region.width * 4)
+    )
+  }
+
   if (candidate.maxBackgroundForegroundRatio > 0.3) {
-    if (
-      candidate.quantity.value !== 1 ||
-      candidate.componentCount !== 2 ||
-      candidate.quantity.confidence < 0.8 ||
-      candidate.region.width > candidate.region.height * 1.6 ||
-      rowAnchors.length < 1
-    ) {
+    const supportsLooseOne = (
+      candidate.quantity.value === 1 &&
+      candidate.componentCount === 2 &&
+      candidate.quantity.confidence >= 0.8 &&
+      candidate.region.width <= candidate.region.height * 1.6 &&
+      rowAnchors.length >= 1
+    )
+    const supportsLooseSingleDigit = (
+      candidate.quantity.value <= 9 &&
+      candidate.componentCount === 2 &&
+      candidate.quantity.confidence >= 0.78 &&
+      candidate.region.width <= candidate.region.height * 1.8 &&
+      rowAnchors.length >= 2
+    )
+
+    if (!supportsLooseOne && !supportsLooseSingleDigit) {
       return false
     }
 
@@ -6591,15 +9103,17 @@ function createQuantityLabelAnchorCandidate(
 ): QuantityLabelAnchor | null {
   const readableRegion = expandRegion(region, imageData, 2)
   const quantity = readQuantityFromImageData(imageData, readableRegion)
-  if (!quantity.value || quantity.confidence < 0.58) {
+  if (!quantity.value || quantity.confidence < 0.68) {
     return null
   }
 
   const textRegion = trimRegionToQuantityDisplayText(imageData, readableRegion) ??
     trimRegionToQuantityText(imageData, readableRegion)
+  const maxTextHeight = Math.max(24, Math.round(imageData.height * 0.09))
   if (
     !textRegion ||
     !isQuantityLabelInsideInterior(textRegion, interiorRegion) ||
+    textRegion.height > maxTextHeight ||
     !isQuantityLabelOnPlainBackground(imageData, foregroundMask, textRegion, maxBackgroundForegroundRatio)
   ) {
     return null
@@ -6610,7 +9124,13 @@ function createQuantityLabelAnchorCandidate(
     return null
   }
   const digitCount = quantity.text?.length ?? 0
-  if (digitCount <= 1 && aspectRatio > 2.6) {
+  if (
+    digitCount <= 1 &&
+    (
+      aspectRatio > 2.6 ||
+      (componentCount >= 3 && aspectRatio > 2.05)
+    )
+  ) {
     return null
   }
 
@@ -6698,6 +9218,10 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
       return false
     }
 
+    if (anchor.region.height > candidate.region.height * 1.6) {
+      return false
+    }
+
     const verticalGap = anchor.region.y - (candidate.region.y + candidate.region.height)
     const candidateAspectRatio = candidate.region.width / Math.max(1, candidate.region.height)
     const lowerAnchorRight = anchor.region.x + anchor.region.width
@@ -6712,6 +9236,18 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
       return true
     }
 
+    if (
+      candidate.quantity.value != null &&
+      candidate.quantity.value <= 9 &&
+      candidateAspectRatio <= 1.75 &&
+      verticalGap >= Math.max(2, candidate.region.height * 0.32) &&
+      verticalGap <= candidate.region.height * 1.75 &&
+      getRegionCenterX(candidate.region) > getRegionCenterX(anchor.region) &&
+      candidate.region.x <= lowerAnchorRight + candidate.region.height * 0.75
+    ) {
+      return true
+    }
+
     const horizontalOverlap = Math.max(
       0,
       Math.min(candidate.region.x + candidate.region.width, anchor.region.x + anchor.region.width) -
@@ -6720,7 +9256,7 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
     const horizontalOverlapRatio = horizontalOverlap / Math.max(1, Math.min(candidate.region.width, anchor.region.width))
 
     return (
-      verticalGap >= -Math.max(2, candidate.region.height * 0.12) &&
+      verticalGap >= -Math.max(2, candidate.region.height * 0.65) &&
       verticalGap <= Math.max(candidate.region.height, anchor.region.height) * 0.72 &&
       horizontalOverlapRatio >= 0.35
     )
@@ -6849,6 +9385,15 @@ function findPartRegionForQuantityAnchor(
   zone: QuantityLabelAnchorZone,
   anchors: readonly QuantityLabelAnchor[],
 ) {
+  return findPartRegionCandidateForQuantityAnchor(imageData, partMask, zone, anchors).partRegion
+}
+
+function findPartRegionCandidateForQuantityAnchor(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  zone: QuantityLabelAnchorZone,
+  anchors: readonly QuantityLabelAnchor[],
+): QuantityAnchorPartRegionResult {
   const labelRegion = zone.anchor.region
   const interiorRegion = getCalloutInteriorRegion(imageData)
   const partSearchBottom = Math.min(
@@ -6863,19 +9408,58 @@ function findPartRegionForQuantityAnchor(
   }, imageData.width, imageData.height)
   const boundedBaseSearchRegion = intersectRegions(baseSearchRegion, interiorRegion)
   if (!boundedBaseSearchRegion) {
-    return null
+    return {
+      partRegion: null,
+      reason: "outside-interior",
+    }
   }
 
   const searchRegion = normalizeRegion(boundedBaseSearchRegion, imageData.width, imageData.height)
   const rawPartRegion = selectNearestPartComponentRegion(imageData, partMask, searchRegion, labelRegion)
-  if (!rawPartRegion || !isLikelyAnchoredPartRegion(imageData, rawPartRegion, labelRegion)) {
-    return null
+  if (!rawPartRegion) {
+    const impliedPartRegion = getQuantityLabelImpliedPartRegion(imageData, partMask, searchRegion, labelRegion)
+    if (impliedPartRegion) {
+      return {
+        ownedPartRegion: impliedPartRegion,
+        partRegion: impliedPartRegion,
+        reason: "quantity-label-implied-part-region",
+        searchRegion,
+      }
+    }
+
+    return {
+      partRegion: null,
+      reason: "no-raw-part-region",
+      searchRegion,
+    }
+  }
+  const anchoredPartRegion = isLikelyAnchoredPartRegion(imageData, rawPartRegion, labelRegion)
+    ? rawPartRegion
+    : getFallbackRegionForUnlikelyAnchoredPart(imageData, partMask, searchRegion, rawPartRegion, labelRegion)
+  if (!anchoredPartRegion) {
+    const impliedPartRegion = getQuantityLabelImpliedPartRegion(imageData, partMask, searchRegion, labelRegion)
+    if (impliedPartRegion) {
+      return {
+        ownedPartRegion: impliedPartRegion,
+        partRegion: impliedPartRegion,
+        rawPartRegion,
+        reason: "quantity-label-implied-part-region",
+        searchRegion,
+      }
+    }
+
+    return {
+      partRegion: null,
+      rawPartRegion,
+      reason: "unlikely-anchored-part-region",
+      searchRegion,
+    }
   }
 
   const expandedPartRegion = expandPartRegionAcrossConnectedForeground(
     imageData,
     partMask,
-    rawPartRegion,
+    anchoredPartRegion,
     zone.anchor,
     anchors,
     interiorRegion,
@@ -6891,7 +9475,13 @@ function findPartRegionForQuantityAnchor(
   const paddedRegion = padRegion(ownedPartRegion, imageData.width, imageData.height, padding)
   const constrainedRegion = intersectRegions(paddedRegion, interiorRegion) ?? rawPartRegion
 
-  return normalizeRegion(constrainedRegion, imageData.width, imageData.height)
+  return {
+    expandedPartRegion,
+    ownedPartRegion,
+    partRegion: normalizeRegion(constrainedRegion, imageData.width, imageData.height),
+    rawPartRegion,
+    searchRegion,
+  }
 }
 
 function selectNearestPartComponentRegion(
@@ -6924,6 +9514,114 @@ function selectNearestPartComponentRegion(
 
   return unionRegions(selected.length > 0 ? selected : candidates) ??
     getFallbackAnchoredPartRegion(imageData, partMask, searchRegion, labelRegion)
+}
+
+function getFallbackRegionForUnlikelyAnchoredPart(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  searchRegion: PixelRegion,
+  rawPartRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  if (!isBroadConnectedPartRegionNearQuantityLabel(imageData, rawPartRegion, labelRegion)) {
+    return null
+  }
+
+  const fallbackRegion = getFallbackAnchoredPartRegion(imageData, partMask, searchRegion, labelRegion)
+  if (!fallbackRegion || getIntersectionOverUnion(fallbackRegion, rawPartRegion) > 0.92) {
+    return null
+  }
+
+  return isLikelyAnchoredPartRegion(imageData, fallbackRegion, labelRegion)
+    ? fallbackRegion
+    : null
+}
+
+function getQuantityLabelImpliedPartRegion(
+  imageData: DetectionImageData,
+  partMask: Uint8Array,
+  searchRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const fallbackWidth = Math.max(labelRegion.width * 5.2, imageData.width * 0.1)
+  const fallbackHeight = Math.max(labelRegion.height * 6.4, imageData.height * 0.16)
+  const fallbackSearch = intersectRegions({
+    height: fallbackHeight,
+    width: fallbackWidth,
+    x: labelCenterX - fallbackWidth / 2,
+    y: labelRegion.y - fallbackHeight,
+  }, searchRegion)
+  if (!fallbackSearch) {
+    return null
+  }
+
+  const foregroundRegion = trimRegionToForeground(partMask, imageData.width, imageData.height, fallbackSearch)
+  if (foregroundRegion && isQuantityLabelImpliedPartRegion(imageData, foregroundRegion, labelRegion)) {
+    return normalizeRegion(foregroundRegion, imageData.width, imageData.height)
+  }
+
+  return getQuantityLabelDefaultPartRegion(imageData, fallbackSearch, labelRegion)
+}
+
+function getQuantityLabelDefaultPartRegion(
+  imageData: DetectionImageData,
+  searchRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const width = Math.max(labelRegion.width * 4.6, imageData.width * 0.1)
+  const height = Math.max(labelRegion.height * 4.8, imageData.height * 0.11)
+  const bottom = labelRegion.y - Math.max(1, Math.round(labelRegion.height * 0.12))
+  const region = intersectRegions({
+    height,
+    width,
+    x: labelCenterX - width / 2,
+    y: bottom - height,
+  }, searchRegion)
+  if (!region || region.width < 3 || region.height < 2) {
+    return null
+  }
+
+  return normalizeRegion(region, imageData.width, imageData.height)
+}
+
+function isQuantityLabelImpliedPartRegion(
+  imageData: DetectionImageData,
+  partRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const area = partRegion.width * partRegion.height
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const horizontalSlack = Math.max(labelRegion.width * 2.8, partRegion.width * 0.34)
+
+  return (
+    area >= imageData.width * imageData.height * 0.00012 &&
+    area <= imageData.width * imageData.height * 0.28 &&
+    partRegion.width >= Math.max(3, imageData.width * 0.004) &&
+    partRegion.height >= Math.max(2, imageData.height * 0.006) &&
+    partRegion.y < labelRegion.y + labelRegion.height * 0.4 &&
+    partRegion.y + partRegion.height <= labelRegion.y + labelRegion.height * 0.65 &&
+    labelCenterX >= partRegion.x - horizontalSlack &&
+    labelCenterX <= partRegion.x + partRegion.width + horizontalSlack
+  )
+}
+
+function isBroadConnectedPartRegionNearQuantityLabel(
+  imageData: DetectionImageData,
+  partRegion: PixelRegion,
+  labelRegion: PixelRegion,
+) {
+  const labelCenterX = getRegionCenterX(labelRegion)
+  const widthLimit = Math.max(imageData.width * 0.78, labelRegion.width * 7)
+
+  return (
+    partRegion.width >= widthLimit &&
+    labelCenterX >= partRegion.x &&
+    labelCenterX <= partRegion.x + partRegion.width &&
+    partRegion.y < labelRegion.y &&
+    partRegion.y + partRegion.height <= labelRegion.y + labelRegion.height * 1.25
+  )
 }
 
 function selectPrimaryPartComponentForQuantityLabel(
@@ -7376,7 +10074,7 @@ function isLikelyAnchoredPartRegion(
   const horizontalSlack = Math.max(labelRegion.width * 2.5, partRegion.width * 0.25)
 
   return (
-    area >= imageData.width * imageData.height * 0.0015 &&
+    area >= imageData.width * imageData.height * 0.00065 &&
     area <= imageData.width * imageData.height * 0.46 &&
     partRegion.width >= Math.max(7, imageData.width * 0.012) &&
     partRegion.width <= imageData.width * 0.9 &&
@@ -7733,6 +10431,7 @@ function getPartPreviewContentSearchRegion(
 ) {
   const sameRowRegions = getSameRowPartItemRegions(itemRegion, itemRegions)
   const labelRegion = itemRegion.quantityRegion
+  const quantityRowTolerance = Math.max(8, Math.round(labelRegion.height * 1.35))
   const horizontalExpansion = Math.max(
     24,
     Math.round(labelRegion.width * 4.2),
@@ -7754,14 +10453,22 @@ function getPartPreviewContentSearchRegion(
 
   for (const neighbor of sameRowRegions) {
     const neighborCenterX = getRegionCenterX(neighbor.quantityRegion)
+    const hasQuantityAlignedNeighbor =
+      Math.abs(getRegionCenterY(neighbor.quantityRegion) - getRegionCenterY(labelRegion)) <= quantityRowTolerance
     const guard = Math.max(
       2,
       Math.round(Math.min(labelRegion.height, neighbor.quantityRegion.height) * 0.22),
     )
     if (neighborCenterX < labelCenterX) {
-      left = Math.max(left, neighbor.quantityRegion.x + neighbor.quantityRegion.width + guard)
+      const boundary = hasQuantityAlignedNeighbor
+        ? neighbor.quantityRegion.x + neighbor.quantityRegion.width
+        : getPartPreviewBoundaryBetweenSameRowItems(neighbor, itemRegion)
+      left = Math.max(left, boundary + guard)
     } else if (neighborCenterX > labelCenterX) {
-      right = Math.min(right, neighbor.quantityRegion.x - guard)
+      const boundary = hasQuantityAlignedNeighbor
+        ? neighbor.quantityRegion.x
+        : getPartPreviewBoundaryBetweenSameRowItems(itemRegion, neighbor)
+      right = Math.min(right, boundary - guard)
     }
   }
 
@@ -7899,6 +10606,28 @@ function getOwnedPartContentForeground(
   }
 }
 
+function constrainOwnedPartContentRegionToDetectedPart(
+  ownedRegion: PixelRegion,
+  itemRegion: StepCalloutPartItemRegion,
+  imageWidth: number,
+  imageHeight: number,
+  interiorRegion: PixelRegion,
+) {
+  const rightSlack = Math.max(6, Math.round(itemRegion.quantityRegion.height * 0.9))
+  const widthInflationLimit = Math.max(
+    itemRegion.partRegion.width * 1.65,
+    itemRegion.partRegion.width + itemRegion.quantityRegion.height * 1.4,
+  )
+  const reachesRightFrame = ownedRegion.x + ownedRegion.width >=
+    interiorRegion.x + interiorRegion.width - rightSlack
+
+  if (!reachesRightFrame || ownedRegion.width <= widthInflationLimit) {
+    return ownedRegion
+  }
+
+  return padPartRegion(itemRegion.partRegion, imageWidth, imageHeight, 1, interiorRegion)
+}
+
 function createOwnedForegroundMask(
   imageData: DetectionImageData,
   width: number,
@@ -8020,9 +10749,33 @@ function getSameRowPartItemRegions(
   const rowTolerance = Math.max(8, Math.round(itemRegion.quantityRegion.height * 1.35))
 
   return itemRegions.filter((neighbor) =>
-    neighbor !== itemRegion &&
-    Math.abs(getRegionCenterY(neighbor.quantityRegion) - getRegionCenterY(itemRegion.quantityRegion)) <= rowTolerance
+    neighbor !== itemRegion && (
+      Math.abs(getRegionCenterY(neighbor.quantityRegion) - getRegionCenterY(itemRegion.quantityRegion)) <= rowTolerance ||
+      arePartItemRegionsOnSameVisualRow(itemRegion, neighbor)
+    )
   )
+}
+
+function arePartItemRegionsOnSameVisualRow(
+  left: StepCalloutPartItemRegion,
+  right: StepCalloutPartItemRegion,
+) {
+  const partVerticalOverlap = getVerticalOverlapRatio(left.partRegion, right.partRegion)
+  const quantityVerticalGap = Math.abs(getRegionCenterY(left.quantityRegion) - getRegionCenterY(right.quantityRegion))
+  const quantityGapTolerance = Math.max(
+    left.quantityRegion.height,
+    right.quantityRegion.height,
+    Math.round(Math.min(left.partRegion.height, right.partRegion.height) * 0.35),
+  )
+
+  return partVerticalOverlap >= 0.35 && quantityVerticalGap <= quantityGapTolerance
+}
+
+function getPartPreviewBoundaryBetweenSameRowItems(
+  left: StepCalloutPartItemRegion,
+  right: StepCalloutPartItemRegion,
+) {
+  return Math.round((getRegionCenterX(left.partRegion) + getRegionCenterX(right.partRegion)) / 2)
 }
 
 function isDirectlyOwnedPartContentComponent(
@@ -8142,6 +10895,8 @@ function isLikelyCalloutRuleComponent(
   const edgeTolerance = Math.max(2, Math.round(labelRegion.height * 0.1))
   const touchesSearchTop = component.y <= searchRegion.y + edgeTolerance
   const touchesSearchLeft = component.x <= searchRegion.x + edgeTolerance
+  const touchesSearchRight = component.x + component.width >= searchRegion.x + searchRegion.width - edgeTolerance
+  const searchHeightCoverage = component.height / Math.max(1, searchRegion.height)
   const isHorizontalRule = component.height <= 3 &&
     component.width >= Math.max(20, labelRegion.width * 2.4, searchRegion.width * 0.32) &&
     (
@@ -8153,6 +10908,21 @@ function isLikelyCalloutRuleComponent(
     (
       component.x <= rawPartRegion.x - 1 ||
       touchesSearchLeft
+    )
+  const rightEdgeRuleWidthLimit = Math.max(
+    3,
+    Math.round(labelRegion.width * 0.95),
+    Math.round(searchRegion.width * 0.26),
+  )
+  const startsAfterRawPartMidline = component.x >= rawPartRegion.x + Math.round(rawPartRegion.width * 0.45)
+  const touchesSearchRightLoosely = component.x + component.width >=
+    searchRegion.x + searchRegion.width - Math.max(edgeTolerance, rightEdgeRuleWidthLimit)
+  const isRightEdgeVerticalRule = component.height >=
+    Math.max(20, labelRegion.height * 2.8, searchRegion.height * 0.42) &&
+    searchHeightCoverage >= 0.5 &&
+    (
+      (component.width <= 3 && (touchesSearchRight || startsAfterRawPartMidline)) ||
+      (component.width <= rightEdgeRuleWidthLimit && startsAfterRawPartMidline && touchesSearchRightLoosely)
     )
   const isSparseCornerRule = (
     (
@@ -8176,7 +10946,7 @@ function isLikelyCalloutRuleComponent(
     labelCenterX <= component.x + component.width
   )
 
-  return isHorizontalRule || isVerticalRule || isSparseCornerRule || isSparsePreLabelFrame
+  return isHorizontalRule || isVerticalRule || isRightEdgeVerticalRule || isSparseCornerRule || isSparsePreLabelFrame
 }
 
 function isLikelyForeignPartContentComponent(
@@ -8402,6 +11172,46 @@ function median(values: readonly number[]) {
 function getFiniteNumber(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? number : null
+}
+
+function getElapsedMs(startedAt: number) {
+  return getNowMs() - startedAt
+}
+
+function getNowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now()
+}
+
+async function yieldStepCalloutPageScan(signal?: AbortSignal) {
+  assertStepCalloutDetectionCanContinue(signal)
+
+  const scheduler = (globalThis as typeof globalThis & {
+    scheduler?: { yield?: () => Promise<void> }
+  }).scheduler
+  if (typeof scheduler?.yield === "function") {
+    await scheduler.yield()
+    assertStepCalloutDetectionCanContinue(signal)
+    return
+  }
+
+  if (typeof globalThis.MessageChannel === "function") {
+    await new Promise<void>((resolve) => {
+      const channel = new globalThis.MessageChannel()
+      channel.port1.onmessage = () => {
+        channel.port1.close()
+        channel.port2.close()
+        resolve()
+      }
+      channel.port2.postMessage(undefined)
+    })
+    assertStepCalloutDetectionCanContinue(signal)
+    return
+  }
+
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0)
+  })
+  assertStepCalloutDetectionCanContinue(signal)
 }
 
 function getStepCalloutProgress(pageIndex: number, pageCount: number, withinPageProgress: number) {
