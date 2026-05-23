@@ -2,7 +2,7 @@
 
 import { Box, Stack } from "@chakra-ui/react"
 import { Boxes, PackageCheck, Search } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BaggingOverview } from "@/components/bagging/bagging-overview"
 import { BaggingPageFrame } from "@/components/bagging/bagging-page-frame"
 import { ExtractedPartsPanel, NormalizationAttentionList } from "@/components/bagging/extracted-parts-panel"
@@ -12,7 +12,13 @@ import { PartsListDebugPanel } from "@/components/bagging/parts-list-debug-panel
 import { PendingOutputPanel } from "@/components/bagging/pending-output-panel"
 import { ProcessingStatusCard, type ProcessingStatusStep } from "@/components/bagging/processing-status-card"
 import { SessionControlsCard } from "@/components/bagging/session-controls-card"
-import { StepCalloutDebugPanel, StepCalloutMatchingDebugPanel, StepCalloutsPanel } from "@/components/bagging/step-callouts-panel"
+import {
+  getStepCalloutQuantityDiagnostic,
+  StepCalloutDebugPanel,
+  StepCalloutMatchingDebugPanel,
+  StepCalloutQuantityDiagnosticPanel,
+  StepCalloutsPanel,
+} from "@/components/bagging/step-callouts-panel"
 import {
   fetchPartsListCatalogueColors,
   fetchPartsListNormalization,
@@ -68,7 +74,10 @@ import {
   type StepCalloutDetectionProgress,
   type StepCalloutDetectionResult,
 } from "@/features/bagging/step-callout-detection"
-import type { StepCalloutMultiplierMap } from "@/features/bagging/step-callout-bagging"
+import {
+  createStepCalloutBaggingPlan,
+  type StepCalloutMultiplierMap,
+} from "@/features/bagging/step-callout-bagging"
 
 type PartsAnalysisProgress = Pick<PartsListPdfExtractionProgress, "message" | "progress"> &
   Partial<
@@ -158,6 +167,19 @@ export function BaggingPage() {
   const hasCurrentStepCalloutAnalysis = hasCurrentStepCalloutResult(stepCalloutResult)
   const visibleStepCalloutResult = hasCurrentStepCalloutAnalysis ? stepCalloutResult : null
   const inventoryPartCount = getPartsListTotalQuantity(partsListResult)
+  const stepCoverageDiagnostic = useMemo(() => {
+    if (!visibleStepCalloutResult) {
+      return null
+    }
+
+    return getStepCalloutQuantityDiagnostic(
+      createStepCalloutBaggingPlan(visibleStepCalloutResult, {
+        calloutMultipliers: stepCalloutMultipliers,
+        inventoryPartCount,
+      }),
+      inventoryPartCount,
+    )
+  }, [inventoryPartCount, stepCalloutMultipliers, visibleStepCalloutResult])
   const hasStaleStepCalloutAnalysis = Boolean(stepCalloutResult && !hasCurrentStepCalloutAnalysis)
   const canRunStepOnlyAnalysis = Boolean(
     selectedManualFile &&
@@ -1198,6 +1220,12 @@ export function BaggingPage() {
           />
           {partsListResult?.normalization?.attentionRows.length ? (
             <NormalizationAttentionList rows={partsListResult.normalization.attentionRows} />
+          ) : null}
+          {stepCoverageDiagnostic ? (
+            <StepCalloutQuantityDiagnosticPanel
+              diagnostic={stepCoverageDiagnostic}
+              testId="step-callout-quantity-sidebar-diagnostics"
+            />
           ) : null}
         </Stack>
 

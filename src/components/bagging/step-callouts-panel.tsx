@@ -316,14 +316,16 @@ export function StepCalloutLocalMatchDebugPanel({ result }: { result: StepCallou
   return <StepLocalMatchDebugPanel groups={localDebugGroups} />
 }
 
-function StepCalloutQuantityDiagnosticPanel({
+export function StepCalloutQuantityDiagnosticPanel({
   diagnostic,
+  testId = "step-callout-quantity-diagnostics",
 }: {
   diagnostic: StepCalloutQuantityDiagnostic
+  testId?: string
 }) {
   return (
     <Box
-      data-testid="step-callout-quantity-diagnostics"
+      data-testid={testId}
       data-bom-part-count={diagnostic.inventoryPartCount}
       data-detected-part-count={diagnostic.detectedPartCount}
       data-missing-part-count={diagnostic.missingPartCount}
@@ -1711,7 +1713,7 @@ function getStepCalloutBagSummary(plan: StepCalloutBaggingPlan, result: StepCall
   return `${bagText} from ${calloutText} and ${partText} across ${pageText}; ${scopeText}.`
 }
 
-function getStepCalloutQuantityDiagnostic(
+export function getStepCalloutQuantityDiagnostic(
   plan: StepCalloutBaggingPlan,
   inventoryPartCount?: number | null,
 ): StepCalloutQuantityDiagnostic | null {
@@ -2059,7 +2061,7 @@ type StepBagChecklistCompletion = {
   totalQuantity: number
 }
 
-type StepCalloutQuantityDiagnostic = {
+export type StepCalloutQuantityDiagnostic = {
   detectedPartCount: number
   inventoryPartCount: number
   missingPartCount: number

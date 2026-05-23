@@ -1424,6 +1424,11 @@ describe("BaggingPage parts list extraction", () => {
     expect(stepOptions).not.toHaveProperty("inventoryRows")
     expect(stepOptions.maxPages).toBeNull()
 
+    const sidebarDiagnostics = await screen.findByTestId("step-callout-quantity-sidebar-diagnostics")
+    expect(sidebarDiagnostics).toHaveAttribute("data-bom-part-count", "14")
+    expect(sidebarDiagnostics).toHaveAttribute("data-detected-part-count", "1")
+    expect(sidebarDiagnostics).toHaveAttribute("data-missing-part-count", "13")
+
     await user.click(screen.getByRole("tab", { name: "Build steps" }))
     const stepDiagnostics = await screen.findByTestId("step-callout-quantity-diagnostics")
     expect(stepDiagnostics).toHaveAttribute("data-bom-part-count", "14")
@@ -1435,6 +1440,10 @@ describe("BaggingPage parts list extraction", () => {
         "data-detected-part-count",
         "2",
       ),
+    )
+    expect(screen.getByTestId("step-callout-quantity-sidebar-diagnostics")).toHaveAttribute(
+      "data-missing-part-count",
+      "12",
     )
 
     await user.click(screen.getByRole("tab", { name: "Bags" }))

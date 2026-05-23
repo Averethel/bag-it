@@ -37,10 +37,12 @@ preserved in the Debug tab for later tuning; final ready-bag generation remains
 outside the active UI loop while this local baseline is being tightened.
 When the recognized BOM quantity is higher than the bagging quantity currently
 accounted for by detected callouts, the UI shows a step coverage diagnostic with
-the BOM quantity, callout quantity, and missing quantity. The Build steps tab
-lets the user raise a per-step multiplier, defaulting to 1, so repeated manual
-steps can multiply every detected item in that callout for bagging and trigger
-bag rebalancing without requiring the detector to infer repeated-step notation.
+the BOM quantity, callout quantity, and missing quantity in the same sidebar
+attention area used for unresolved BOM rows, so it remains visible while the
+user changes tabs and tunes bagging. The Build steps tab lets the user raise a
+per-step multiplier, defaulting to 1, so repeated manual steps can multiply
+every detected item in that callout for bagging and trigger bag rebalancing
+without requiring the detector to infer repeated-step notation.
 Bag boundaries now preserve page containment: every detected callout on the
 same manual page stays in the same draft bag, so the default detector can stay
 callout-first and avoid step-label OCR during normal analysis. Step-number OCR

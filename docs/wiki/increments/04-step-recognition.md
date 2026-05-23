@@ -30,8 +30,9 @@ to the original build callouts.
   loading, and hover previews for enlarged callout crops
 - Per-step bagging multiplier controls in the Build steps tab, defaulting to 1,
   for manuals that print one callout but expect a step to be repeated
-- Step coverage diagnostic when BOM quantity is higher than the current
-  callout-derived bagging quantity, including BOM, callout, and missing counts
+- Step coverage diagnostic in the persistent sidebar attention area when BOM
+  quantity is higher than the current callout-derived bagging quantity,
+  including BOM, callout, and missing counts
 - Page reference and source region per callout
 - Callout-first default detection path, with manual step-number assignment kept
   as an optional debug path rather than required for draft bag grouping
@@ -80,7 +81,9 @@ to the original build callouts.
   containment constraint.
 - When the recognized BOM quantity is higher than multiplier-adjusted callout
   quantity, the UI displays a step coverage diagnostic with the BOM quantity,
-  callout quantity, and missing quantity.
+  callout quantity, and missing quantity in the same persistent sidebar area as
+  unresolved BOM rows, so the user can see whether multiplier changes are
+  overcorrecting.
 - Each detected callout reports the number of visible part types and renders
   detected part-image crops with parsed quantity numbers and visual color
   estimates.
