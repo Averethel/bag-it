@@ -1283,7 +1283,7 @@ describe("BaggingPage parts list extraction", () => {
       metadata,
       partPreviewByKey: catalogueMock.createPreviewMap([{ colorId: "0", partNumber: "3005" }]),
       partsListResult,
-      stepCalloutMultipliers: { "step-callout:p1:r1": 3 },
+      stepCalloutMultipliers: { "step-callout:p1:r1": 15 },
       stepCalloutResult,
     })
     const user = userEvent.setup()
@@ -1302,13 +1302,23 @@ describe("BaggingPage parts list extraction", () => {
     expect(screen.getByText("Analysis complete")).toBeVisible()
     expect(catalogueMock.fetchPartsListNormalization).toHaveBeenCalled()
     expect(extractionMock.extractPartsListFromPdfDocument).not.toHaveBeenCalled()
+    expect(await screen.findByTestId("step-callout-quantity-sidebar-diagnostics")).toHaveAttribute(
+      "data-diagnostic-kind",
+      "overage",
+    )
+    expect(screen.getByTestId("step-callout-quantity-sidebar-diagnostics")).toHaveAttribute(
+      "data-overage-part-count",
+      "1",
+    )
+    expect(screen.getByText("Step quantity exceeds BOM")).toBeVisible()
 
     await user.click(screen.getByRole("tab", { name: "Build steps" }))
-    expect(await screen.findByTestId("step-callout-multiplier-value")).toHaveTextContent("x3")
-    expect(screen.getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute("data-detected-part-count", "3")
+    expect(await screen.findByTestId("step-callout-multiplier-value")).toHaveTextContent("x15")
+    expect(screen.getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute("data-detected-part-count", "15")
+    expect(screen.getByTestId("step-callout-quantity-diagnostics")).toHaveAttribute("data-diagnostic-kind", "overage")
 
     await user.click(screen.getByRole("tab", { name: "Bags" }))
-    expect(await screen.findByTestId("step-bag-part-row")).toHaveAttribute("data-quantity", "3")
+    expect(await screen.findByTestId("step-bag-part-row")).toHaveAttribute("data-quantity", "15")
   })
 
   it("does not restore a failed upload state when the saved part analysis is current", async () => {

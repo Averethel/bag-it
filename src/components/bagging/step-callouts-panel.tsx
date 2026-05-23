@@ -323,12 +323,19 @@ export function StepCalloutQuantityDiagnosticPanel({
   diagnostic: StepCalloutQuantityDiagnostic
   testId?: string
 }) {
+  const isOverage = diagnostic.kind === "overage"
+  const deltaPartCount = isOverage ? diagnostic.overagePartCount : diagnostic.missingPartCount
+  const deltaLabel = isOverage ? "extra" : "missing"
+  const metricLabel = isOverage ? "Extra quantity" : "Missing quantity"
+
   return (
     <Box
       data-testid={testId}
       data-bom-part-count={diagnostic.inventoryPartCount}
       data-detected-part-count={diagnostic.detectedPartCount}
+      data-diagnostic-kind={diagnostic.kind}
       data-missing-part-count={diagnostic.missingPartCount}
+      data-overage-part-count={diagnostic.overagePartCount}
       border="sm"
       borderColor="orange.200"
       bg="orange.50"
@@ -339,14 +346,16 @@ export function StepCalloutQuantityDiagnosticPanel({
         <HStack justify="space-between" align="start" gap="3">
           <Stack gap="bagging.none" minW="bagging.zero">
             <Text color="orange.800" fontSize="sm" fontWeight="semibold">
-              Step coverage needs attention
+              {isOverage ? "Step quantity exceeds BOM" : "Step coverage needs attention"}
             </Text>
             <Text color="orange.700" fontSize="xs">
-              BOM quantity is higher than the parts found in step callouts.
+              {isOverage
+                ? "Callout quantity is higher than the recognized BOM quantity."
+                : "BOM quantity is higher than the parts found in step callouts."}
             </Text>
           </Stack>
           <Badge colorPalette="orange" variant="solid" flexShrink={0}>
-            {stepQuantityFormatter.format(diagnostic.missingPartCount)} missing
+            {stepQuantityFormatter.format(deltaPartCount)} {deltaLabel}
           </Badge>
         </HStack>
         <SimpleGrid columns={{ base: 1, md: 3 }} gap="2">
@@ -359,8 +368,8 @@ export function StepCalloutQuantityDiagnosticPanel({
             value={stepQuantityFormatter.format(diagnostic.detectedPartCount)}
           />
           <StepDiagnosticMetric
-            label="Missing quantity"
-            value={stepQuantityFormatter.format(diagnostic.missingPartCount)}
+            label={metricLabel}
+            value={stepQuantityFormatter.format(deltaPartCount)}
           />
         </SimpleGrid>
       </Stack>
@@ -1717,14 +1726,19 @@ export function getStepCalloutQuantityDiagnostic(
   plan: StepCalloutBaggingPlan,
   inventoryPartCount?: number | null,
 ): StepCalloutQuantityDiagnostic | null {
-  if (inventoryPartCount == null || inventoryPartCount <= plan.detectedPartCount) {
+  if (inventoryPartCount == null || inventoryPartCount === plan.detectedPartCount) {
     return null
   }
 
+  const overagePartCount = Math.max(0, plan.detectedPartCount - inventoryPartCount)
+  const missingPartCount = Math.max(0, inventoryPartCount - plan.detectedPartCount)
+
   return {
     detectedPartCount: plan.detectedPartCount,
+    kind: overagePartCount > 0 ? "overage" : "missing",
     inventoryPartCount,
-    missingPartCount: inventoryPartCount - plan.detectedPartCount,
+    missingPartCount,
+    overagePartCount,
   }
 }
 
@@ -2064,7 +2078,9 @@ type StepBagChecklistCompletion = {
 export type StepCalloutQuantityDiagnostic = {
   detectedPartCount: number
   inventoryPartCount: number
+  kind: "missing" | "overage"
   missingPartCount: number
+  overagePartCount: number
 }
 
 type StepBagChecklistRow = {

@@ -174,6 +174,20 @@ describe("StepCalloutsPanel", () => {
     ])
   })
 
+  it("warns when multiplier-adjusted step quantities exceed the BOM quantity", () => {
+    renderWithProvider(<StepCalloutsPanel inventoryPartCount={4} result={createResult()} />)
+
+    const diagnosticsPanel = screen.getByTestId("step-callout-quantity-diagnostics")
+    expect(diagnosticsPanel).toHaveAttribute("data-diagnostic-kind", "overage")
+    expect(diagnosticsPanel).toHaveAttribute("data-bom-part-count", "4")
+    expect(diagnosticsPanel).toHaveAttribute("data-detected-part-count", "5")
+    expect(diagnosticsPanel).toHaveAttribute("data-missing-part-count", "0")
+    expect(diagnosticsPanel).toHaveAttribute("data-overage-part-count", "1")
+    expect(screen.getByText("Step quantity exceeds BOM")).toBeVisible()
+    expect(screen.getByText("1 extra")).toBeVisible()
+    expect(screen.getByText("Extra quantity")).toBeVisible()
+  })
+
   it("moves callout crops and local match diagnostics to the debug panel", () => {
     renderWithProvider(<StepCalloutDebugPanel inventoryPartCount={480} result={createResult()} />)
 
