@@ -309,6 +309,16 @@ describe("step callout detection", () => {
     })
   })
 
+  it("rejects shallow wide model strips that resemble callout panels", () => {
+    const imageData = createSyntheticPage(1_000, 700)
+    drawBorderOnlyRect(imageData, { x: 220, y: 420, width: 480, height: 70 }, [216, 239, 250])
+    drawRect(imageData, { x: 250, y: 438, width: 410, height: 18 }, [182, 188, 190])
+    drawRect(imageData, { x: 292, y: 462, width: 120, height: 8 }, [92, 92, 92])
+    drawSyntheticQuantityText(imageData, { scale: 2, text: "1x", x: 246, y: 462 })
+
+    expect(detectStepCalloutRegionsFromImageData(imageData)).toEqual([])
+  })
+
   it("detects a non-blue bordered callout from a nearby printed step number", async () => {
     const canvasApi = installMockCanvasApi()
 
@@ -2866,6 +2876,7 @@ describe("step callout detection", () => {
       { expected: 1, mask: manualStyleSerifOneQuantityMask },
       { expected: 1, mask: annotatedTallSlopedOneQuantityMask },
       { expected: 1, mask: annotatedNarrowSlopedOneQuantityMask },
+      { expected: 1, mask: actualUpperCourtyardPage38RightStemmedOneQuantityMask },
       { expected: 11, mask: annotatedElevenQuantityMask },
       { expected: 2, mask: manualStyleSplitMarkerTwoQuantityMask },
       { expected: 3, mask: manualStyleSplitMarkerThreeQuantityMask },
@@ -2885,6 +2896,7 @@ describe("step callout detection", () => {
       { expected: 8, mask: annotatedLowerCourtyardRoundedEightQuantityMask },
       { expected: 9, mask: annotatedLowerCourtyardNineQuantityMask },
       { expected: 9, mask: annotatedLowerCourtyardCompactNineQuantityMask },
+      { expected: 9, mask: actualUpperCourtyardPage89NineQuantityMask },
       { expected: 9, mask: manualStyleSplitMarkerNineQuantityMask },
       { expected: 10, mask: annotatedLowerCourtyardTenQuantityMask },
       { expected: 20, mask: annotatedLowerCourtyardTwentyQuantityMask },
@@ -2931,6 +2943,7 @@ describe("step callout detection", () => {
     for (const { expected, mask } of [
       { expected: 9, mask: actualLowerCourtyardPage2NineQuantityMask },
       { expected: 6, mask: actualLowerCourtyardPage10SixQuantityMask },
+      { expected: 6, mask: actualUpperCourtyardPage109SixQuantityMask },
     ]) {
       const canvasApi = installMockCanvasApi()
 
@@ -3213,6 +3226,53 @@ describe("step callout detection", () => {
       )
 
       expect(result.callouts[0].partItems[0].quantity.value).toBe(24)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("detects tall narrow callout panels with small quantity markers", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 1_000)
+      drawBorderOnlyRect(imageData, { x: 100, y: 40, width: 260, height: 910 }, [216, 239, 250])
+
+      for (let index = 0; index < 10; index += 1) {
+        drawColoredPartItem(
+          imageData,
+          {
+            height: 34,
+            width: 72,
+            x: 135 + ((index % 2) * 100),
+            y: 70 + (index * 82),
+          },
+          [147, 138, 109],
+        )
+      }
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 1_000 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts).toHaveLength(1)
+      expect(result.callouts[0].partItems).toHaveLength(10)
+      expect(result.callouts[0].partItems.map((item) => item.quantity.value)).toEqual(Array(10).fill(1))
     } finally {
       canvasApi.restore()
     }
@@ -3676,6 +3736,25 @@ const annotatedNarrowSlopedOneQuantityMask = [
   "......................",
 ]
 
+const actualUpperCourtyardPage38RightStemmedOneQuantityMask = [
+  ".....##...............",
+  "....##................",
+  "...###................",
+  ".#####................",
+  "###.##.......#......#.",
+  ".....#.......##....##.",
+  ".....#.......###..###.",
+  ".....#........##..##..",
+  ".....#.........####...",
+  ".....#.........####...",
+  ".....#.........####...",
+  ".....#.........####...",
+  ".....#........##..##..",
+  ".....#.......###..###.",
+  ".....#.......##....##.",
+  ".....#......##......##",
+]
+
 const annotatedElevenQuantityMask = [
   ".....##...........###...............",
   "....###...........###...............",
@@ -4089,6 +4168,46 @@ const actualLowerCourtyardPage10SixQuantityMask = [
   ".###...##.....##....##.",
   "..######.....##......##",
   ".....#.................",
+]
+
+const actualUpperCourtyardPage89NineQuantityMask = [
+  "...####................",
+  "..#######..............",
+  ".###...###.............",
+  ".##.....##.............",
+  "##......###............",
+  "##.......##...##.....##",
+  "##.......##...##....##.",
+  "##......###....##..##..",
+  ".##.....###....######..",
+  ".##########.....####...",
+  "..#####..##......###...",
+  ".........##.....####...",
+  "........###.....#####..",
+  ".#......##.....##..##..",
+  ".##....###....###...##.",
+  ".########....###....###",
+  "...#####.....##......##",
+]
+
+const actualUpperCourtyardPage109SixQuantityMask = [
+  "...######..............",
+  "..###.####.............",
+  ".##.....##.............",
+  ".##.....##.............",
+  "##............#......#.",
+  "##............##....###",
+  "##.######.....###...##.",
+  "#####.####.....##..##..",
+  "###.....##......####...",
+  "##......###.....####...",
+  "##.......##.....####...",
+  "##.......##.....####...",
+  "##.......##....###.##..",
+  ".##.....##.....##..###.",
+  ".###...###....##....##.",
+  "..#######....###.....##",
+  "....###................",
 ]
 
 const actualCastleRampPartEdgeFalseFiveMask = [

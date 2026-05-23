@@ -1,6 +1,6 @@
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v107"
+export const stepCalloutDetectorVersion = "step-callout-detection-v114"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -735,6 +735,7 @@ export function detectStepCalloutRegionsFromImageData(imageData: DetectionImageD
   const scaledCandidates = detectDownscaledStepCalloutRegionsFromImageData(imageData)
 
   return suppressOverlappingCandidates([...nativeCandidates, ...scaledCandidates])
+    .filter((candidate) => !isImplausiblyWideShallowStepCalloutRegion(imageData, candidate))
     .sort((left, right) => left.y - right.y || left.x - right.x)
 }
 
@@ -1830,6 +1831,28 @@ function getMaximumStepCalloutRegionHeight(imageData: DetectionImageData) {
   return imageData.height * 0.58
 }
 
+function isTallNarrowStepCalloutRegionCandidate(imageData: DetectionImageData, region: PixelRegion) {
+  const aspectRatio = region.width / Math.max(1, region.height)
+
+  return (
+    region.height <= imageData.height * 0.94 &&
+    region.height >= imageData.height * 0.45 &&
+    region.width <= imageData.width * 0.34 &&
+    aspectRatio <= 0.62
+  )
+}
+
+function isImplausiblyWideShallowStepCalloutRegion(imageData: DetectionImageData, region: PixelRegion) {
+  const aspectRatio = region.width / Math.max(1, region.height)
+  const maxShallowHeight = Math.max(72, imageData.height * 0.112)
+
+  return (
+    aspectRatio >= 3.4 &&
+    region.height <= maxShallowHeight &&
+    region.width >= imageData.width * 0.16
+  )
+}
+
 function normalizeStepNumberLabelsForSequence(
   labels: readonly StepNumberLabel[],
   fallbackStart: number,
@@ -2541,13 +2564,14 @@ function createRegionCandidate(
   const rawArea = component.width * component.height
   const isBelowStandardSize = component.width < standardMinWidth || component.height < standardMinHeight
   const minimumFillPixelRatio = isBelowStandardSize ? 0.0002 : 0.003
+  const isTallNarrowCandidate = isTallNarrowStepCalloutRegionCandidate(imageData, component)
 
   if (
     component.count < Math.max(80, imageArea * minimumFillPixelRatio) ||
     component.width < minWidth ||
     component.height < minHeight ||
     component.width > maxWidth ||
-    component.height > maxHeight ||
+    (component.height > maxHeight && !isTallNarrowCandidate) ||
     rawArea <= 0
   ) {
     return null
@@ -7212,6 +7236,17 @@ function classifyQuantityGlyph(
   }
 
   if (
+    aspectRatio < 0.5 &&
+    bestTemplate.char === "x" &&
+    isRightStemmedOneQuantityGlyph(densities)
+  ) {
+    return {
+      char: "1",
+      confidence: 0.76,
+    }
+  }
+
+  if (
     sevenFeatureClassification &&
     bestTemplate.char === "7" &&
     sevenFeatureClassification.confidence >= bestTemplate.confidence - 0.12
@@ -7255,6 +7290,14 @@ function classifyQuantityGlyph(
     sixFeatureClassification &&
     isLeftWeightedSixQuantityGlyph(densities) &&
     sixFeatureClassification.confidence >= bestTemplate.confidence - 0.18
+  ) {
+    return sixFeatureClassification
+  }
+
+  if (
+    sixFeatureClassification &&
+    isOpenSixQuantityGlyph(densities) &&
+    sixFeatureClassification.confidence >= bestTemplate.confidence - 0.16
   ) {
     return sixFeatureClassification
   }
@@ -7474,6 +7517,28 @@ function classifyOneQuantityGlyphByFeatures(
   }
 
   return null
+}
+
+function isRightStemmedOneQuantityGlyph(densities: readonly number[]) {
+  const left = getQuantityGridAreaDensity(densities, 0, 0, 2, 7)
+  const right = getQuantityGridAreaDensity(densities, 3, 0, 2, 7)
+  const top = getQuantityGridAreaDensity(densities, 0, 0, 5, 2)
+  const bottom = getQuantityGridAreaDensity(densities, 0, 5, 5, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+  const middleLeft = getQuantityGridAreaDensity(densities, 0, 3, 2, 1)
+  const middleRight = getQuantityGridAreaDensity(densities, 3, 3, 2, 1)
+
+  return (
+    right > 0.42 &&
+    upperRight > 0.32 &&
+    lowerRight > 0.36 &&
+    left < 0.22 &&
+    middleLeft < 0.08 &&
+    middleRight > 0.28 &&
+    top > 0.35 &&
+    bottom < 0.36
+  )
 }
 
 function classifyZeroQuantityGlyphByFeatures(
@@ -7851,6 +7916,22 @@ function isLeftWeightedSixQuantityGlyph(densities: readonly number[]) {
   return (
     upperLeft >= upperRight * 1.35 &&
     lowerLeft >= lowerRight * 1.3
+  )
+}
+
+function isOpenSixQuantityGlyph(densities: readonly number[]) {
+  const upperLeft = getQuantityGridAreaDensity(densities, 0, 1, 2, 2)
+  const upperRight = getQuantityGridAreaDensity(densities, 3, 1, 2, 2)
+  const lowerLeft = getQuantityGridAreaDensity(densities, 0, 4, 2, 2)
+  const lowerRight = getQuantityGridAreaDensity(densities, 3, 4, 2, 2)
+  const center = getQuantityGridAreaDensity(densities, 2, 2, 1, 3)
+
+  return (
+    upperLeft >= upperRight * 1.32 &&
+    upperRight <= 0.38 &&
+    lowerLeft >= lowerRight * 0.82 &&
+    lowerRight >= lowerLeft * 0.72 &&
+    center < 0.26
   )
 }
 
@@ -8693,16 +8774,24 @@ function createQuantityLabelAnchorsForImageData(
 
 function isLikelyQuantityLabelComponent(imageData: DetectionImageData, component: DarkComponent) {
   const density = component.count / Math.max(1, component.width * component.height)
+  const minLabelHeight = getMinimumQuantityLabelComponentHeight(imageData)
   const maxLabelHeight = Math.max(24, imageData.height * 0.18)
   const maxLabelWidth = Math.max(72, imageData.width * 0.28)
 
   return (
-    component.height >= Math.max(4, Math.round(imageData.height * 0.018)) &&
+    component.height >= minLabelHeight &&
     component.height <= maxLabelHeight &&
     component.width <= maxLabelWidth &&
     component.count <= imageData.width * imageData.height * 0.04 &&
     density <= 0.92
   )
+}
+
+function getMinimumQuantityLabelComponentHeight(imageData: DetectionImageData) {
+  const scaledMinimum = Math.round(imageData.height * 0.018)
+  const isTallNarrowCallout = imageData.height > imageData.width * 1.8
+
+  return Math.max(4, isTallNarrowCallout ? Math.min(12, scaledMinimum) : scaledMinimum)
 }
 
 function createQuantityLabelAnchorCandidates(
@@ -8812,7 +8901,7 @@ function createQuantityLabelAnchorCandidates(
 
   return [
     ...supportedAnchors,
-    ...createRowSupportedLooseLabelAnchors(imageData, components, interiorRegion, supportedAnchors),
+    ...createRowSupportedLooseLabelAnchors(imageData, components, interiorRegion, foregroundMask, supportedAnchors),
   ]
 }
 
@@ -8892,6 +8981,7 @@ function createRowSupportedLooseLabelAnchors(
   imageData: DetectionImageData,
   components: readonly DarkComponent[],
   interiorRegion: PixelRegion,
+  foregroundMask: Uint8Array,
   existingAnchors: readonly QuantityLabelAnchor[],
 ): QuantityLabelAnchor[] {
   const anchors: QuantityLabelAnchor[] = []
@@ -8950,10 +9040,19 @@ function createRowSupportedLooseLabelAnchors(
         region: normalizeRegion(textRegion, imageData.width, imageData.height),
         score: quantity.confidence + 0.04,
       }
+      const hasSupport = hasNearbyRowSupportedQuantityAnchor(candidate, [...existingAnchors, ...anchors]) ||
+        isSupportedPerspectiveLooseQuantityAnchor(
+          imageData,
+          foregroundMask,
+          candidate,
+          interiorRegion,
+          [...existingAnchors, ...anchors],
+        )
+
       if (
         existingAnchors.some((anchor) => areQuantityLabelAnchorsDuplicative(anchor, candidate)) ||
         anchors.some((anchor) => areQuantityLabelAnchorsDuplicative(anchor, candidate)) ||
-        !hasNearbyRowSupportedQuantityAnchor(candidate, [...existingAnchors, ...anchors])
+        !hasSupport
       ) {
         continue
       }
@@ -8963,6 +9062,44 @@ function createRowSupportedLooseLabelAnchors(
   }
 
   return anchors
+}
+
+function isSupportedPerspectiveLooseQuantityAnchor(
+  imageData: DetectionImageData,
+  foregroundMask: Uint8Array,
+  candidate: QuantityLabelAnchor,
+  interiorRegion: PixelRegion,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  if (
+    candidate.quantity.value !== 1 ||
+    candidate.componentCount !== 2 ||
+    candidate.quantity.confidence < 0.8 ||
+    candidate.region.width > candidate.region.height * 1.65 ||
+    anchors.length < 3 ||
+    !isSupportedIsolatedLooseQuantityAnchor(imageData, foregroundMask, candidate, interiorRegion)
+  ) {
+    return false
+  }
+
+  const candidateCenterX = getRegionCenterX(candidate.region)
+  const candidateCenterY = getRegionCenterY(candidate.region)
+  const horizontalSlack = Math.max(candidate.region.height * 4, candidate.region.width * 2.5)
+  const minAnchorX = Math.min(...anchors.map((anchor) => getRegionCenterX(anchor.region)))
+  const maxAnchorX = Math.max(...anchors.map((anchor) => getRegionCenterX(anchor.region)))
+  if (candidateCenterX < minAnchorX - horizontalSlack || candidateCenterX > maxAnchorX + horizontalSlack) {
+    return false
+  }
+
+  return anchors.some((anchor) => {
+    const deltaX = Math.abs(getRegionCenterX(anchor.region) - candidateCenterX)
+    const deltaY = Math.abs(getRegionCenterY(anchor.region) - candidateCenterY)
+
+    return (
+      deltaX <= Math.max(candidate.region.height * 10, candidate.region.width * 4.5) &&
+      deltaY <= Math.max(candidate.region.height * 4, anchor.region.height * 4)
+    )
+  })
 }
 
 function isRowSupportedLooseQuantity(quantity: QuantityEstimate) {
@@ -9103,7 +9240,7 @@ function createQuantityLabelAnchorCandidate(
 ): QuantityLabelAnchor | null {
   const readableRegion = expandRegion(region, imageData, 2)
   const quantity = readQuantityFromImageData(imageData, readableRegion)
-  if (!quantity.value || quantity.confidence < 0.68) {
+  if (!quantity.value || quantity.confidence < 0.675) {
     return null
   }
 
@@ -9213,6 +9350,10 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
   candidate: QuantityLabelAnchor,
   anchors: readonly QuantityLabelAnchor[],
 ) {
+  if (hasTightlyAlignedPeerQuantityAnchor(candidate, anchors)) {
+    return false
+  }
+
   return anchors.some((anchor) => {
     if (anchor === candidate || anchor.region.y <= candidate.region.y) {
       return false
@@ -9261,6 +9402,22 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
       horizontalOverlapRatio >= 0.35
     )
   })
+}
+
+function hasTightlyAlignedPeerQuantityAnchor(
+  candidate: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const candidateCenterX = getRegionCenterX(candidate.region)
+  const candidateCenterY = getRegionCenterY(candidate.region)
+  const rowTolerance = Math.max(5, Math.round(candidate.region.height * 0.35))
+  const maxDistance = Math.max(candidate.region.height * 8, candidate.region.width * 4)
+
+  return anchors.some((anchor) => (
+    anchor !== candidate &&
+    Math.abs(getRegionCenterY(anchor.region) - candidateCenterY) <= rowTolerance &&
+    Math.abs(getRegionCenterX(anchor.region) - candidateCenterX) <= maxDistance
+  ))
 }
 
 function areQuantityLabelAnchorsDuplicative(left: QuantityLabelAnchor, right: QuantityLabelAnchor) {
