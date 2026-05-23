@@ -2,7 +2,7 @@
 
 import { Accordion, Badge, Box, Button, Flex, Grid, HoverCard, HStack, Image, Portal, Progress, SimpleGrid, Stack, Text } from "@chakra-ui/react"
 import { ImageIcon, Minus, Plus } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 import { compareColorNames } from "@/features/bagging/color-sort"
 import {
   createStepCalloutBaggingPlan,
@@ -40,9 +40,13 @@ const allPartChecklistSortColumns = [
   "quantity",
 ] as const satisfies readonly PartChecklistSortColumn[]
 type StepCalloutPageRenderStatus = "idle" | "loading" | "unavailable"
+const emptyStepCalloutMultiplierMap = Object.freeze({}) as StepCalloutMultiplierMap
+const emptyPageRenders = [] as const satisfies readonly PdfPrivatePageRender[]
+const emptyDetectedStepCallouts = [] as const satisfies readonly DetectedStepCallout[]
+const stepBagChecklistBagPlainColumns = ["location"] as const satisfies readonly PartChecklistSortColumn[]
 
 export function StepCalloutsPanel({
-  calloutMultipliers = {},
+  calloutMultipliers = emptyStepCalloutMultiplierMap,
   inventoryPartCount,
   result,
 }: {
@@ -56,10 +60,14 @@ export function StepCalloutsPanel({
     () => createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount }),
     [calloutMultipliers, inventoryPartCount, result],
   )
-  const quantityDiagnostic = getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount)
+  const quantityDiagnostic = useMemo(
+    () => getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount),
+    [baggingPlan, inventoryPartCount],
+  )
   const rows = useMemo(() => getStepBagChecklistRows(baggingPlan, calloutMultipliers), [baggingPlan, calloutMultipliers])
   const sections = useMemo(() => getStepBagChecklistSections(rows, groupMode), [groupMode, rows])
-  const completion = getStepBagChecklistCompletion(rows, checkedRowIds)
+  const completion = useMemo(() => getStepBagChecklistCompletion(rows, checkedRowIds), [checkedRowIds, rows])
+  const sectionDefaultValues = useMemo(() => sections.map((section) => section.id), [sections])
 
   return (
     <Box
@@ -93,7 +101,7 @@ export function StepCalloutsPanel({
         <StepBagCompletionIndicator completion={completion} />
 
         {sections.length > 0 ? (
-          <Accordion.Root key={groupMode} multiple defaultValue={sections.map((section) => section.id)} lazyMount>
+          <Accordion.Root key={groupMode} multiple defaultValue={sectionDefaultValues} lazyMount unmountOnExit>
             <Stack gap="3">
               {sections.map((section) => (
                 <StepBagChecklistSection
@@ -126,7 +134,7 @@ export function StepCalloutsPanel({
 }
 
 export function StepCalloutDebugPanel({
-  calloutMultipliers = {},
+  calloutMultipliers = emptyStepCalloutMultiplierMap,
   inventoryPartCount,
   result,
 }: {
@@ -134,8 +142,14 @@ export function StepCalloutDebugPanel({
   inventoryPartCount?: number | null
   result: StepCalloutDetectionResult
 }) {
-  const baggingPlan = createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount })
-  const quantityDiagnostic = getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount)
+  const baggingPlan = useMemo(
+    () => createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount }),
+    [calloutMultipliers, inventoryPartCount, result],
+  )
+  const quantityDiagnostic = useMemo(
+    () => getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount),
+    [baggingPlan, inventoryPartCount],
+  )
 
   return (
     <Stack data-testid="step-callout-debug-panel" gap="4">
@@ -147,11 +161,11 @@ export function StepCalloutDebugPanel({
 }
 
 export function StepCalloutMatchingDebugPanel({
-  calloutMultipliers = {},
+  calloutMultipliers = emptyStepCalloutMultiplierMap,
   inventoryPartCount,
   loadPageRenders,
   onCalloutMultiplierChange,
-  pageRenders = [],
+  pageRenders = emptyPageRenders,
   result,
 }: {
   calloutMultipliers?: StepCalloutMultiplierMap
@@ -174,7 +188,11 @@ export function StepCalloutMatchingDebugPanel({
     () => createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount }),
     [calloutMultipliers, inventoryPartCount, result],
   )
-  const quantityDiagnostic = getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount)
+  const quantityDiagnostic = useMemo(
+    () => getStepCalloutQuantityDiagnostic(baggingPlan, inventoryPartCount),
+    [baggingPlan, inventoryPartCount],
+  )
+  const partDiagnostic = useMemo(() => getStepCalloutPartDiagnostic(baggingPlan), [baggingPlan])
   const pageRenderByNumber = useMemo(
     () => mergePageRenderSources(pageRenders, loadedPageRenders),
     [loadedPageRenders, pageRenders],
@@ -278,6 +296,7 @@ export function StepCalloutMatchingDebugPanel({
           </Badge>
         </HStack>
         {quantityDiagnostic ? <StepCalloutQuantityDiagnosticPanel diagnostic={quantityDiagnostic} /> : null}
+        <StepCalloutPartDiagnosticPanel diagnostic={partDiagnostic} />
 
         {pageGroups.length > 0 ? (
           <Stack data-testid="step-callout-matching-debug-page-groups" gap="3">
@@ -285,7 +304,7 @@ export function StepCalloutMatchingDebugPanel({
               <StepCalloutMatchingPageGroup
                 key={group.pageNumber}
                 group={group}
-                pageCallouts={pageCalloutsByNumber.get(group.pageNumber) ?? []}
+                pageCallouts={pageCalloutsByNumber.get(group.pageNumber) ?? emptyDetectedStepCallouts}
                 pageRender={pageRenderByNumber.get(group.pageNumber) ?? null}
                 pageRenderStatus={getStepCalloutPageRenderStatus(
                   group.pageNumber,
@@ -314,6 +333,26 @@ export function StepCalloutLocalMatchDebugPanel({ result }: { result: StepCallou
   const localDebugGroups = getStepLocalMatchDebugGroups(result)
 
   return <StepLocalMatchDebugPanel groups={localDebugGroups} />
+}
+
+function StepCalloutPartDiagnosticPanel({ diagnostic }: { diagnostic: StepCalloutPartDiagnosticData }) {
+  return (
+    <Box
+      data-testid="step-callout-part-diagnostic"
+      data-part-type-count={diagnostic.partTypeCount}
+      data-total-quantity={diagnostic.totalQuantity}
+      border="sm"
+      borderColor="bagging.border"
+      bg="bagging.subtleBg"
+      rounded="md"
+      px="3"
+      py="2"
+    >
+      <Text color="fg.muted" fontSize="sm">
+        {formatPartTypeCount(diagnostic.partTypeCount)} represented · {stepQuantityFormatter.format(diagnostic.totalQuantity)} total quantity
+      </Text>
+    </Box>
+  )
 }
 
 export function StepCalloutQuantityDiagnosticPanel({
@@ -443,21 +482,23 @@ function StepBagGroupToggle({
   )
 }
 
-function StepCalloutMatchingPageGroup({
-  calloutMultipliers,
-  group,
-  onCalloutMultiplierChange,
-  pageCallouts,
-  pageRender,
-  pageRenderStatus,
-}: {
+type StepCalloutMatchingPageGroupProps = {
   calloutMultipliers: StepCalloutMultiplierMap
   group: StepCalloutMatchingPageGroupData
   onCalloutMultiplierChange?: (calloutId: string, multiplier: number) => void
   pageCallouts: readonly DetectedStepCallout[]
   pageRender: PdfPrivatePageRender | null
   pageRenderStatus: StepCalloutPageRenderStatus
-}) {
+}
+
+const StepCalloutMatchingPageGroup = memo(function StepCalloutMatchingPageGroup({
+  calloutMultipliers,
+  group,
+  onCalloutMultiplierChange,
+  pageCallouts,
+  pageRender,
+  pageRenderStatus,
+}: StepCalloutMatchingPageGroupProps) {
   return (
     <Grid
       data-testid="step-callout-matching-debug-page-group"
@@ -532,17 +573,46 @@ function StepCalloutMatchingPageGroup({
       </Stack>
     </Grid>
   )
+}, areStepCalloutMatchingPageGroupPropsEqual)
+
+function areStepCalloutMatchingPageGroupPropsEqual(
+  previous: StepCalloutMatchingPageGroupProps,
+  next: StepCalloutMatchingPageGroupProps,
+) {
+  return previous.group === next.group &&
+    previous.onCalloutMultiplierChange === next.onCalloutMultiplierChange &&
+    previous.pageCallouts === next.pageCallouts &&
+    previous.pageRender === next.pageRender &&
+    previous.pageRenderStatus === next.pageRenderStatus &&
+    haveEqualCalloutMultipliersForRows(previous.group.rows, previous.calloutMultipliers, next.calloutMultipliers)
 }
 
-function StepCalloutMatchingRow({
-  multiplier,
-  onMultiplierChange,
-  row,
-}: {
+function haveEqualCalloutMultipliersForRows(
+  rows: readonly StepCalloutMatchingRowData[],
+  previousMultipliers: StepCalloutMultiplierMap,
+  nextMultipliers: StepCalloutMultiplierMap,
+) {
+  if (previousMultipliers === nextMultipliers) {
+    return true
+  }
+
+  return rows.every(
+    (row) => getStepCalloutMultiplier(row.callout.id, previousMultipliers) ===
+      getStepCalloutMultiplier(row.callout.id, nextMultipliers),
+  )
+}
+
+type StepCalloutMatchingRowProps = {
   multiplier: number
   onMultiplierChange?: (calloutId: string, multiplier: number) => void
   row: StepCalloutMatchingRowData
-}) {
+}
+
+const StepCalloutMatchingRow = memo(function StepCalloutMatchingRow({
+  multiplier,
+  onMultiplierChange,
+  row,
+}: StepCalloutMatchingRowProps) {
   return (
     <Box
       as="tr"
@@ -576,6 +646,15 @@ function StepCalloutMatchingRow({
       </Box>
     </Box>
   )
+}, areStepCalloutMatchingRowPropsEqual)
+
+function areStepCalloutMatchingRowPropsEqual(
+  previous: StepCalloutMatchingRowProps,
+  next: StepCalloutMatchingRowProps,
+) {
+  return previous.multiplier === next.multiplier &&
+    previous.onMultiplierChange === next.onMultiplierChange &&
+    previous.row === next.row
 }
 
 function StepCalloutMultiplierControl({
@@ -698,7 +777,7 @@ function StepCalloutStepCell({ row }: { row: StepCalloutMatchingRowData }) {
 function StepCalloutCropPreviewHover({ row }: { row: StepCalloutMatchingRowData }) {
   const callout = row.callout
   return (
-    <HoverCard.Root openDelay={120} closeDelay={80}>
+    <HoverCard.Root closeDelay={80} lazyMount openDelay={120} unmountOnExit>
       <HoverCard.Trigger asChild>
         <Button
           aria-label={`Enlarge step ${callout.stepIndex} callout`}
@@ -728,6 +807,8 @@ function StepCalloutCropPreviewHover({ row }: { row: StepCalloutMatchingRowData 
                 alt={`Step ${callout.stepIndex} callout thumbnail`}
                 src={callout.crop.dataUrl}
                 maxH="full"
+                decoding="async"
+                loading="lazy"
                 maxW="full"
                 objectFit="contain"
               />
@@ -814,26 +895,34 @@ function StepBagSectionProgress({ completion }: { completion: StepBagChecklistCo
   )
 }
 
-function StepBagChecklistSection({
-  checkedRowIds,
-  groupMode,
-  onCheckedRowIdsChange,
-  section,
-}: {
+type StepBagChecklistSectionProps = {
   checkedRowIds: ReadonlySet<string>
   groupMode: StepBagGroupMode
   onCheckedRowIdsChange: (checkedRowIds: ReadonlySet<string>) => void
   section: StepBagChecklistSectionData
-}) {
-  const sectionCompletion = getStepBagChecklistCompletion(section.rows, checkedRowIds)
-  const tableRows = section.rows.map((row, index) =>
-    createStepBagPartChecklistRow(row, {
-      dividerLabel: groupMode === "color" && (index === 0 || row.bagNumber !== section.rows[index - 1]?.bagNumber)
-        ? `${row.bagLabel} · ${formatStepRange(row.bagStepRange)}`
-        : undefined,
-    })
+}
+
+const StepBagChecklistSection = memo(function StepBagChecklistSection({
+  checkedRowIds,
+  groupMode,
+  onCheckedRowIdsChange,
+  section,
+}: StepBagChecklistSectionProps) {
+  const sectionCompletion = useMemo(
+    () => getStepBagChecklistCompletion(section.rows, checkedRowIds),
+    [checkedRowIds, section.rows],
   )
-  const plainColumns = groupMode === "color" ? allPartChecklistSortColumns : (["location"] as const)
+  const tableRows = useMemo(
+    () => section.rows.map((row, index) =>
+      createStepBagPartChecklistRow(row, {
+        dividerLabel: groupMode === "color" && (index === 0 || row.bagNumber !== section.rows[index - 1]?.bagNumber)
+          ? `${row.bagLabel} · ${formatStepRange(row.bagStepRange)}`
+          : undefined,
+      })
+    ),
+    [groupMode, section.rows],
+  )
+  const plainColumns = groupMode === "color" ? allPartChecklistSortColumns : stepBagChecklistBagPlainColumns
 
   return (
     <Accordion.Item
@@ -878,7 +967,14 @@ function StepBagChecklistSection({
         <Accordion.ItemIndicator />
       </Accordion.ItemTrigger>
       <Accordion.ItemContent>
-        <Accordion.ItemBody px="3" pb="3">
+        <Accordion.ItemBody
+          px="3"
+          pb="3"
+          style={{
+            contentVisibility: "auto",
+            containIntrinsicSize: `${getStepBagSectionIntrinsicHeight(section.rows.length)}px`,
+          }}
+        >
           <PartChecklistTable
             checkedRowIds={checkedRowIds}
             locationColumnLabel="Step"
@@ -892,6 +988,28 @@ function StepBagChecklistSection({
       </Accordion.ItemContent>
     </Accordion.Item>
   )
+}, areStepBagChecklistSectionPropsEqual)
+
+function areStepBagChecklistSectionPropsEqual(
+  previous: StepBagChecklistSectionProps,
+  next: StepBagChecklistSectionProps,
+) {
+  return previous.groupMode === next.groupMode &&
+    previous.onCheckedRowIdsChange === next.onCheckedRowIdsChange &&
+    previous.section === next.section &&
+    haveEqualCheckedStateForRows(previous.section.rows, previous.checkedRowIds, next.checkedRowIds)
+}
+
+function haveEqualCheckedStateForRows(
+  rows: readonly StepBagChecklistRow[],
+  previousCheckedRowIds: ReadonlySet<string>,
+  nextCheckedRowIds: ReadonlySet<string>,
+) {
+  if (previousCheckedRowIds === nextCheckedRowIds) {
+    return true
+  }
+
+  return rows.every((row) => previousCheckedRowIds.has(row.id) === nextCheckedRowIds.has(row.id))
 }
 
 function createStepBagPartChecklistRow(
@@ -940,7 +1058,7 @@ function StepCalloutPreviewStep({ row }: { row: StepBagChecklistRow }) {
   const imageAlt = `Step ${row.stepIndex} callout preview`
 
   return (
-    <HoverCard.Root openDelay={120} closeDelay={80}>
+    <HoverCard.Root closeDelay={80} lazyMount openDelay={120} unmountOnExit>
       <HoverCard.Trigger asChild>
         <Box
           as="span"
@@ -1008,7 +1126,7 @@ function StepBagQuantityLabelCrop({ row }: { row: StepBagChecklistRow }) {
         maxW="full"
         maxH="full"
         objectFit="contain"
-        loading="eager"
+        loading="lazy"
         decoding="async"
       />
     </Box>
@@ -1030,13 +1148,13 @@ function StepBagPartPreviewImage({
       maxW="full"
       maxH="full"
       objectFit="contain"
-      loading="eager"
+      loading="lazy"
       decoding="async"
     />
   )
 
   return (
-    <HoverCard.Root openDelay={120} closeDelay={80}>
+    <HoverCard.Root closeDelay={80} lazyMount openDelay={120} unmountOnExit>
       <HoverCard.Trigger asChild>
         <Flex
           align="center"
@@ -1742,6 +1860,16 @@ export function getStepCalloutQuantityDiagnostic(
   }
 }
 
+function getStepCalloutPartDiagnostic(plan: StepCalloutBaggingPlan): StepCalloutPartDiagnosticData {
+  return {
+    partTypeCount: plan.bags.reduce(
+      (sum, bag) => sum + bag.partGroups.reduce((bagSum, group) => bagSum + group.itemCount, 0),
+      0,
+    ),
+    totalQuantity: plan.detectedPartCount,
+  }
+}
+
 function getStepBagChecklistRows(
   plan: StepCalloutBaggingPlan,
   calloutMultipliers: StepCalloutMultiplierMap,
@@ -1791,7 +1919,12 @@ function getStepBagChecklistSections(
     const sectionsByColor = new Map<string, StepBagChecklistRow[]>()
     for (const row of rows) {
       const colorKey = normalizeStepBagColorName(row.colorName)
-      sectionsByColor.set(colorKey, [...(sectionsByColor.get(colorKey) ?? []), row])
+      const colorRows = sectionsByColor.get(colorKey)
+      if (colorRows) {
+        colorRows.push(row)
+      } else {
+        sectionsByColor.set(colorKey, [row])
+      }
     }
 
     return [...sectionsByColor.entries()]
@@ -1813,7 +1946,12 @@ function getStepBagChecklistSections(
 
   const sectionsByBag = new Map<string, StepBagChecklistRow[]>()
   for (const row of rows) {
-    sectionsByBag.set(row.bagId, [...(sectionsByBag.get(row.bagId) ?? []), row])
+    const bagRows = sectionsByBag.get(row.bagId)
+    if (bagRows) {
+      bagRows.push(row)
+    } else {
+      sectionsByBag.set(row.bagId, [row])
+    }
   }
 
   return [...sectionsByBag.entries()].map(([bagId, bagRows]) => {
@@ -1859,6 +1997,10 @@ function getStepBagChecklistCompletion(
 
 function getStepBagRowsQuantity(rows: readonly StepBagChecklistRow[]) {
   return rows.reduce((sum, row) => sum + row.quantity, 0)
+}
+
+function getStepBagSectionIntrinsicHeight(rowCount: number) {
+  return Math.min(1600, Math.max(180, rowCount * 72))
 }
 
 function getUniqueSortedNumbers(values: readonly number[]) {
@@ -1912,7 +2054,12 @@ function getCalloutsByPageNumber(callouts: readonly DetectedStepCallout[]) {
   const calloutsByPage = new Map<number, DetectedStepCallout[]>()
 
   for (const callout of callouts) {
-    calloutsByPage.set(callout.pageNumber, [...(calloutsByPage.get(callout.pageNumber) ?? []), callout])
+    const pageCallouts = calloutsByPage.get(callout.pageNumber)
+    if (pageCallouts) {
+      pageCallouts.push(callout)
+    } else {
+      calloutsByPage.set(callout.pageNumber, [callout])
+    }
   }
 
   return calloutsByPage
@@ -2021,7 +2168,12 @@ function getStepCalloutMatchingPageGroups(
   }
 
   for (const row of rows) {
-    groupByPageNumber.set(row.pageNumber, [...(groupByPageNumber.get(row.pageNumber) ?? []), row])
+    const groupRows = groupByPageNumber.get(row.pageNumber)
+    if (groupRows) {
+      groupRows.push(row)
+    } else {
+      groupByPageNumber.set(row.pageNumber, [row])
+    }
   }
 
   return [...groupByPageNumber.entries()]
@@ -2072,6 +2224,11 @@ type MutableStepLocalMatchDebugGroup = Omit<StepLocalMatchDebugGroup, "items" | 
 type StepBagChecklistCompletion = {
   completedQuantity: number
   percent: number
+  totalQuantity: number
+}
+
+type StepCalloutPartDiagnosticData = {
+  partTypeCount: number
   totalQuantity: number
 }
 

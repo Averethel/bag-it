@@ -250,6 +250,10 @@ describe("StepCalloutsPanel", () => {
     )
 
     expect(screen.getByTestId("step-callout-matching-debug-panel")).toBeVisible()
+    const partDiagnostic = screen.getByTestId("step-callout-part-diagnostic")
+    expect(partDiagnostic).toHaveAttribute("data-part-type-count", "3")
+    expect(partDiagnostic).toHaveAttribute("data-total-quantity", "5")
+    expect(partDiagnostic).toHaveTextContent("3 part types represented · 5 total quantity")
     expect(screen.getByText("Build steps")).toBeVisible()
     expect(screen.getByText("2 callouts across 2 scanned pages.")).toBeVisible()
     expect(screen.getByTestId("step-callout-matching-debug-page-groups")).toBeVisible()
@@ -291,6 +295,10 @@ describe("StepCalloutsPanel", () => {
     const rows = screen.getAllByTestId("step-callout-matching-debug-row")
     expect(rows[0]).toHaveAttribute("data-step-multiplier", "2")
     expect(rows[1]).toHaveAttribute("data-step-multiplier", "1")
+    const partDiagnostic = screen.getByTestId("step-callout-part-diagnostic")
+    expect(partDiagnostic).toHaveAttribute("data-part-type-count", "3")
+    expect(partDiagnostic).toHaveAttribute("data-total-quantity", "8")
+    expect(partDiagnostic).toHaveTextContent("3 part types represented · 8 total quantity")
     expect(screen.getAllByTestId("step-callout-multiplier-value").map((value) => value.textContent)).toEqual([
       "x2",
       "x1",

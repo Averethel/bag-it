@@ -2,7 +2,18 @@
 
 import { Badge, Box, Button, Flex, Grid, HStack, Stack, Text } from "@chakra-ui/react"
 import { ArrowDown, ArrowUp, ArrowUpDown, Check } from "lucide-react"
-import { Fragment, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react"
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react"
 import { compareColorNames } from "@/features/bagging/color-sort"
 
 export type PartChecklistSortColumn = "color" | "completion" | "confidence" | "location" | "part" | "quantity"
@@ -55,6 +66,8 @@ const partChecklistCollator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
 })
+const emptyPartChecklistPlainColumns = [] as const satisfies readonly PartChecklistSortColumn[]
+const emptyPartChecklistCheckedRowIds = new Set<string>()
 
 export function PartChecklistTable({
   checkedRowIds,
@@ -62,7 +75,7 @@ export function PartChecklistTable({
   headerTestId,
   locationColumnLabel = "Page",
   onCheckedRowIdsChange,
-  plainColumns = [],
+  plainColumns = emptyPartChecklistPlainColumns,
   rows,
   showConfidence = true,
   stickyHeader = false,
@@ -80,21 +93,38 @@ export function PartChecklistTable({
   titleColumnLabel?: string
 }) {
   const [sort, setSort] = useState<PartChecklistSortState>(defaultSort)
-  const sortedRows = sortPartChecklistRows(rows, sort, checkedRowIds)
-  const gridColumns = showConfidence ? rowGridColumns : rowGridColumnsWithoutConfidence
-  const plainColumnSet = new Set(plainColumns)
+  const checkedRowIdsRef = useRef(checkedRowIds)
+  const onCheckedRowIdsChangeRef = useRef(onCheckedRowIdsChange)
 
-  function updateChecked(rowId: string, checked: boolean) {
-    const next = new Set(checkedRowIds)
+  useLayoutEffect(() => {
+    checkedRowIdsRef.current = checkedRowIds
+    onCheckedRowIdsChangeRef.current = onCheckedRowIdsChange
+  }, [checkedRowIds, onCheckedRowIdsChange])
+
+  const checkedRowIdsForSort = sort?.column === "completion" ? checkedRowIds : emptyPartChecklistCheckedRowIds
+  const sortedRows = useMemo(
+    () => sortPartChecklistRows(rows, sort, checkedRowIdsForSort),
+    [checkedRowIdsForSort, rows, sort],
+  )
+  const gridColumns = showConfidence ? rowGridColumns : rowGridColumnsWithoutConfidence
+  const plainColumnSet = useMemo(() => new Set(plainColumns), [plainColumns])
+
+  const updateChecked = useCallback((rowId: string, checked: boolean) => {
+    const current = checkedRowIdsRef.current
+    if (current.has(rowId) === checked) {
+      return
+    }
+
+    const next = new Set(current)
     if (checked) {
       next.add(rowId)
     } else {
       next.delete(rowId)
     }
-    onCheckedRowIdsChange(next)
-  }
+    onCheckedRowIdsChangeRef.current(next)
+  }, [])
 
-  function toggleSort(column: PartChecklistSortColumn) {
+  const toggleSort = useCallback((column: PartChecklistSortColumn) => {
     if (plainColumnSet.has(column)) {
       return
     }
@@ -109,7 +139,7 @@ export function PartChecklistTable({
         direction: current.direction === "asc" ? "desc" : "asc",
       }
     })
-  }
+  }, [plainColumnSet])
 
   return (
     <Stack
@@ -183,7 +213,7 @@ export function PartChecklistTable({
             isChecked={checkedRowIds.has(row.id)}
             row={row}
             showConfidence={showConfidence}
-            onCheckedChange={(checked) => updateChecked(row.id, checked)}
+            onCheckedChange={updateChecked}
           />
         </Fragment>
       ))}
@@ -324,22 +354,24 @@ function SortHeader({
   )
 }
 
-function PartChecklistTableRow({
+type PartChecklistTableRowProps = {
+  gridColumns: typeof rowGridColumns | typeof rowGridColumnsWithoutConfidence
+  isChecked: boolean
+  onCheckedChange: (rowId: string, checked: boolean) => void
+  row: PartChecklistRow
+  showConfidence: boolean
+}
+
+const PartChecklistTableRow = memo(function PartChecklistTableRow({
   gridColumns,
   isChecked,
   onCheckedChange,
   row,
   showConfidence,
-}: {
-  gridColumns: typeof rowGridColumns | typeof rowGridColumnsWithoutConfidence
-  isChecked: boolean
-  onCheckedChange: (checked: boolean) => void
-  row: PartChecklistRow
-  showConfidence: boolean
-}) {
+}: PartChecklistTableRowProps) {
   const rowContentOpacity = isChecked ? 0.58 : 1
   function toggleChecked() {
-    onCheckedChange(!isChecked)
+    onCheckedChange(row.id, !isChecked)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -435,6 +467,17 @@ function PartChecklistTableRow({
       ) : null}
     </Grid>
   )
+}, arePartChecklistTableRowPropsEqual)
+
+function arePartChecklistTableRowPropsEqual(
+  previous: PartChecklistTableRowProps,
+  next: PartChecklistTableRowProps,
+) {
+  return previous.gridColumns === next.gridColumns &&
+    previous.isChecked === next.isChecked &&
+    previous.onCheckedChange === next.onCheckedChange &&
+    previous.row === next.row &&
+    previous.showConfidence === next.showConfidence
 }
 
 function PartFoundControl({ checked }: { checked: boolean }) {
