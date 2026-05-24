@@ -74,7 +74,11 @@ import {
   type StepCalloutDetectionProgress,
   type StepCalloutDetectionResult,
 } from "@/features/bagging/step-callout-detection"
-import type { StepCalloutMultiplierMap } from "@/features/bagging/step-callout-bagging"
+import {
+  pruneStepCalloutMultipliers,
+  setStepCalloutMultiplier,
+  type StepCalloutMultiplierMap,
+} from "@/features/bagging/step-callout-multipliers"
 
 type PartsAnalysisProgress = Pick<PartsListPdfExtractionProgress, "message" | "progress"> &
   Partial<
@@ -132,6 +136,7 @@ export function BaggingPage() {
   const [attemptedPartPreviewKeys, setAttemptedPartPreviewKeys] = useState<ReadonlySet<string>>(new Set())
   const [previewReadyPageNumbers, setPreviewReadyPageNumbers] = useState<ReadonlySet<number>>(new Set())
   const [checkedPartRowIds, setCheckedPartRowIds] = useState<ReadonlySet<string>>(new Set())
+  const [checkedStepBagRowIds, setCheckedStepBagRowIds] = useState<ReadonlySet<string>>(new Set())
   const [sessionRecoveryNotice, setSessionRecoveryNotice] = useState<SessionRecoveryNotice>(null)
   const [analysisHeartbeat, setAnalysisHeartbeat] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -139,6 +144,7 @@ export function BaggingPage() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const activeJobIdRef = useRef<string | null>(null)
   const checkedPartRowIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const checkedStepBagRowIdsRef = useRef<ReadonlySet<string>>(new Set())
   const inFlightPartPreviewKeysRef = useRef<Set<string>>(new Set())
   const normalizationPublicationIdRef = useRef(0)
   const attemptedPartPreviewKeysRef = useRef<ReadonlySet<string>>(new Set())
@@ -210,6 +216,11 @@ export function BaggingPage() {
       setStepCalloutMultipliers((current) => setStepCalloutMultiplier(current, calloutId, multiplier))
     })
   }, [startStepCalloutMultiplierTransition])
+  const commitCheckedStepBagRowIds = useCallback((rowIds: ReadonlySet<string>) => {
+    const nextRowIds = new Set(rowIds)
+    checkedStepBagRowIdsRef.current = nextRowIds
+    setCheckedStepBagRowIds(nextRowIds)
+  }, [])
   const loadStepDebugPageRenders = useCallback(async (pageNumbers: readonly number[]): Promise<readonly PdfPrivatePageRender[]> => {
     if (!selectedManualFile || pageNumbers.length === 0 || !canUseBrowserPdfParser()) {
       return []
@@ -275,6 +286,9 @@ export function BaggingPage() {
     stepCalloutResultRef.current = result
     setStepCalloutResult(result)
     setStepCalloutMultipliers((current) => pruneStepCalloutMultipliers(current, result))
+    if (!result) {
+      commitCheckedStepBagRowIds(new Set())
+    }
   }
 
   function commitPartPreviewByKey(previews: ReadonlyMap<string, PartsListPartPreview>) {
@@ -920,6 +934,7 @@ export function BaggingPage() {
       const sessionFile = await createBaggingSessionFile({
         attemptedPartPreviewKeys,
         checkedRowIds: checkedPartRowIds,
+        checkedStepBagRowIds,
         currentExtractorVersion: partsListExtractorVersion,
         jobSnapshot,
         manualFile: selectedManualFile,
@@ -980,6 +995,9 @@ export function BaggingPage() {
       setJobSnapshot(nextJobSnapshot)
       activeJobIdRef.current = nextJobSnapshot.id
       commitCheckedPartRowIds(restoredSession.checkedRowIds)
+      commitCheckedStepBagRowIds(
+        isCurrentStepAnalysis ? restoredSession.checkedStepBagRowIds : new Set(),
+      )
 
       if (isCurrentAnalysis) {
         pendingProgressTransferRef.current = null
@@ -1249,7 +1267,9 @@ export function BaggingPage() {
               visibleStepCalloutResult ? (
                 <StepCalloutsPanel
                   calloutMultipliers={stepCalloutMultipliers}
+                  checkedRowIds={checkedStepBagRowIds}
                   inventoryPartCount={inventoryPartCount}
+                  onCheckedRowIdsChange={commitCheckedStepBagRowIds}
                   result={visibleStepCalloutResult}
                 />
               ) : (
@@ -1647,67 +1667,6 @@ function getPartsListTotalQuantity(result: PartsListPdfExtractionResult | null) 
   }
 
   return result.normalization?.totalQuantity ?? result.rows.reduce((sum, row) => sum + row.quantity, 0)
-}
-
-function setStepCalloutMultiplier(
-  current: StepCalloutMultiplierMap,
-  calloutId: string,
-  multiplier: number,
-): StepCalloutMultiplierMap {
-  const nextMultiplier = normalizeStepCalloutMultiplier(multiplier)
-  const currentMultiplier = normalizeStepCalloutMultiplier(current[calloutId])
-  if (nextMultiplier === currentMultiplier) {
-    return current
-  }
-
-  const next = { ...current }
-  if (nextMultiplier <= 1) {
-    delete next[calloutId]
-  } else {
-    next[calloutId] = nextMultiplier
-  }
-
-  return next
-}
-
-function pruneStepCalloutMultipliers(
-  current: StepCalloutMultiplierMap,
-  result: StepCalloutDetectionResult | null,
-): StepCalloutMultiplierMap {
-  const entries = Object.entries(current)
-  if (entries.length === 0) {
-    return current
-  }
-  if (!result) {
-    return {}
-  }
-
-  const calloutIds = new Set(result.callouts.map((callout) => callout.id))
-  const next: Record<string, number> = {}
-  let changed = false
-
-  for (const [calloutId, multiplier] of entries) {
-    const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
-    if (!calloutIds.has(calloutId) || normalizedMultiplier <= 1) {
-      changed = true
-      continue
-    }
-
-    next[calloutId] = normalizedMultiplier
-    if (normalizedMultiplier !== multiplier) {
-      changed = true
-    }
-  }
-
-  return changed || Object.keys(next).length !== entries.length ? next : current
-}
-
-function normalizeStepCalloutMultiplier(multiplier: number | undefined) {
-  if (multiplier == null || !Number.isFinite(multiplier)) {
-    return 1
-  }
-
-  return Math.max(1, Math.floor(multiplier))
 }
 
 function getNormalizationProgress(normalization: NonNullable<PartsListPdfExtractionResult["normalization"]>) {

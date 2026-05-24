@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import {
   stepCalloutDetectorVersion,
@@ -101,16 +102,87 @@ describe("StepCalloutsPanel", () => {
     await user.hover(within(firstRow).getByTestId("step-callout-preview-step"))
     expect(await screen.findByRole("img", { name: "Step 1 callout preview" })).toBeVisible()
 
+    await user.click(screen.getByRole("checkbox", {
+      name: "Mark Bag 1 Green part from step 1 as packed",
+    }))
+    expect(group).toHaveAttribute("data-completion-percent", "20")
+
     const groupTrigger = screen.getByRole("button", { name: /Bag 1 · Steps 1-2/ })
 
     await user.click(groupTrigger)
     expect(group).toHaveAttribute("data-state", "closed")
+    expect(group).toHaveAttribute("data-completion-percent", "20")
+    expect(screen.getByText("1 of 5 packed")).toBeVisible()
     expect(groupTrigger).toHaveAttribute("aria-expanded", "false")
 
     await user.click(groupTrigger)
     expect(group).toHaveAttribute("data-state", "open")
     expect(groupTrigger).toHaveAttribute("aria-expanded", "true")
     expect(screen.getAllByTestId("step-bag-part-row")).toHaveLength(3)
+  })
+
+  it("keeps checked progress when another accordion group is selected", async () => {
+    const user = userEvent.setup()
+
+    renderWithProvider(<StepCalloutsPanel inventoryPartCount={100} result={createMultiBagSameColorResult()} />)
+
+    const groups = screen.getAllByTestId("step-bag-checklist-group")
+    expect(groups).toHaveLength(2)
+    expect(screen.getByText("0 of 100 detected parts checked.")).toBeVisible()
+
+    await user.click(screen.getByRole("checkbox", {
+      name: "Mark Bag 1 Green part from step 1 as packed",
+    }))
+    expect(groups[0]).toHaveAttribute("data-completion-percent", "100")
+    expect(screen.getByText("50 of 100 detected parts checked.")).toBeVisible()
+
+    await user.click(screen.getByRole("checkbox", {
+      name: "Mark Bag 2 Green part from step 2 as packed",
+    }))
+    expect(groups[0]).toHaveAttribute("data-completion-percent", "100")
+    expect(groups[1]).toHaveAttribute("data-completion-percent", "100")
+    expect(screen.getByText("100 of 100 detected parts checked.")).toBeVisible()
+  })
+
+  it("supports controlled checked progress across remounts", async () => {
+    const user = userEvent.setup()
+
+    function ControlledPanel() {
+      const [checkedRowIds, setCheckedRowIds] = useState<ReadonlySet<string>>(() => new Set())
+      const [isVisible, setIsVisible] = useState(true)
+
+      return (
+        <>
+          <button type="button" onClick={() => setIsVisible((current) => !current)}>
+            Toggle panel
+          </button>
+          {isVisible ? (
+            <StepCalloutsPanel
+              checkedRowIds={checkedRowIds}
+              inventoryPartCount={480}
+              onCheckedRowIdsChange={setCheckedRowIds}
+              result={createResult()}
+            />
+          ) : null}
+        </>
+      )
+    }
+
+    renderWithProvider(<ControlledPanel />)
+
+    await user.click(screen.getByRole("checkbox", {
+      name: "Mark Bag 1 Green part from step 1 as packed",
+    }))
+    expect(screen.getByText("1 of 5 detected parts checked.")).toBeVisible()
+
+    await user.click(screen.getByRole("button", { name: "Toggle panel" }))
+    expect(screen.queryByTestId("step-callouts-panel")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Toggle panel" }))
+
+    expect(screen.getByText("1 of 5 detected parts checked.")).toBeVisible()
+    expect(screen.getByRole("checkbox", {
+      name: "Mark Bag 1 Green part from step 1 as packed",
+    })).toBeChecked()
   })
 
   it("uses one color group across multiple bags", async () => {

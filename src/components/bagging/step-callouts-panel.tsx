@@ -5,13 +5,18 @@ import { ImageIcon, Minus, Plus } from "lucide-react"
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { compareColorNames } from "@/features/bagging/color-sort"
 import {
+  createStepCalloutBagChecklistRowId,
   createStepCalloutBaggingPlan,
-  getStepCalloutMultiplier,
   type StepCalloutBagPartGroup,
   type StepCalloutBagPlan,
   type StepCalloutBaggingPlan,
-  type StepCalloutMultiplierMap,
 } from "@/features/bagging/step-callout-bagging"
+import {
+  getStepCalloutMultiplier,
+  normalizeStepCalloutMultiplier,
+  setStepCalloutMultiplier,
+  type StepCalloutMultiplierMap,
+} from "@/features/bagging/step-callout-multipliers"
 import type {
   DetectedStepCallout,
   DetectedStepCalloutPartImageSignature,
@@ -47,15 +52,21 @@ const stepBagChecklistBagPlainColumns = ["location"] as const satisfies readonly
 
 export function StepCalloutsPanel({
   calloutMultipliers = emptyStepCalloutMultiplierMap,
+  checkedRowIds,
   inventoryPartCount,
+  onCheckedRowIdsChange,
   result,
 }: {
   calloutMultipliers?: StepCalloutMultiplierMap
+  checkedRowIds?: ReadonlySet<string>
   inventoryPartCount?: number | null
+  onCheckedRowIdsChange?: (checkedRowIds: ReadonlySet<string>) => void
   result: StepCalloutDetectionResult
 }) {
-  const [checkedRowIds, setCheckedRowIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [localCheckedRowIds, setLocalCheckedRowIds] = useState<ReadonlySet<string>>(() => new Set())
   const [groupMode, setGroupMode] = useState<StepBagGroupMode>("bag")
+  const visibleCheckedRowIds = checkedRowIds ?? localCheckedRowIds
+  const visibleCheckedRowIdsRef = useRef<ReadonlySet<string>>(visibleCheckedRowIds)
   const baggingPlan = useMemo(
     () => createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount }),
     [calloutMultipliers, inventoryPartCount, result],
@@ -66,8 +77,34 @@ export function StepCalloutsPanel({
   )
   const rows = useMemo(() => getStepBagChecklistRows(baggingPlan, calloutMultipliers), [baggingPlan, calloutMultipliers])
   const sections = useMemo(() => getStepBagChecklistSections(rows, groupMode), [groupMode, rows])
-  const completion = useMemo(() => getStepBagChecklistCompletion(rows, checkedRowIds), [checkedRowIds, rows])
+  const completion = useMemo(() => getStepBagChecklistCompletion(rows, visibleCheckedRowIds), [rows, visibleCheckedRowIds])
   const sectionDefaultValues = useMemo(() => sections.map((section) => section.id), [sections])
+  const updateCheckedRowIds = useCallback((nextCheckedRowIds: ReadonlySet<string>) => {
+    if (onCheckedRowIdsChange) {
+      onCheckedRowIdsChange(nextCheckedRowIds)
+      return
+    }
+
+    setLocalCheckedRowIds(nextCheckedRowIds)
+  }, [onCheckedRowIdsChange])
+  const updateCheckedRow = useCallback((rowId: string, checked: boolean) => {
+    const current = visibleCheckedRowIdsRef.current
+    if (current.has(rowId) === checked) {
+      return
+    }
+
+    const next = new Set(current)
+    if (checked) {
+      next.add(rowId)
+    } else {
+      next.delete(rowId)
+    }
+    updateCheckedRowIds(next)
+  }, [updateCheckedRowIds])
+
+  useLayoutEffect(() => {
+    visibleCheckedRowIdsRef.current = visibleCheckedRowIds
+  }, [visibleCheckedRowIds])
 
   return (
     <Box
@@ -106,9 +143,10 @@ export function StepCalloutsPanel({
               {sections.map((section) => (
                 <StepBagChecklistSection
                   key={section.id}
-                  checkedRowIds={checkedRowIds}
+                  checkedRowIds={visibleCheckedRowIds}
                   groupMode={groupMode}
-                  onCheckedRowIdsChange={setCheckedRowIds}
+                  onCheckedRowChange={updateCheckedRow}
+                  onCheckedRowIdsChange={updateCheckedRowIds}
                   section={section}
                 />
               ))}
@@ -232,14 +270,14 @@ export function StepCalloutMatchingDebugPanel({
 
   const updateVisibleCalloutMultiplier = useCallback((calloutId: string, multiplier: number) => {
     const current = visibleCalloutMultipliersRef.current
-    const next = setStepCalloutMultiplierValue(current, calloutId, multiplier)
+    const next = setStepCalloutMultiplier(current, calloutId, multiplier)
     if (next === current) {
       return
     }
 
     visibleCalloutMultipliersRef.current = next
     setVisibleCalloutMultipliers(next)
-    onCalloutMultiplierChangeRef.current?.(calloutId, normalizeStepCalloutMultiplierValue(multiplier))
+    onCalloutMultiplierChangeRef.current?.(calloutId, normalizeStepCalloutMultiplier(multiplier))
   }, [])
 
   useEffect(() => {
@@ -943,6 +981,7 @@ function StepBagSectionProgress({ completion }: { completion: StepBagChecklistCo
 type StepBagChecklistSectionProps = {
   checkedRowIds: ReadonlySet<string>
   groupMode: StepBagGroupMode
+  onCheckedRowChange: (rowId: string, checked: boolean) => void
   onCheckedRowIdsChange: (checkedRowIds: ReadonlySet<string>) => void
   section: StepBagChecklistSectionData
 }
@@ -950,6 +989,7 @@ type StepBagChecklistSectionProps = {
 const StepBagChecklistSection = memo(function StepBagChecklistSection({
   checkedRowIds,
   groupMode,
+  onCheckedRowChange,
   onCheckedRowIdsChange,
   section,
 }: StepBagChecklistSectionProps) {
@@ -1023,6 +1063,7 @@ const StepBagChecklistSection = memo(function StepBagChecklistSection({
           <PartChecklistTable
             checkedRowIds={checkedRowIds}
             locationColumnLabel="Step"
+            onCheckedRowChange={onCheckedRowChange}
             onCheckedRowIdsChange={onCheckedRowIdsChange}
             plainColumns={plainColumns}
             rows={tableRows}
@@ -1040,6 +1081,7 @@ function areStepBagChecklistSectionPropsEqual(
   next: StepBagChecklistSectionProps,
 ) {
   return previous.groupMode === next.groupMode &&
+    previous.onCheckedRowChange === next.onCheckedRowChange &&
     previous.onCheckedRowIdsChange === next.onCheckedRowIdsChange &&
     previous.section === next.section &&
     haveEqualCheckedStateForRows(previous.section.rows, previous.checkedRowIds, next.checkedRowIds)
@@ -1955,7 +1997,12 @@ function getStepBagChecklistRows(
           colorConfidence: item.detectedColor.confidence,
           colorHex: item.detectedColor.hex,
           colorName: item.detectedColor.name,
-          id: `${bag.id}:m${multiplier}:${callout.id}:${item.id}`,
+          id: createStepCalloutBagChecklistRowId({
+            bagId: bag.id,
+            calloutId: callout.id,
+            itemId: item.id,
+            multiplier,
+          }),
           itemCount: 1,
           itemIndex: item.indexOnCallout,
           multiplier,
@@ -2119,35 +2166,6 @@ function getCalloutItemQuantity(item: DetectedStepCalloutPartItem) {
   const value = item.quantity.value
 
   return value != null && Number.isFinite(value) && value > 0 ? value : 1
-}
-
-function setStepCalloutMultiplierValue(
-  current: StepCalloutMultiplierMap,
-  calloutId: string,
-  multiplier: number,
-): StepCalloutMultiplierMap {
-  const nextMultiplier = normalizeStepCalloutMultiplierValue(multiplier)
-  const currentMultiplier = getStepCalloutMultiplier(calloutId, current)
-  if (nextMultiplier === currentMultiplier) {
-    return current
-  }
-
-  const next = { ...current }
-  if (nextMultiplier <= 1) {
-    delete next[calloutId]
-  } else {
-    next[calloutId] = nextMultiplier
-  }
-
-  return next
-}
-
-function normalizeStepCalloutMultiplierValue(value: number | undefined) {
-  if (value == null || !Number.isFinite(value)) {
-    return 1
-  }
-
-  return Math.max(1, Math.floor(value))
 }
 
 function formatStepRange(range: { end: number; start: number }) {

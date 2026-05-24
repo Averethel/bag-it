@@ -1,8 +1,13 @@
 import type { PartsListPartPreview } from "./browser-catalogue"
 import type { PartsListPdfExtractionResult } from "./parts-list-pdf-extraction"
 import type { PdfIntakeJobSnapshot, PdfIntakeMetadata } from "./pdf-intake"
-import type { StepCalloutMultiplierMap } from "./step-callout-bagging"
 import type { StepCalloutDetectionResult } from "./step-callout-detection"
+import { getStepCalloutBagChecklistRowIds } from "./step-callout-bagging"
+import {
+  createStepCalloutMultiplierEntries,
+  restoreStepCalloutMultiplierEntries,
+  type StepCalloutMultiplierMap,
+} from "./step-callout-multipliers"
 
 export const baggingSessionFileKind = "bag-it-session"
 export const baggingSessionFileVersion = 1
@@ -10,6 +15,7 @@ export const baggingSessionFileVersion = 1
 export type BaggingSessionFileInput = {
   attemptedPartPreviewKeys: ReadonlySet<string>
   checkedRowIds: ReadonlySet<string>
+  checkedStepBagRowIds?: ReadonlySet<string>
   currentExtractorVersion: string
   jobSnapshot: PdfIntakeJobSnapshot | null
   manualFile: File
@@ -23,6 +29,7 @@ export type BaggingSessionFileInput = {
 export type RestoredBaggingSession = {
   attemptedPartPreviewKeys: ReadonlySet<string>
   checkedRowIds: ReadonlySet<string>
+  checkedStepBagRowIds: ReadonlySet<string>
   jobSnapshot: PdfIntakeJobSnapshot | null
   manualFile: File
   metadata: PdfIntakeMetadata | null
@@ -59,12 +66,16 @@ type BaggingSessionFile = {
   partCompletion: {
     checkedRowIds: string[]
   }
+  stepBagCompletion?: {
+    checkedRowIds: string[]
+  }
   version: typeof baggingSessionFileVersion
 }
 
 export async function createBaggingSessionFile({
   attemptedPartPreviewKeys,
   checkedRowIds,
+  checkedStepBagRowIds = new Set(),
   currentExtractorVersion,
   jobSnapshot,
   manualFile,
@@ -99,6 +110,14 @@ export async function createBaggingSessionFile({
     partCompletion: {
       checkedRowIds: [...checkedRowIds],
     },
+    stepBagCompletion: {
+      checkedRowIds: createStepBagCheckedRowIdEntries({
+        checkedRowIds: checkedStepBagRowIds,
+        partsListResult,
+        stepCalloutMultipliers,
+        stepCalloutResult,
+      }),
+    },
     version: baggingSessionFileVersion,
   } satisfies BaggingSessionFile
 }
@@ -112,10 +131,21 @@ export async function restoreBaggingSessionFile(file: File): Promise<RestoredBag
     lastModified: parsed.manual.lastModified,
     type: parsed.manual.type || "application/pdf",
   })
+  const stepCalloutResult = getRestorableStepCalloutResult(parsed.analysis.stepCalloutResult ?? null)
+  const stepCalloutMultipliers = restoreStepCalloutMultipliers(
+    parsed.analysis.stepCalloutMultiplierEntries ?? [],
+    stepCalloutResult,
+  )
 
   return {
     attemptedPartPreviewKeys: new Set(parsed.analysis.attemptedPartPreviewKeys),
     checkedRowIds: new Set(parsed.partCompletion.checkedRowIds),
+    checkedStepBagRowIds: restoreStepBagCheckedRowIds({
+      checkedRowIds: parsed.stepBagCompletion?.checkedRowIds ?? [],
+      partsListResult: parsed.analysis.partsListResult,
+      stepCalloutMultipliers,
+      stepCalloutResult,
+    }),
     jobSnapshot: parsed.analysis.jobSnapshot,
     manualFile,
     metadata: parsed.analysis.metadata,
@@ -123,11 +153,8 @@ export async function restoreBaggingSessionFile(file: File): Promise<RestoredBag
     partsListResult: parsed.analysis.partsListResult,
     savedExtractorVersion: parsed.analysis.extractorVersion,
     savedStepCalloutDetectorVersion: parsed.analysis.stepCalloutDetectorVersion ?? null,
-    stepCalloutMultipliers: restoreStepCalloutMultipliers(
-      parsed.analysis.stepCalloutMultiplierEntries ?? [],
-      parsed.analysis.stepCalloutResult ?? null,
-    ),
-    stepCalloutResult: getRestorableStepCalloutResult(parsed.analysis.stepCalloutResult ?? null),
+    stepCalloutMultipliers,
+    stepCalloutResult,
   }
 }
 
@@ -165,56 +192,61 @@ export function getBaggingSessionDownloadName(manualName: string | null | undefi
   return `${baseName || "bag-it-session"}.bagit.json`
 }
 
-function createStepCalloutMultiplierEntries(
-  multipliers: StepCalloutMultiplierMap,
-  result: StepCalloutDetectionResult | null,
-): [string, number][] {
-  if (!result) {
+function restoreStepCalloutMultipliers(entries: unknown, resultValue: unknown): StepCalloutMultiplierMap {
+  const result = getRestorableStepCalloutResult(resultValue)
+  return restoreStepCalloutMultiplierEntries(entries, result)
+}
+
+function createStepBagCheckedRowIdEntries({
+  checkedRowIds,
+  partsListResult,
+  stepCalloutMultipliers,
+  stepCalloutResult,
+}: {
+  checkedRowIds: ReadonlySet<string>
+  partsListResult: PartsListPdfExtractionResult | null
+  stepCalloutMultipliers: StepCalloutMultiplierMap
+  stepCalloutResult: StepCalloutDetectionResult | null
+}) {
+  if (!stepCalloutResult || checkedRowIds.size === 0) {
     return []
   }
 
-  const calloutIds = new Set(result.callouts.map((callout) => callout.id))
+  const validRowIds = getStepCalloutBagChecklistRowIds(stepCalloutResult, {
+    calloutMultipliers: stepCalloutMultipliers,
+    inventoryPartCount: getPartsListTotalQuantity(partsListResult),
+  })
 
-  return Object.entries(multipliers)
-    .flatMap(([calloutId, multiplier]): [string, number][] => {
-      const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
-      return calloutIds.has(calloutId) && normalizedMultiplier > 1
-        ? [[calloutId, normalizedMultiplier]]
-        : []
-    })
-    .sort(([leftCalloutId], [rightCalloutId]) => leftCalloutId.localeCompare(rightCalloutId))
+  return [...checkedRowIds]
+    .filter((rowId) => validRowIds.has(rowId))
+    .sort((left, right) => left.localeCompare(right))
 }
 
-function restoreStepCalloutMultipliers(entries: unknown, resultValue: unknown): StepCalloutMultiplierMap {
-  const result = getRestorableStepCalloutResult(resultValue)
-  if (!result || !Array.isArray(entries)) {
-    return {}
+function restoreStepBagCheckedRowIds({
+  checkedRowIds,
+  partsListResult,
+  stepCalloutMultipliers,
+  stepCalloutResult,
+}: {
+  checkedRowIds: unknown
+  partsListResult: PartsListPdfExtractionResult | null
+  stepCalloutMultipliers: StepCalloutMultiplierMap
+  stepCalloutResult: StepCalloutDetectionResult | null
+}) {
+  if (!Array.isArray(checkedRowIds)) {
+    return new Set<string>()
   }
 
-  const calloutIds = new Set(result.callouts.map((callout) => callout.id))
-  const multipliers: Record<string, number> = {}
-
-  for (const entry of entries) {
-    if (!Array.isArray(entry) || entry.length !== 2) {
-      continue
-    }
-
-    const [calloutId, multiplier] = entry
-    const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
-    if (typeof calloutId === "string" && calloutIds.has(calloutId) && normalizedMultiplier > 1) {
-      multipliers[calloutId] = normalizedMultiplier
-    }
-  }
-
-  return multipliers
+  return new Set(createStepBagCheckedRowIdEntries({
+    checkedRowIds: new Set(checkedRowIds.filter((rowId): rowId is string => typeof rowId === "string")),
+    partsListResult,
+    stepCalloutMultipliers,
+    stepCalloutResult,
+  }))
 }
 
-function normalizeStepCalloutMultiplier(multiplier: unknown) {
-  if (typeof multiplier !== "number" || !Number.isFinite(multiplier)) {
-    return 1
-  }
-
-  return Math.max(1, Math.floor(multiplier))
+function getPartsListTotalQuantity(result: PartsListPdfExtractionResult | null) {
+  return result ? result.normalization?.totalQuantity ?? result.rows.reduce((sum, row) => sum + row.quantity, 0) : null
 }
 
 function assertBaggingSessionFile(value: unknown): asserts value is BaggingSessionFile {

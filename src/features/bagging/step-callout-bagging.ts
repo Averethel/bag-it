@@ -6,6 +6,11 @@ import type {
   StepCalloutSourceImage,
 } from "./step-callout-detection"
 import { compareColorNames } from "./color-sort"
+import { getStepCalloutMultiplier } from "./step-callout-multipliers"
+import type { StepCalloutMultiplierMap } from "./step-callout-multipliers"
+
+export { getStepCalloutMultiplier } from "./step-callout-multipliers"
+export type { StepCalloutMultiplierMap } from "./step-callout-multipliers"
 
 export const stepCalloutBaggingHeuristicVersion = "step-callout-bagging-v4"
 
@@ -18,8 +23,6 @@ export type StepCalloutBaggingPolicy = {
   targetParts: number
   targetSteps: number
 }
-
-export type StepCalloutMultiplierMap = Readonly<Record<string, number>>
 
 export type StepCalloutBagPartGroup = {
   cataloguePartNumber: string | null
@@ -73,6 +76,13 @@ export type StepCalloutBaggingPlan = {
   heuristicVersion: typeof stepCalloutBaggingHeuristicVersion
   policy: StepCalloutBaggingPolicy
   setPieceCount: number
+}
+
+export type StepCalloutBagChecklistRowIdParts = {
+  bagId: string
+  calloutId: string
+  itemId: string
+  multiplier: number
 }
 
 export function createStepCalloutBaggingPlan(
@@ -137,6 +147,45 @@ export function createStepCalloutBaggingPlan(
       inventoryPartCount,
     }),
   }
+}
+
+export function createStepCalloutBagChecklistRowId({
+  bagId,
+  calloutId,
+  itemId,
+  multiplier,
+}: StepCalloutBagChecklistRowIdParts) {
+  return `${bagId}:m${multiplier}:${calloutId}:${itemId}`
+}
+
+export function getStepCalloutBagChecklistRowIds(
+  result: StepCalloutDetectionResult,
+  {
+    calloutMultipliers = {},
+    inventoryPartCount = null,
+  }: {
+    calloutMultipliers?: StepCalloutMultiplierMap
+    inventoryPartCount?: number | null
+  } = {},
+) {
+  const plan = createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount })
+  const rowIds = new Set<string>()
+
+  for (const bag of plan.bags) {
+    for (const callout of bag.callouts) {
+      const multiplier = getStepCalloutMultiplier(callout.id, calloutMultipliers)
+      for (const item of callout.partItems) {
+        rowIds.add(createStepCalloutBagChecklistRowId({
+          bagId: bag.id,
+          calloutId: callout.id,
+          itemId: item.id,
+          multiplier,
+        }))
+      }
+    }
+  }
+
+  return rowIds
 }
 
 function sortCalloutsForPageContainedBags(callouts: readonly DetectedStepCallout[]) {
@@ -763,26 +812,11 @@ function getCalloutPartCount(callout: DetectedStepCallout, multiplier = 1) {
   return callout.partItems.reduce((sum, item) => sum + getItemQuantity(item).value * multiplier, 0)
 }
 
-export function getStepCalloutMultiplier(
-  calloutId: string,
-  calloutMultipliers: StepCalloutMultiplierMap = {},
-) {
-  return normalizeStepCalloutMultiplier(calloutMultipliers[calloutId])
-}
-
 function getCalloutMultiplier(
   callout: DetectedStepCallout,
   calloutMultipliers: StepCalloutMultiplierMap,
 ) {
   return getStepCalloutMultiplier(callout.id, calloutMultipliers)
-}
-
-function normalizeStepCalloutMultiplier(value: number | undefined) {
-  if (value == null || !Number.isFinite(value)) {
-    return 1
-  }
-
-  return Math.max(1, Math.floor(value))
 }
 
 function getDetectedColor(item: DetectedStepCalloutPartItem): {

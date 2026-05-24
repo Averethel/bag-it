@@ -75,6 +75,7 @@ export function PartChecklistTable({
   headerTestId,
   locationColumnLabel = "Page",
   onCheckedRowIdsChange,
+  onCheckedRowChange,
   plainColumns = emptyPartChecklistPlainColumns,
   rows,
   showConfidence = true,
@@ -86,6 +87,7 @@ export function PartChecklistTable({
   headerTestId?: string
   locationColumnLabel?: string
   onCheckedRowIdsChange: (checkedRowIds: ReadonlySet<string>) => void
+  onCheckedRowChange?: (rowId: string, checked: boolean) => void
   plainColumns?: readonly PartChecklistSortColumn[]
   rows: readonly PartChecklistRow[]
   showConfidence?: boolean
@@ -94,12 +96,14 @@ export function PartChecklistTable({
 }) {
   const [sort, setSort] = useState<PartChecklistSortState>(defaultSort)
   const checkedRowIdsRef = useRef(checkedRowIds)
+  const onCheckedRowChangeRef = useRef(onCheckedRowChange)
   const onCheckedRowIdsChangeRef = useRef(onCheckedRowIdsChange)
 
   useLayoutEffect(() => {
     checkedRowIdsRef.current = checkedRowIds
+    onCheckedRowChangeRef.current = onCheckedRowChange
     onCheckedRowIdsChangeRef.current = onCheckedRowIdsChange
-  }, [checkedRowIds, onCheckedRowIdsChange])
+  }, [checkedRowIds, onCheckedRowChange, onCheckedRowIdsChange])
 
   const checkedRowIdsForSort = sort?.column === "completion" ? checkedRowIds : emptyPartChecklistCheckedRowIds
   const sortedRows = useMemo(
@@ -110,6 +114,11 @@ export function PartChecklistTable({
   const plainColumnSet = useMemo(() => new Set(plainColumns), [plainColumns])
 
   const updateChecked = useCallback((rowId: string, checked: boolean) => {
+    if (onCheckedRowChangeRef.current) {
+      onCheckedRowChangeRef.current(rowId, checked)
+      return
+    }
+
     const current = checkedRowIdsRef.current
     if (current.has(rowId) === checked) {
       return
