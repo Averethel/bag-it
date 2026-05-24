@@ -319,6 +319,35 @@ describe("step callout detection", () => {
     expect(detectStepCalloutRegionsFromImageData(imageData)).toEqual([])
   })
 
+  it("keeps shallow wide callout panels when they contain a real part row", () => {
+    const imageData = createSyntheticPage(1_000, 700)
+    drawSyntheticQuantityText(imageData, { scale: 7, text: "34", x: 146, y: 84 })
+    drawBorderOnlyRect(imageData, { x: 210, y: 78, width: 440, height: 106 }, [216, 239, 250])
+
+    const parts = [
+      { fill: [108, 110, 104] as Rgb, quantity: "2x", width: 32 },
+      { fill: [35, 120, 35] as Rgb, quantity: "2x", width: 30 },
+      { fill: [108, 110, 104] as Rgb, quantity: "1x", width: 38 },
+      { fill: [108, 110, 104] as Rgb, quantity: "1x", width: 38 },
+      { fill: [108, 110, 104] as Rgb, quantity: "1x", width: 34 },
+      { fill: [35, 120, 35] as Rgb, quantity: "1x", width: 30 },
+      { fill: [108, 110, 104] as Rgb, quantity: "1x", width: 34 },
+    ]
+
+    parts.forEach((part, index) => {
+      const x = 246 + (index * 52)
+      drawRect(imageData, { x, y: 104, width: part.width, height: 24 }, part.fill)
+      drawSyntheticQuantityText(imageData, { scale: 2, text: part.quantity, x: x + 2, y: 146 })
+    })
+
+    const regions = detectStepCalloutRegionsFromImageData(imageData)
+    expect(regions).toHaveLength(1)
+
+    const partItems = detectStepCalloutPartItemRegionsFromImageData(cropSyntheticImageData(imageData, regions[0]!))
+    expect(partItems).toHaveLength(7)
+    expect(partItems.map((item) => item.quantity.value)).toEqual([2, 2, 1, 1, 1, 1, 1])
+  })
+
   it("detects a non-blue bordered callout from a nearby printed step number", async () => {
     const canvasApi = installMockCanvasApi()
 

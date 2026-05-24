@@ -1,6 +1,6 @@
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v114"
+export const stepCalloutDetectorVersion = "step-callout-detection-v115"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -1842,15 +1842,27 @@ function isTallNarrowStepCalloutRegionCandidate(imageData: DetectionImageData, r
   )
 }
 
-function isImplausiblyWideShallowStepCalloutRegion(imageData: DetectionImageData, region: PixelRegion) {
+function isImplausiblyWideShallowStepCalloutRegion(imageData: DetectionImageData, region: RegionCandidate) {
   const aspectRatio = region.width / Math.max(1, region.height)
   const maxShallowHeight = Math.max(72, imageData.height * 0.112)
 
-  return (
+  const isWideShallowRegion =
     aspectRatio >= 3.4 &&
     region.height <= maxShallowHeight &&
     region.width >= imageData.width * 0.16
-  )
+
+  return isWideShallowRegion && !hasWideShallowStepCalloutEvidence(imageData, region)
+}
+
+function hasWideShallowStepCalloutEvidence(imageData: DetectionImageData, region: RegionCandidate) {
+  if (region.borderScore < 0.72 || region.fillRatio < 0.62) {
+    return false
+  }
+
+  const paddedRegion = padRegion(region, imageData.width, imageData.height, cropPaddingPixels)
+  const partItems = detectStepCalloutPartItemRegionsFromImageData(cropDetectionImageDataRegion(imageData, paddedRegion))
+
+  return partItems.length >= 2 || (partItems.length === 1 && hasNearbyStepNumberGlyphEvidence(imageData, region))
 }
 
 function normalizeStepNumberLabelsForSequence(
