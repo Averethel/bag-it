@@ -1235,7 +1235,7 @@ describe("extractPartsListFromPdfDocument", () => {
     )
   })
 
-  it("skips OCR for a native-text boundary page before a large detected inventory span", async () => {
+  it("stops OCR before a native-text boundary page ahead of a large detected inventory span", async () => {
     const document = createTextDocument(70, {
       58: "Step 42\nParts needed\nAttach the wall plates before continuing.",
     })
@@ -1245,7 +1245,7 @@ describe("extractPartsListFromPdfDocument", () => {
       const pageTexts = []
 
       for (const pageNumber of pageNumbers) {
-        if (options.shouldSkipPage?.(pageNumber, pageTexts)) {
+        if (options.shouldStopBeforePage?.(pageNumber, pageTexts)) {
           break
         }
 

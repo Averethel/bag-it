@@ -217,8 +217,8 @@ export async function extractPartsListFromPdfDocument(
         ocrPageTexts.set(pageText.pageNumber, pageText)
       },
       retainDefaultWorkerAfterUse: true,
-      shouldSkipPage: (pageNumber) =>
-        shouldSkipOcrBeforeNativeBoundaryPage({
+      shouldStopBeforePage: (pageNumber) =>
+        shouldStopOcrBeforeNativeBoundaryPage({
           colors,
           detectedPageCount: detectedOcrPageNumbers.size,
           foundCandidatePage: foundOcrCandidatePage,
@@ -1198,7 +1198,7 @@ function shouldStopOcrAfterLatestPage({
   return true
 }
 
-function shouldSkipOcrBeforeNativeBoundaryPage({
+function shouldStopOcrBeforeNativeBoundaryPage({
   colors,
   detectedPageCount,
   foundCandidatePage,

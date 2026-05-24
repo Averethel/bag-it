@@ -242,9 +242,13 @@ export function StepCalloutMatchingDebugPanel({
   const previewPageNumbersToLoad = useMemo(
     () =>
       previewPageNumbers
-        .filter((pageNumber) => !pageRenderByNumber.has(pageNumber) && !unavailablePageNumbers.has(pageNumber))
+        .filter((pageNumber) =>
+          !hasUsablePageRender(pageRenderByNumber.get(pageNumber) ?? null) &&
+          !loadingPageNumbers.has(pageNumber) &&
+          !unavailablePageNumbers.has(pageNumber)
+        )
         .slice(0, stepCalloutPreviewRenderBatchSize),
-    [pageRenderByNumber, previewPageNumbers, unavailablePageNumbers],
+    [loadingPageNumbers, pageRenderByNumber, previewPageNumbers, unavailablePageNumbers],
   )
   const previewPageNumbersToLoadKey = previewPageNumbersToLoad.join(",")
 
@@ -316,7 +320,11 @@ export function StepCalloutMatchingDebugPanel({
           return
         }
 
-        const renderedPageNumbers = new Set(renders.map((render) => render.pageNumber))
+        const renderedPageNumbers = new Set(
+          renders
+            .filter(hasUsablePageRender)
+            .map((render) => render.pageNumber),
+        )
         setLoadedPageRenders((current) => mergePageRenderList(current, renders))
         setUnavailablePageNumbers((current) =>
           addPageNumbersToSet(
@@ -844,7 +852,7 @@ function StepCalloutPagePreview({
           rounded="sm"
         >
           <Text fontSize="xs">
-            {status === "loading" ? "Loading page preview." : "No page preview rendered."}
+            {getStepCalloutPagePreviewPlaceholderText(status)}
           </Text>
         </Flex>
       )}
@@ -2213,10 +2221,19 @@ function mergePageRenderSources(
     pageRenderByNumber.set(pageRender.pageNumber, pageRender)
   }
   for (const pageRender of primaryRenders) {
-    pageRenderByNumber.set(pageRender.pageNumber, pageRender)
+    const existingPageRender = pageRenderByNumber.get(pageRender.pageNumber)
+    if (!existingPageRender || pageRender.dataUrl || !existingPageRender.dataUrl) {
+      pageRenderByNumber.set(pageRender.pageNumber, pageRender)
+    }
   }
 
   return pageRenderByNumber
+}
+
+function hasUsablePageRender(pageRender: PdfPrivatePageRender | null): pageRender is PdfPrivatePageRender & {
+  dataUrl: string
+} {
+  return Boolean(pageRender?.dataUrl)
 }
 
 function mergePageRenderList(
@@ -2283,6 +2300,17 @@ function getStepCalloutPageRenderStatus(
   }
 
   return "idle"
+}
+
+function getStepCalloutPagePreviewPlaceholderText(status: StepCalloutPageRenderStatus) {
+  if (status === "loading") {
+    return "Loading page preview."
+  }
+  if (status === "unavailable") {
+    return "Page preview unavailable."
+  }
+
+  return "No page preview rendered."
 }
 
 function getStepCalloutMatchingRows(result: StepCalloutDetectionResult): StepCalloutMatchingRowData[] {

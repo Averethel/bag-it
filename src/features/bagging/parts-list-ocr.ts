@@ -211,7 +211,7 @@ export type PdfPageOcrOptions = {
   onPageStart?: (pageNumber: number, pageTexts: readonly PartsListPageText[]) => void
   onPageText?: (pageText: PartsListPageText, pageTexts: readonly PartsListPageText[]) => void
   retainDefaultWorkerAfterUse?: boolean
-  shouldSkipPage?: (pageNumber: number, pageTexts: readonly PartsListPageText[]) => boolean
+  shouldStopBeforePage?: (pageNumber: number, pageTexts: readonly PartsListPageText[]) => boolean
   shouldStop?: (pageTexts: readonly PartsListPageText[]) => boolean
   signal?: AbortSignal
 }
@@ -349,7 +349,7 @@ export async function extractPdfPageTextsWithOcr(
     onPageStart,
     onPageText,
     retainDefaultWorkerAfterUse = false,
-    shouldSkipPage,
+    shouldStopBeforePage,
     shouldStop,
     signal,
   }: PdfPageOcrOptions = {},
@@ -378,7 +378,7 @@ export async function extractPdfPageTextsWithOcr(
     for (let index = 0; index < boundedPageNumbers.length; index += workers.length) {
       assertOcrCanContinue(remainingMs, signal)
       const nextPageNumber = boundedPageNumbers[index]
-      if (nextPageNumber && shouldSkipPage?.(nextPageNumber, pageTexts)) {
+      if (nextPageNumber && shouldStopBeforePage?.(nextPageNumber, pageTexts)) {
         break
       }
 

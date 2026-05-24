@@ -435,6 +435,52 @@ describe("StepCalloutsPanel", () => {
     expect(screen.getByRole("img", { name: "Manual page 4 preview" })).toBeVisible()
   })
 
+  it("loads a usable page preview when an existing render has no image data", async () => {
+    const loadPageRenders = vi.fn(async (pageNumbers: readonly number[]) =>
+      pageNumbers.map((pageNumber) => ({
+        dataUrl: `data:image/png;base64,page-${pageNumber}`,
+        height: 1000,
+        pageNumber,
+        renderKind: "canvas" as const,
+        width: 700,
+      })),
+    )
+    const result = createResult()
+    result.callouts = [result.callouts[0]!]
+    result.scannedPageNumbers = [1]
+
+    renderWithProvider(
+      <StepCalloutMatchingDebugPanel
+        loadPageRenders={loadPageRenders}
+        pageRenders={[
+          {
+            dataUrl: null,
+            height: 1000,
+            pageNumber: 1,
+            renderKind: "viewport",
+            width: 700,
+          },
+        ]}
+        result={result}
+      />,
+    )
+
+    await waitFor(() => expect(loadPageRenders).toHaveBeenCalledWith([1]))
+    expect(await screen.findByRole("img", { name: "Manual page 1 preview" })).toBeVisible()
+  })
+
+  it("shows when a requested page preview is unavailable", async () => {
+    const loadPageRenders = vi.fn(async () => [])
+    const result = createResult()
+    result.callouts = [result.callouts[0]!]
+    result.scannedPageNumbers = [1]
+
+    renderWithProvider(<StepCalloutMatchingDebugPanel loadPageRenders={loadPageRenders} result={result} />)
+
+    await waitFor(() => expect(loadPageRenders).toHaveBeenCalledWith([1]))
+    await waitFor(() => expect(screen.getByText("Page preview unavailable.")).toBeVisible())
+  })
+
   it("renders scanned pages even when no build steps are detected on that page", () => {
     const result = createResult()
     result.scannedPageNumbers = [1, 2, 3]
