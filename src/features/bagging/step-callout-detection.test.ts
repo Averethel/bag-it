@@ -839,6 +839,29 @@ describe("step callout detection", () => {
     expect(items[0].quantity.value).toBe(2)
   })
 
+  it("ignores single-digit texture just above a real lower callout label row", () => {
+    const imageData = createSyntheticPage(210, 150, [216, 239, 250])
+    drawRect(imageData, { x: 36, y: 58, width: 34, height: 30 }, [160, 166, 170])
+    drawRect(imageData, { x: 84, y: 52, width: 48, height: 36 }, [160, 166, 170])
+    drawRect(imageData, { x: 140, y: 28, width: 44, height: 60 }, [160, 166, 170])
+    drawSyntheticQuantityText(imageData, {
+      scale: 1,
+      text: "3x",
+      x: 92,
+      y: 55,
+    })
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 36, 98)
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 84, 98)
+    drawSyntheticQuantityMask(imageData, manualStyleOneQuantityMask, 140, 98)
+
+    const debug = debugDetectStepCalloutPartItemRegionsFromImageData(imageData)
+    const items = detectStepCalloutPartItemRegionsFromImageData(imageData)
+
+    expect(debug.anchors.map((anchor) => anchor.quantity.value)).toEqual([1, 1, 1])
+    expect(items).toHaveLength(3)
+    expect(items.map((item) => item.quantity.value)).toEqual([1, 1, 1])
+  })
+
   it("rejects isolated loose quantity-like texture embedded in a part surface", () => {
     const imageData = createSyntheticPage(240, 190, [216, 239, 250])
     drawRect(imageData, { x: 68, y: 42, width: 104, height: 100 }, [160, 166, 170])

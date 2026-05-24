@@ -1,6 +1,6 @@
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v115"
+export const stepCalloutDetectorVersion = "step-callout-detection-v116"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -9392,7 +9392,7 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
     if (
       candidate.quantity.value != null &&
       candidate.quantity.value <= 9 &&
-      candidateAspectRatio <= 1.75 &&
+      candidateAspectRatio <= 1.85 &&
       verticalGap >= Math.max(2, candidate.region.height * 0.32) &&
       verticalGap <= candidate.region.height * 1.75 &&
       getRegionCenterX(candidate.region) > getRegionCenterX(anchor.region) &&
