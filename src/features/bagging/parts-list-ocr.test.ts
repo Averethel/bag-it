@@ -441,6 +441,23 @@ describe("buildPartsListTextFromOcrBlocks", () => {
     )
   })
 
+  it("does not expand repeated valid Studio color codes to a dominant longer code", () => {
+    const dominantRows = Array.from({ length: 12 }, (_, index) => [
+      block("1x", 10 + index * 20, 10, 36 + index * 20, 28),
+      block(`${3000 + index}, 88`, 10 + index * 20, 34, 90 + index * 20, 52),
+    ]).flat()
+    const text = buildPartsListTextFromOcrBlocks([
+      ...dominantRows,
+      block("1x", 10, 100, 36, 118),
+      block("4505,8", 10, 124, 72, 142),
+      block("4x", 120, 100, 146, 118),
+      block("3846p48,8", 120, 124, 210, 142),
+    ])
+
+    expect(text).toContain("1 x 4505 studio-8")
+    expect(text).toContain("4 x 3846p48 studio-8")
+  })
+
   it("reconstructs repeated part and color labels from one OCR line", () => {
     const text = buildPartsListTextFromOcrBlocks([
       block("26x 4274, 86 107x 54200, 86", 10, 10, 210, 28),
