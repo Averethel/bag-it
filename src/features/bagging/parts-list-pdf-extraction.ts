@@ -27,6 +27,9 @@ const defaultOcrCandidateConcurrency = 3
 const defaultOcrManyPageCandidateConcurrency = 3
 const manyPageCandidateConcurrencyThreshold = 12
 const minSplitOcrDocumentPages = 40
+const minInitialOcrProbePageCount = 8
+const minNativeBoundaryStopCandidatePageCount = 12
+const splitSensitiveStudioComponentParts = ["970", "971", "972"] as const
 export {
   disposePreloadedPartsListOcrWorker,
   preloadPartsListOcrWorker,
@@ -214,6 +217,16 @@ export async function extractPartsListFromPdfDocument(
         ocrPageTexts.set(pageText.pageNumber, pageText)
       },
       retainDefaultWorkerAfterUse: true,
+      shouldSkipPage: (pageNumber) =>
+        shouldSkipOcrBeforeNativeBoundaryPage({
+          colors,
+          detectedPageCount: detectedOcrPageNumbers.size,
+          foundCandidatePage: foundOcrCandidatePage,
+          nativePageText: pageTexts.get(pageNumber) ?? null,
+          pageCount: document.numPages,
+          partCatalogue,
+          tailPageCount,
+        }),
       shouldStop: (ocrScanPageTexts) => {
         const shouldStop = shouldStopOcrAfterLatestPage({
           colors,
@@ -221,6 +234,7 @@ export async function extractPartsListFromPdfDocument(
           latestPageText: ocrScanPageTexts.at(-1) ?? null,
           pageCount: document.numPages,
           partCatalogue,
+          scannedPageCount: ocrScanPageTexts.length,
           tailPageCount,
           updateFoundCandidatePage: (pageNumber) => {
             detectedOcrPageNumbers.add(pageNumber)
@@ -268,8 +282,8 @@ export async function extractPartsListFromPdfDocument(
       extractionStartedAt,
       extractionTimings,
       nativeTextPageCount: pageTexts.size,
+      ocrConcurrency,
       ocrDeadlineMs,
-      ocrDenseCropRetries,
       ocrEngineFactory,
       ocrMaxPageWidth,
       ocrPageTexts,
@@ -567,8 +581,8 @@ async function processSplitOcrCandidatePages({
   extractionStartedAt,
   extractionTimings,
   nativeTextPageCount,
+  ocrConcurrency,
   ocrDeadlineMs,
-  ocrDenseCropRetries,
   ocrEngineFactory,
   ocrMaxPageWidth,
   ocrPageTexts,
@@ -583,8 +597,8 @@ async function processSplitOcrCandidatePages({
   extractionStartedAt: number
   extractionTimings: Omit<PartsListPdfExtractionTimings, "totalMs">
   nativeTextPageCount: number
+  ocrConcurrency?: number
   ocrDeadlineMs: number | null | undefined
-  ocrDenseCropRetries: boolean
   ocrEngineFactory?: PdfPageOcrOptions["createWorker"]
   ocrMaxPageWidth: number
   ocrPageTexts: Map<number, PartsListPageText>
@@ -594,126 +608,317 @@ async function processSplitOcrCandidatePages({
 }) {
   const finalizedPageTexts = new Map<number, PartsListPageText>()
   const previewReadyPageNumbers: number[] = []
+  const candidateConcurrency = getOcrCandidateProcessingConcurrency({
+    candidatePageCount: candidatePageNumbers.length,
+    requestedConcurrency: ocrConcurrency,
+  })
+  const candidatePageIndexByNumber = new Map(candidatePageNumbers.map((pageNumber, index) => [pageNumber, index]))
 
-  for (const [index, pageNumber] of candidatePageNumbers.entries()) {
-    const pageTextsForCurrentPage = new Map<number, PartsListPageText>()
-    await extractAndStoreOcrPageTexts({
+  for (let pageIndex = 0; pageIndex < candidatePageNumbers.length; pageIndex += candidateConcurrency) {
+    const pageNumbersForChunk = candidatePageNumbers.slice(pageIndex, pageIndex + candidateConcurrency)
+    const pageTextsForCurrentChunk = createReusableSplitCandidatePageTexts({
+      candidatePageCount: candidatePageNumbers.length,
+      colors,
       document,
-      extractOcrPageTexts,
-      ocrPageTexts: pageTextsForCurrentPage,
-      pageNumbers: [pageNumber],
-      options: {
-        concurrency: 1,
-        createWorker: ocrEngineFactory,
-        deadlineMs: ocrDeadlineMs,
-        denseCropRetries: ocrDenseCropRetries,
-        maxPageWidth: ocrMaxPageWidth,
-        onPageStart: () => {
-          onProgress?.({
-            currentPage: pageNumber,
-            detectedPageCount: candidatePageNumbers.length,
-            message: `Inventory span detected; finishing page ${pageNumber} with full OCR.`,
-            pageCount: document.numPages,
-            phase: "ocr",
-            progress: getSplitCandidatePageProgress(index, candidatePageNumbers.length, 0),
-            rowCount: getCandidatePageRowCount(finalizedPageTexts, colors, document, partCatalogue),
-            scannedPageCount: ocrPageTexts.size,
-          })
-        },
-        retainDefaultWorkerAfterUse: true,
-        signal,
-      },
+      nativeTextPageCount,
+      ocrPageTexts,
+      pageNumbers: pageNumbersForChunk,
+      partCatalogue,
     })
+    const pageNumbersNeedingFullOcr = pageNumbersForChunk.filter((pageNumber) => !pageTextsForCurrentChunk.has(pageNumber))
 
-    const pageText = pageTextsForCurrentPage.get(pageNumber)
-    if (!pageText) {
-      continue
+    if (pageNumbersNeedingFullOcr.length > 0) {
+      await extractAndStoreOcrPageTexts({
+        document,
+        extractOcrPageTexts,
+        ocrPageTexts: pageTextsForCurrentChunk,
+        pageNumbers: pageNumbersNeedingFullOcr,
+        options: {
+          concurrency: Math.min(candidateConcurrency, pageNumbersNeedingFullOcr.length),
+          createWorker: ocrEngineFactory,
+          deadlineMs: ocrDeadlineMs,
+          denseCropRetries: false,
+          maxPageWidth: ocrMaxPageWidth,
+          onPageStart: (pageNumber) => {
+            const currentPageIndex = candidatePageIndexByNumber.get(pageNumber) ?? pageIndex
+            onProgress?.({
+              currentPage: pageNumber,
+              detectedPageCount: candidatePageNumbers.length,
+              message: `Inventory span detected; finishing page ${pageNumber} with full OCR.`,
+              pageCount: document.numPages,
+              phase: "ocr",
+              progress: getSplitCandidatePageProgress(currentPageIndex, candidatePageNumbers.length, 0),
+              rowCount: getCandidatePageRowCount(finalizedPageTexts, colors, document, partCatalogue),
+              scannedPageCount: ocrPageTexts.size,
+            })
+          },
+          retainDefaultWorkerAfterUse: true,
+          signal,
+        },
+      })
     }
 
-    ocrPageTexts.set(pageNumber, pageText)
-    finalizedPageTexts.set(pageNumber, pageText)
-
-    await refineSplitOcrCandidatePageIfNeeded({
+    await refineSplitOcrCandidatePagesIfNeeded({
+      basePageTextsByPageNumber: createSplitRetryBasePageTexts(ocrPageTexts, pageTextsForCurrentChunk),
       colors,
       document,
       extractOcrPageTexts,
-      finalizedPageTexts,
       nativeTextPageCount,
+      ocrConcurrency,
       ocrDeadlineMs,
       ocrEngineFactory,
       ocrMaxPageWidth,
-      ocrPageTexts,
-      pageNumber,
+      pageNumbers: pageNumbersForChunk,
+      pageTexts: pageTextsForCurrentChunk,
       partCatalogue,
       signal,
     })
 
-    const partialResult = extractFromCandidatePageTexts({
-      colors,
-      document,
-      nativeTextPageCount,
-      pageTexts: finalizedPageTexts,
-      partCatalogue,
-    })
-    if (partialResult.status === "unsupported" || partialResult.rows.length === 0) {
-      continue
-    }
+    for (const [chunkIndex, pageNumber] of pageNumbersForChunk.entries()) {
+      const pageText = pageTextsForCurrentChunk.get(pageNumber)
+      if (!pageText) {
+        continue
+      }
 
-    previewReadyPageNumbers.push(pageNumber)
-    const resultWithMetadata = withExtractionMetadata(
-      partialResult,
-      "ocr",
-      ocrPageTexts.size,
-      createExtractionTimings(extractionTimings, extractionStartedAt),
-    )
-    onProgress?.({
-      currentPage: pageNumber,
-      detectedPageCount: candidatePageNumbers.length,
-      message: `Finished inventory page ${pageNumber}; ${previewReadyPageNumbers.length} pages ready.`,
-      pageCount: document.numPages,
-      partialResult: resultWithMetadata,
-      phase: "ocr",
-      previewReadyPageNumbers: [...previewReadyPageNumbers],
-      progress: getSplitCandidatePageProgress(index, candidatePageNumbers.length, 1),
-      rowCount: resultWithMetadata.rows.length,
-      scannedPageCount: ocrPageTexts.size,
-    })
-    await yieldToBrowser()
+      ocrPageTexts.set(pageNumber, pageText)
+      finalizedPageTexts.set(pageNumber, pageText)
+
+      const partialResult = extractFromCandidatePageTexts({
+        colors,
+        document,
+        nativeTextPageCount,
+        pageTexts: finalizedPageTexts,
+        partCatalogue,
+      })
+      if (partialResult.status === "unsupported" || partialResult.rows.length === 0) {
+        continue
+      }
+
+      previewReadyPageNumbers.push(pageNumber)
+      const resultWithMetadata = withExtractionMetadata(
+        partialResult,
+        "ocr",
+        ocrPageTexts.size,
+        createExtractionTimings(extractionTimings, extractionStartedAt),
+      )
+      onProgress?.({
+        currentPage: pageNumber,
+        detectedPageCount: candidatePageNumbers.length,
+        message: `Finished inventory page ${pageNumber}; ${previewReadyPageNumbers.length} pages ready.`,
+        pageCount: document.numPages,
+        partialResult: resultWithMetadata,
+        phase: "ocr",
+        previewReadyPageNumbers: [...previewReadyPageNumbers],
+        progress: getSplitCandidatePageProgress(pageIndex + chunkIndex, candidatePageNumbers.length, 1),
+        rowCount: resultWithMetadata.rows.length,
+        scannedPageCount: ocrPageTexts.size,
+      })
+      await yieldToBrowser()
+    }
   }
 
   return previewReadyPageNumbers
 }
 
-async function refineSplitOcrCandidatePageIfNeeded({
+function createReusableSplitCandidatePageTexts({
+  candidatePageCount,
   colors,
   document,
-  extractOcrPageTexts,
-  finalizedPageTexts,
   nativeTextPageCount,
-  ocrDeadlineMs,
-  ocrEngineFactory,
-  ocrMaxPageWidth,
   ocrPageTexts,
-  pageNumber,
+  pageNumbers,
   partCatalogue,
-  signal,
+}: {
+  candidatePageCount: number
+  colors: readonly PartsListColor[]
+  document: PdfReadableDocument
+  nativeTextPageCount: number
+  ocrPageTexts: ReadonlyMap<number, PartsListPageText>
+  pageNumbers: readonly number[]
+  partCatalogue?: PartsListPartCatalogue | null
+}) {
+  if (candidatePageCount >= manyPageCandidateConcurrencyThreshold) {
+    return new Map<number, PartsListPageText>()
+  }
+
+  const reusablePageTexts = new Map<number, PartsListPageText>()
+  for (const pageNumber of pageNumbers) {
+    const pageText = ocrPageTexts.get(pageNumber)
+    if (
+      pageText &&
+      canReuseSplitDetectionPageText({
+        colors,
+        document,
+        nativeTextPageCount,
+        pageNumber,
+        pageText,
+        partCatalogue,
+      })
+    ) {
+      reusablePageTexts.set(pageNumber, pageText)
+    }
+  }
+
+  return reusablePageTexts
+}
+
+function canReuseSplitDetectionPageText({
+  colors,
+  document,
+  nativeTextPageCount,
+  pageNumber,
+  pageText,
+  partCatalogue,
 }: {
   colors: readonly PartsListColor[]
   document: PdfReadableDocument
-  extractOcrPageTexts: typeof extractPdfPageTextsWithOcr
-  finalizedPageTexts: Map<number, PartsListPageText>
   nativeTextPageCount: number
+  pageNumber: number
+  pageText: PartsListPageText
+  partCatalogue?: PartsListPartCatalogue | null
+}) {
+  const pageResult = extractFromCandidatePageTexts({
+    colors,
+    document,
+    nativeTextPageCount,
+    pageTexts: new Map([[pageNumber, pageText]]),
+    partCatalogue,
+  })
+
+  return (
+    pageResult.status !== "unsupported" &&
+    pageResult.rows.length > 0 &&
+    !getDenseRetryPageNumbers(pageResult).includes(pageNumber) &&
+    !hasSplitSensitiveStudioComponentEvidence(pageText)
+  )
+}
+
+function hasSplitSensitiveStudioComponentEvidence(pageText: PartsListPageText) {
+  const componentsByStudioColor = new Map<string, Set<string>>()
+  const evidenceText = [pageText.rawText, pageText.text].filter(Boolean).join("\n")
+
+  for (const partNumber of splitSensitiveStudioComponentParts) {
+    const studioCodePattern = new RegExp(
+      `(?:^|[^a-z0-9])${partNumber}\\s*[,.;:]\\s*(\\d{1,3})(?=$|[^a-z0-9])`,
+      "gi",
+    )
+    const studioAliasPattern = new RegExp(
+      `(?:^|[^a-z0-9])${partNumber}\\s+studio-(\\d{1,3})(?=$|[^a-z0-9])`,
+      "gi",
+    )
+
+    for (const pattern of [studioCodePattern, studioAliasPattern]) {
+      for (const match of evidenceText.matchAll(pattern)) {
+        const studioColorCode = match[1]
+        if (!studioColorCode) {
+          continue
+        }
+
+        const components = componentsByStudioColor.get(studioColorCode) ?? new Set<string>()
+        components.add(partNumber)
+        componentsByStudioColor.set(studioColorCode, components)
+      }
+    }
+  }
+
+  return [...componentsByStudioColor.values()].some((components) =>
+    splitSensitiveStudioComponentParts.every((partNumber) => components.has(partNumber)),
+  )
+}
+
+async function refineSplitOcrCandidatePagesIfNeeded({
+  basePageTextsByPageNumber,
+  colors,
+  document,
+  extractOcrPageTexts,
+  nativeTextPageCount,
+  ocrConcurrency,
+  ocrDeadlineMs,
+  ocrEngineFactory,
+  ocrMaxPageWidth,
+  pageNumbers,
+  pageTexts,
+  partCatalogue,
+  signal,
+}: {
+  basePageTextsByPageNumber: ReadonlyMap<number, PartsListPageText>
+  colors: readonly PartsListColor[]
+  document: PdfReadableDocument
+  extractOcrPageTexts: typeof extractPdfPageTextsWithOcr
+  nativeTextPageCount: number
+  ocrConcurrency?: number
   ocrDeadlineMs: number | null | undefined
   ocrEngineFactory?: PdfPageOcrOptions["createWorker"]
   ocrMaxPageWidth: number
-  ocrPageTexts: Map<number, PartsListPageText>
-  pageNumber: number
+  pageNumbers: readonly number[]
+  pageTexts: Map<number, PartsListPageText>
   partCatalogue?: PartsListPartCatalogue | null
   signal?: AbortSignal
 }) {
-  const pageText = finalizedPageTexts.get(pageNumber)
-  if (!pageText) {
+  const retryPageNumbers = pageNumbers.filter((pageNumber) =>
+    shouldRetrySplitOcrCandidatePage({
+      colors,
+      document,
+      nativeTextPageCount,
+      pageNumber,
+      pageTexts,
+      partCatalogue,
+    }),
+  )
+  if (retryPageNumbers.length === 0) {
     return
+  }
+
+  const retryPageTexts = new Map<number, PartsListPageText>()
+  await extractAndStoreOcrPageTexts({
+    document,
+    extractOcrPageTexts,
+    ocrPageTexts: retryPageTexts,
+    pageNumbers: retryPageNumbers,
+    options: {
+      basePageTextsByPageNumber,
+      concurrency: getOcrCandidateProcessingConcurrency({
+        candidatePageCount: retryPageNumbers.length,
+        requestedConcurrency: ocrConcurrency,
+      }),
+      createWorker: ocrEngineFactory,
+      deadlineMs: ocrDeadlineMs,
+      denseCropRetries: true,
+      maxPageWidth: ocrMaxPageWidth,
+      signal,
+    },
+  })
+
+  for (const [pageNumber, refinedPageText] of retryPageTexts) {
+    pageTexts.set(pageNumber, refinedPageText)
+  }
+}
+
+function createSplitRetryBasePageTexts(
+  ocrPageTexts: ReadonlyMap<number, PartsListPageText>,
+  currentPageTexts: ReadonlyMap<number, PartsListPageText>,
+) {
+  return new Map([...ocrPageTexts, ...currentPageTexts])
+}
+
+function shouldRetrySplitOcrCandidatePage({
+  colors,
+  document,
+  nativeTextPageCount,
+  pageNumber,
+  pageTexts,
+  partCatalogue,
+}: {
+  colors: readonly PartsListColor[]
+  document: PdfReadableDocument
+  nativeTextPageCount: number
+  pageNumber: number
+  pageTexts: ReadonlyMap<number, PartsListPageText>
+  partCatalogue?: PartsListPartCatalogue | null
+}) {
+  const pageText = pageTexts.get(pageNumber)
+  if (!pageText) {
+    return false
   }
 
   const pageResult = extractFromCandidatePageTexts({
@@ -723,34 +928,8 @@ async function refineSplitOcrCandidatePageIfNeeded({
     pageTexts: new Map([[pageNumber, pageText]]),
     partCatalogue,
   })
-  if (!shouldRetryFinalizedOcrPage(pageResult, pageNumber)) {
-    return
-  }
 
-  const retryPageTexts = new Map<number, PartsListPageText>()
-  await extractAndStoreOcrPageTexts({
-    document,
-    extractOcrPageTexts,
-    ocrPageTexts: retryPageTexts,
-    pageNumbers: [pageNumber],
-    options: {
-      basePageTextsByPageNumber: ocrPageTexts,
-      concurrency: 1,
-      createWorker: ocrEngineFactory,
-      deadlineMs: ocrDeadlineMs,
-      denseCropRetries: true,
-      maxPageWidth: ocrMaxPageWidth,
-      signal,
-    },
-  })
-
-  const refinedPageText = retryPageTexts.get(pageNumber)
-  if (!refinedPageText) {
-    return
-  }
-
-  finalizedPageTexts.set(pageNumber, refinedPageText)
-  ocrPageTexts.set(pageNumber, refinedPageText)
+  return shouldRetryFinalizedOcrPage(pageResult, pageNumber)
 }
 
 function extractFromCandidatePageTexts({
@@ -819,19 +998,13 @@ function shouldRetryFinalizedOcrPage(result: PartsListFromPageTextResult, pageNu
     return false
   }
 
-  if (getDenseRetryPageNumbers(result).includes(pageNumber)) {
-    return true
-  }
-
-  if (result.lowConfidenceRows.some((row) => row.sourcePage === pageNumber)) {
-    return true
-  }
-
-  const pageText = result.debugPageTexts?.find((debugPageText) => debugPageText.pageNumber === pageNumber)
-  return Boolean(pageText && pageText.rowSourceCount > rowCount)
+  return getDenseRetryPageNumbers(result, { includeRowSourceGaps: false }).includes(pageNumber)
 }
 
-function getDenseRetryPageNumbers(result: PartsListFromPageTextResult) {
+function getDenseRetryPageNumbers(
+  result: PartsListFromPageTextResult,
+  { includeRowSourceGaps = true }: { includeRowSourceGaps?: boolean } = {},
+) {
   const pageNumbers = new Set<number>()
   const rowCountByPageNumber = getParsedRowCountByPageNumber(result)
 
@@ -841,6 +1014,10 @@ function getDenseRetryPageNumbers(result: PartsListFromPageTextResult) {
   }
 
   if (result.status !== "supported") {
+    return []
+  }
+
+  if (!includeRowSourceGaps) {
     return []
   }
 
@@ -974,6 +1151,7 @@ function shouldStopOcrAfterLatestPage({
   latestPageText,
   pageCount,
   partCatalogue,
+  scannedPageCount,
   tailPageCount,
   updateFoundCandidatePage,
 }: {
@@ -982,6 +1160,7 @@ function shouldStopOcrAfterLatestPage({
   latestPageText: PartsListPageText | null
   pageCount: number
   partCatalogue?: PartsListPartCatalogue | null
+  scannedPageCount: number
   tailPageCount: number
   updateFoundCandidatePage: (pageNumber: number) => void
 }) {
@@ -1009,10 +1188,60 @@ function shouldStopOcrAfterLatestPage({
       return false
     }
 
-    return !isLikelyTrailingDecorativeOcrPage(latestPageText)
+    if (scannedPageCount < getInitialOcrProbePageCount(pageCount, tailPageCount) && latestPageText.pageNumber > 1) {
+      return false
+    }
+
+    return true
   }
 
   return true
+}
+
+function shouldSkipOcrBeforeNativeBoundaryPage({
+  colors,
+  detectedPageCount,
+  foundCandidatePage,
+  nativePageText,
+  pageCount,
+  partCatalogue,
+  tailPageCount,
+}: {
+  colors: readonly PartsListColor[]
+  detectedPageCount: number
+  foundCandidatePage: boolean
+  nativePageText: PartsListPageText | null
+  pageCount: number
+  partCatalogue?: PartsListPartCatalogue | null
+  tailPageCount: number
+}) {
+  if (
+    !foundCandidatePage ||
+    detectedPageCount < minNativeBoundaryStopCandidatePageCount ||
+    !nativePageText ||
+    nativePageText.text.trim().length < 20
+  ) {
+    return false
+  }
+
+  const nativePageResult = extractPartsListFromPageTexts({
+    colors,
+    minimumRowCount: 1,
+    pageCount,
+    pageTexts: [nativePageText],
+    partCatalogue,
+    tailPageCount,
+  })
+
+  return !hasContinuationInventoryPageEvidence(nativePageResult, nativePageText)
+}
+
+function getInitialOcrProbePageCount(pageCount: number, tailPageCount: number) {
+  if (!Number.isInteger(pageCount) || pageCount <= 0) {
+    return 1
+  }
+
+  return Math.min(pageCount, Math.max(2, Math.min(tailPageCount, minInitialOcrProbePageCount)))
 }
 
 function hasInitialOcrInventorySpanEvidence(result: PartsListFromPageTextResult, pageText: PartsListPageText) {
@@ -1077,20 +1306,6 @@ function hasInventoryHeadingText(text: string) {
 
 function hasStepLocalPartsHeadingText(text: string) {
   return /\bparts\s+needed\b/i.test(text)
-}
-
-function isLikelyTrailingDecorativeOcrPage(pageText: PartsListPageText) {
-  const text = pageText.text.trim()
-  if (!text) {
-    return true
-  }
-
-  if (/(^|[^a-z0-9])\d{1,3}\s*(?:x|\u00d7)(?=$|[^a-z0-9])/i.test(text)) {
-    return false
-  }
-
-  const compactText = text.replace(/\s+/g, "")
-  return compactText.length <= 16 && /^[a-z0-9_-]+$/i.test(compactText)
 }
 
 async function extractAndStorePageTexts({

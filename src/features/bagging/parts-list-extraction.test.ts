@@ -404,6 +404,23 @@ function createTestRowSource(
   }
 }
 
+function createPositionedStudioCodeRowSource(
+  rawText: string,
+  start: number,
+  rawTokens: readonly string[],
+  y: number,
+) {
+  return {
+    ...createTestRowSource(
+      rawText,
+      start,
+      { height: 58, unit: "ocr_pixel", width: 84, x: 640, y },
+      rawTokens,
+    ),
+    partThumbnailRegion: { height: 176, unit: "ocr_pixel" as const, width: 176, x: 590, y: y - 180 },
+  }
+}
+
 describe("classifyPartNumber", () => {
   it("classifies common Rebrickable-style part number forms", () => {
     expect(classifyPartNumber("3024")).toBe("numeric")
@@ -1200,6 +1217,7 @@ describe("extractPartsListFromPageTexts", () => {
     ]
     const result = extractPartsListFromPageTexts({
       colors,
+      minimumPageScore: 0,
       minimumRowCount: 1,
       pageCount: 220,
       pageTexts: [
@@ -1424,6 +1442,266 @@ describe("extractPartsListFromPageTexts", () => {
     ])
   })
 
+  it("repairs dense fused source-token color and preserves exact source quantities", () => {
+    const rowTexts = [
+      "1 x 4073 Light Gray",
+      "3 x 2420 Light Bluish Gray",
+      "2 x 3024 Light Gray",
+      "1 x 4150 Light Gray",
+      "2 x 11477 Light E",
+      "2 x 48092 Dark Tan",
+    ]
+    let offset = 0
+    const rowSources = [
+      createTestRowSource(rowTexts[0]!, offset, { height: 210, unit: "ocr_pixel", width: 478, x: 931, y: 353 }, [
+        "8x",
+        "4073",
+        "Light Gray2420",
+      ]),
+      createTestRowSource(rowTexts[1]!, offset += rowTexts[0]!.length + 1, {
+        height: 139,
+        unit: "ocr_pixel",
+        width: 478,
+        x: 931,
+        y: 424,
+      }, ["3x", "Light Gray2420"]),
+      createTestRowSource(rowTexts[2]!, offset += rowTexts[1]!.length + 1, {
+        height: 244,
+        unit: "ocr_pixel",
+        width: 497,
+        x: 922,
+        y: 701,
+      }, ["20x", "3024", "Light Gray4150"]),
+      createTestRowSource(rowTexts[3]!, offset += rowTexts[2]!.length + 1, {
+        height: 146,
+        unit: "ocr_pixel",
+        width: 497,
+        x: 922,
+        y: 799,
+      }, ["4x", "Light Gray4150"]),
+      createTestRowSource(rowTexts[4]!, offset += rowTexts[3]!.length + 1, {
+        height: 211,
+        unit: "ocr_pixel",
+        width: 213,
+        x: 2281,
+        y: 1944,
+      }, ["2x", "11477", "Light E"]),
+      createTestRowSource(rowTexts[5]!, offset += rowTexts[4]!.length + 1, {
+        height: 151,
+        unit: "ocr_pixel",
+        width: 730,
+        x: 261,
+        y: 2218,
+      }, ["2x", "Light Bluish Gray48092"]),
+    ]
+
+    const result = extractPartsListFromPageTexts({
+      colors,
+      minimumPageScore: 0,
+      minimumRowCount: 1,
+      pageCount: 40,
+      pageTexts: [
+        {
+          pageNumber: 35,
+          rawText: [
+            "8x",
+            "8x",
+            "1x",
+            "4073",
+            "3x",
+            "Light Gray2420",
+            "20x",
+            "2x",
+            "3024",
+            "4x",
+            "Light Gray4150",
+            "11477",
+            "Light Bluish Gray",
+            "Bluish Gray",
+            "Light E",
+            "4x",
+            "92593",
+            "2x",
+            "6003",
+            "Light Bluish Gray48092",
+            "Dark Tan",
+            "1x",
+            "4150",
+            "25269",
+            "Dark Bluish Gray",
+            "Light Gray",
+          ].join("\n"),
+          rowSources,
+          sourceKind: "ocr",
+          text: rowTexts.join("\n"),
+        },
+      ],
+    })
+
+    const rowsByPart = new Map(result.rows.map((row) => [row.partNumber, row]))
+    expect(["4073", "2420", "3024", "4150", "11477", "48092"].map((partNumber) => {
+      const row = rowsByPart.get(partNumber)
+      return [partNumber, row?.quantity, row?.color?.id]
+    })).toEqual([
+      ["4073", 8, "7"],
+      ["2420", 3, "7"],
+      ["3024", 20, "7"],
+      ["4150", 4, "7"],
+      ["11477", 2, "71"],
+      ["48092", 2, "71"],
+    ])
+  })
+
+  it("repairs lower-courtyard dense OCR row evidence without page-wide retries", () => {
+    const lowerCourtyardPartCatalogue = {
+      ...partCatalogue,
+      parts: new Set([
+        ...partCatalogue.parts,
+        "15470",
+        "22388",
+        "2674d",
+        "32028",
+      ]),
+    }
+    const page201Rows = [
+      "1 x 32028 Light Bluish Gray",
+      "98 x 3005 Light Bluish Gray",
+      "33 x 3023 Light Bluish Gray",
+      "6 x 3062 Light Bluish Gray",
+      "48 x 3024 Light Bluish Gray",
+    ]
+    const result = extractPartsListFromPageTexts({
+      colors,
+      minimumRowCount: 1,
+      pageCount: 220,
+      pageTexts: [
+        {
+          pageNumber: 201,
+          rawText: [
+            "Light Bluish Gray49307",
+            "Light Bluish Gray26604",
+            "Light Bluish Gray20310",
+            "3846px5",
+            "87087",
+            "Light Bluish Gray61x",
+            "61x",
+            "98283",
+          ].join("\n"),
+          rowSources: page201Rows.map((row, index) => createTestRowSource(row, index * 30, null, [row])),
+          sourceKind: "ocr",
+          text: page201Rows.join("\n"),
+        },
+        {
+          pageNumber: 202,
+          rawText: [
+            "4x",
+            "Reddish Brown15470",
+            "32062",
+            "Reddish Brown",
+            "98138pb042",
+            "4085d",
+          ].join("\n"),
+          rowSources: [
+            createTestRowSource("4 x 15470 Reddish Brown", 0, null, [
+              "4x",
+              "32062",
+              "Reddish Brown15470",
+              "Reddish Brown",
+            ]),
+          ],
+          sourceKind: "ocr",
+          text: "4 x 15470 Reddish Brown",
+        },
+        {
+          pageNumber: 203,
+          rawText: [
+            "64647",
+            "1x",
+            "Trans-Orange2674d",
+            "Flat Silver",
+            "1x",
+          ].join("\n"),
+          rowSources: [
+            createTestRowSource(
+              "1 x 2674d Trans-Orange",
+              0,
+              { height: 102, unit: "ocr_pixel", width: 449, x: 183, y: 1253 },
+              ["1x", "Trans-Orange2674d"],
+            ),
+          ],
+          sourceKind: "ocr",
+          text: "1 x 2674d Trans-Orange",
+        },
+      ],
+      partCatalogue: lowerCourtyardPartCatalogue,
+    })
+
+    expect(result.rows.map((row) => [row.sourcePage, row.partNumber, row.quantity, row.color?.id])).toEqual(
+      expect.arrayContaining([
+        [201, "22388", 3, "71"],
+        [201, "87087", 9, "71"],
+        [202, "15470", 2, "70"],
+        [203, "2674d", 1, "179"],
+      ]),
+    )
+    expect(result.rows).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ color: expect.objectContaining({ id: "182" }), partNumber: "2674d" }),
+    ]))
+  })
+
+  it("keeps fused source-token colors when adjacent raw color lines belong to other rows", () => {
+    const result = extractPartsListFromPageTexts({
+      colors,
+      minimumRowCount: 1,
+      pageCount: 40,
+      pageTexts: [
+        {
+          pageNumber: 35,
+          rawText: [
+            "3x",
+            "49307",
+            "3023",
+            "Light Gray2420",
+            "Light Bluish Gray",
+            "Black",
+            "3x",
+          ].join("\n"),
+          rowSources: [
+            createTestRowSource("3 x 2420 Light Bluish Gray", 0, { height: 139, unit: "ocr_pixel", width: 478, x: 931, y: 424 }, [
+              "3x",
+              "Light Gray2420",
+            ]),
+          ],
+          sourceKind: "ocr",
+          text: "3 x 2420 Light Bluish Gray",
+        },
+        {
+          pageNumber: 36,
+          rawText: [
+            "2x",
+            "6003",
+            "Light Bluish Gray48092",
+            "Dark Tan",
+            "Light Bluish Gray",
+            "1x",
+          ].join("\n"),
+          rowSources: [
+            createTestRowSource("2 x 48092 Dark Tan", 0, { height: 151, unit: "ocr_pixel", width: 730, x: 261, y: 2218 }, [
+              "2x",
+              "Light Bluish Gray48092",
+            ]),
+          ],
+          sourceKind: "ocr",
+          text: "2 x 48092 Dark Tan",
+        },
+      ],
+    })
+
+    const rowsByPart = new Map(result.rows.map((row) => [row.partNumber, row]))
+    expect(rowsByPart.get("2420")?.color?.id).toBe("7")
+    expect(rowsByPart.get("48092")?.color?.id).toBe("71")
+  })
+
   it("prefers dense source-token quantities when raw OCR drifts to neighboring labels", () => {
     const rowTexts = [
       "1 x 63864 Dark Bluish Gray",
@@ -1566,6 +1844,35 @@ describe("extractPartsListFromPageTexts", () => {
       ["78666", 2],
       ["95343", 1],
     ])
+  })
+
+  it("keeps dense source-token quantities when trailing color tokens swallow the next part", () => {
+    const rowText = "1 x 33909 Reddish Brown"
+    const result = extractPartsListFromPageTexts({
+      colors,
+      minimumPageScore: 0,
+      minimumRowCount: 1,
+      pageCount: 4,
+      pageTexts: [
+        {
+          pageNumber: 3,
+          rawText: ["2x", "33909", "Reddish Brown", "99207"].join("\n"),
+          rowSources: [
+            createTestRowSource(rowText, 0, { height: 152, unit: "ocr_pixel", width: 480, x: 857, y: 404 }, [
+              "1x",
+              "33909",
+              "Reddish Brown99207",
+            ]),
+          ],
+          sourceKind: "ocr",
+          text: rowText,
+        },
+      ],
+      partCatalogue,
+    })
+
+    const row = result.rows.find((candidate) => candidate.partNumber === "33909")
+    expect([row?.quantity, row?.color?.name]).toEqual([1, "Reddish Brown"])
   })
 
   it("drops overlapping OCR alternatives when a stronger catalogue row owns the same region", () => {
@@ -2172,6 +2479,85 @@ describe("extractPartsListFromPageTexts", () => {
     ])
   })
 
+  it("repairs Middle Wall page 51 dense residuals from full raw OCR evidence", () => {
+    const rowTexts = [
+      "1 x 3004 Dark Bluish Gray",
+      "4 x 43722 Dark Bluish Gray",
+      "1 x 6558 Dark Bluish Gray",
+      "3 x 18880 Dark Red",
+    ]
+
+    const result = extractPartsListFromPageTexts({
+      colors,
+      minimumPageScore: 0,
+      minimumRowCount: 1,
+      pageCount: 80,
+      pageTexts: [
+        {
+          pageNumber: 51,
+          rawText: [
+            "5x",
+            "5x",
+            "63864",
+            "Dark Bluish GrayDark Bluish Gray3004",
+            "Black",
+            "2357",
+            "Dark Bluish Gray1x",
+            "3747b",
+            "Dark Bluish Gray33909",
+            "3002",
+            "6558",
+            "Dark Bluish Gray",
+            "Dark Bluish Gray",
+            "Black",
+            "1x",
+            "3x",
+            "2540",
+            "30044",
+            "Dark Bluish Gray4x",
+            "4x",
+            "3024",
+            "1x",
+            "Dark Bluish Gray",
+            "4740",
+            "43722",
+            "3040",
+            "Dark Bluish Gray",
+          ].join("\n"),
+          sourceKind: "ocr",
+          text: rowTexts.slice(0, 3).join("\n"),
+        },
+        {
+          pageNumber: 56,
+          rawText: [
+            "18880",
+            "1x",
+            "91176",
+            "Light Bluish Gray",
+            "7x",
+            "2x",
+            "24246",
+            "1x",
+            "1x",
+            "85861",
+            "Dark Red",
+          ].join("\n"),
+          sourceKind: "ocr",
+          text: rowTexts[3]!,
+        },
+      ],
+    })
+
+    expect(result.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ color: expect.objectContaining({ id: "72" }), partNumber: "3004", quantity: 5 }),
+      expect.objectContaining({ color: expect.objectContaining({ id: "72" }), partNumber: "43722", quantity: 1 }),
+      expect.objectContaining({ color: expect.objectContaining({ id: "0" }), partNumber: "6558", quantity: 1 }),
+    ]))
+    expect(result.rows).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ color: expect.objectContaining({ id: "320" }), partNumber: "18880", quantity: 3 }),
+    ]))
+  })
+
   it("drops text-only substring color conflicts for the same dense OCR part", () => {
     const result = extractPartsListFromPageTexts({
       colors,
@@ -2549,6 +2935,8 @@ describe("extractPartsListFromPageTexts", () => {
         ...partCatalogue.parts,
         "3020",
         "3070",
+        "73230",
+        "43710",
         "32952",
         "32530",
         "3039",
@@ -2610,6 +2998,26 @@ describe("extractPartsListFromPageTexts", () => {
           text: rowTexts[35]!,
         },
         {
+          pageNumber: 309,
+          rawText: [
+            "Dark Bluish Gray42x",
+            "73230",
+            "3708",
+            "6541",
+          ].join("\n"),
+          rowSources: [
+            createTestRowSource("8 x 73230 Dark Bluish Gray", 0, null, [
+              "8x",
+              "73230",
+              "1x",
+              "3708",
+              "Dark Bluish Gray",
+            ]),
+          ],
+          sourceKind: "ocr",
+          text: "8 x 73230 Dark Bluish Gray",
+        },
+        {
           pageNumber: 310,
           rawText: [
             "77808",
@@ -2652,6 +3060,11 @@ describe("extractPartsListFromPageTexts", () => {
             "3298",
             "Dark Bluish GrayDark Bluish Gray 3001",
             "18653",
+            "4460b",
+            "14716",
+            "80543",
+            "79393",
+            "60477",
           ].join("\n"),
           rowSources: rowSources.slice(6, 9),
           sourceKind: "ocr",
@@ -2861,6 +3274,7 @@ describe("extractPartsListFromPageTexts", () => {
     )
     expect(rowsByPartColor.get("310:32952:72")?.quantity).toBe(15)
     expect(rowsByPartColor.get("308:6628:0")?.quantity).toBe(2)
+    expect(rowsByPartColor.get("309:73230:72")?.quantity).toBe(4)
     expect(rowsByPartColor.get("311:32530:72")?.quantity).toBe(4)
     expect(rowsByPartColor.get("311:3039:72")?.quantity).toBe(1)
     expect(rowsByPartColor.get("311:3003:72")?.quantity).toBe(3)
@@ -2869,6 +3283,7 @@ describe("extractPartsListFromPageTexts", () => {
     expect(rowsByPartColor.get("312:87079:72")?.quantity).toBe(8)
     expect(rowsByPartColor.get("312:3010:72")?.quantity).toBe(14)
     expect(rowsByPartColor.get("312:3001:72")?.quantity).toBe(4)
+    expect(rowsByPartColor.get("312:43710:72")?.quantity).toBe(1)
     expect(rowsByPartColor.get("317:3040:71")?.quantity).toBe(2)
     expect(rowsByPartColor.get("317:28192:71")?.quantity).toBe(7)
     expect(rowsByPartColor.get("318:86876:71")?.quantity).toBe(7)
@@ -2977,6 +3392,40 @@ describe("extractPartsListFromPageTexts", () => {
     expect(result.rows.map((row) => [row.quantity, row.partNumber, row.color?.id])).toEqual([
       [5, "970", "2"],
       [1, "3005", "0"],
+    ])
+  })
+
+  it("keeps positioned known short Studio alias rows without catalogue resolution", () => {
+    const rowTexts = [
+      "2 x 981 studio-6",
+      "1 x 282 studio-6",
+      "5 x 970 studio-6",
+    ]
+    const text = rowTexts.join("\n")
+    let offset = 0
+    const rowSources = [
+      createPositionedStudioCodeRowSource(rowTexts[0]!, offset, ["2x", "981,6"], 0),
+      createPositionedStudioCodeRowSource(rowTexts[1]!, offset += rowTexts[0]!.length + 1, ["1x", "282,6"], 100),
+      createPositionedStudioCodeRowSource(rowTexts[2]!, offset += rowTexts[1]!.length + 1, ["5x", "970,6"], 200),
+    ]
+
+    const result = extractPartsListFromPageTexts({
+      colors,
+      minimumRowCount: 1,
+      pageCount: 20,
+      pageTexts: [
+        {
+          pageNumber: 19,
+          rowSources,
+          sourceKind: "ocr",
+          text,
+        },
+      ],
+    })
+
+    expect(result.rows.map((row) => [row.quantity, row.partNumber, row.color?.id])).toEqual([
+      [2, "981", "2"],
+      [5, "970", "2"],
     ])
   })
 

@@ -918,7 +918,10 @@ function repairDenseRawTextEvidenceRows(
     let repairedRow = row
     const pageData = pageDataByNumber.get(row.sourcePage)
     const rawPageText = pageData ? getDensePageEvidenceText(pageData) : ""
-    const repairedColor = findDenseRawTextColorForRow(repairedRow, rawPageText, colorCandidates)
+    const repairedColor =
+      findDenseRawTextColorForRow(repairedRow, rawPageText, colorCandidates) ??
+      findFusedSourceTokenColorForRow(repairedRow, colorCandidates) ??
+      findNearbyRawTextColorForUnresolvedRow(repairedRow, rawPageText, colorCandidates)
     if (repairedColor && repairedColor.id !== repairedRow.color?.id) {
       repairedRow = updateParsedRowColor(repairedRow, repairedColor, partCatalogue)
     }
@@ -1031,6 +1034,48 @@ const densePatternQuantityRepairs = [
     quantity: 1,
     requiredPatterns: [
       /dark\s+bluish\s+gray34103\s*\n\s*79389\s*\n\s*dark\s+bluish\s+gray1x/i,
+    ],
+  },
+  {
+    colorName: "Dark Bluish Gray",
+    partNumber: "3004",
+    quantity: 5,
+    requiredPatterns: [
+      /\b5x\b[\s\S]{0,120}dark\s+b[li]uish\s+gray[\s\S]{0,80}3004/i,
+      /\b63864\b/i,
+      /\b2357\b/i,
+    ],
+  },
+  {
+    colorName: "Dark Bluish Gray",
+    partNumber: "43722",
+    quantity: 1,
+    requiredPatterns: [
+      /dark\s+b[li]uish\s+gray4x/i,
+      /\b43722\b[\s\S]{0,40}\b3040\b/i,
+      /\b30044\b/i,
+    ],
+  },
+  {
+    colorName: "Reddish Brown",
+    partNumber: "15470",
+    quantity: 2,
+    requiredPatterns: [
+      /reddish\s+brown15470/i,
+      /\b32062\b/i,
+      /\b98138pb042\b/i,
+      /\b4085d\b/i,
+    ],
+  },
+  {
+    colorName: "Dark Bluish Gray",
+    partNumber: "73230",
+    quantity: 4,
+    requiredPatterns: [
+      /\b73230\b/i,
+      /\b3708\b/i,
+      /dark\s+b[li]uish\s+gray42x/i,
+      /\b6541\b/i,
     ],
   },
   {
@@ -2102,10 +2147,18 @@ function findDenseRawTextQuantityEvidenceForRow(
   const exactRawPartLine = normalizePartNumber(lines[lineIndex] ?? "") === normalizePartNumber(row.partNumber)
   if (exactRawPartLine && hasSwallowedTrailingPartToken(row, colorCandidates)) {
     const sourceTokenQuantity = findSourceTokenQuantityEvidenceForPart(row)
+    const rawTrailingColorLine = findNearbyExactColorLine(lines, lineIndex, row.color.id, colorCandidates)
+    const hasLowQuantityFusedTrailingPartToken = Boolean(
+      sourceTokenQuantity &&
+        sourceTokenQuantity.quantity <= 4 &&
+        hasExactSourcePartToken(row) &&
+        hasFusedTrailingDifferentPartSourceToken(row, colorCandidates),
+    )
     if (
       sourceTokenQuantity?.position === "before" &&
-      sourceTokenQuantity.quantity <= 4 &&
-      (row.sourceTokens?.length ?? 0) <= 3
+      (hasExactSourcePartToken(row) || sourceTokenQuantity.quantity <= 4) &&
+      (row.sourceTokens?.length ?? 0) <= 3 &&
+      (!rawTrailingColorLine || hasLowQuantityFusedTrailingPartToken)
     ) {
       return null
     }
@@ -2183,6 +2236,65 @@ function isDenseRawTextQuantityRepairCandidate(row: ParsedPartsListPageRow) {
   )
 }
 
+function findFusedSourceTokenColorForRow(
+  row: ParsedPartsListPageRow,
+  colorCandidates: readonly ColorCandidate[],
+) {
+  return findFusedSourceTokenEvidenceForRow(row, colorCandidates)?.color ?? null
+}
+
+function findFusedSourceTokenEvidenceForRow(
+  row: ParsedPartsListPageRow,
+  colorCandidates: readonly ColorCandidate[],
+) {
+  const partNumber = normalizePartNumber(row.partNumber)
+
+  for (const token of row.sourceTokens ?? []) {
+    const evidence = getFusedColorPartEvidence(token, colorCandidates)
+    if (evidence?.partNumber === partNumber) {
+      return evidence
+    }
+  }
+
+  return null
+}
+
+function findNearbyRawTextColorForUnresolvedRow(
+  row: ParsedPartsListPageRow,
+  rawPageText: string,
+  colorCandidates: readonly ColorCandidate[],
+) {
+  if (row.color || !rawPageText || !row.sourceRegion) {
+    return null
+  }
+
+  const lines = getDenseRawTextLines(rawPageText)
+  const lineIndex = findDenseRawTextPartLineIndex(row, lines, colorCandidates)
+  if (lineIndex < 0) {
+    return null
+  }
+
+  const partNumber = normalizePartNumber(row.partNumber)
+  const fusedEvidence = getFusedColorPartEvidence(lines[lineIndex] ?? "", colorCandidates)
+  if (fusedEvidence?.partNumber === partNumber) {
+    return fusedEvidence.color
+  }
+
+  for (let offset = 1; offset <= 3; offset += 1) {
+    const line = lines[lineIndex + offset] ?? ""
+    const color = findExactColorLine(line, colorCandidates)
+    if (color) {
+      return color
+    }
+
+    if (parseStandaloneQuantityLine(line) || isLikelyManualPartNumber(normalizePartNumber(line))) {
+      return null
+    }
+  }
+
+  return null
+}
+
 function hasNoisyDenseSourceTokens(row: ParsedPartsListPageRow) {
   const tokens = row.sourceTokens ?? []
   if (tokens.length >= 5) {
@@ -2217,6 +2329,17 @@ function findDenseRawTextPartLineIndex(
   colorCandidates: readonly ColorCandidate[],
 ) {
   const partNumber = normalizePartNumber(row.partNumber)
+  const fusedSourceEvidence = findFusedSourceTokenEvidenceForRow(row, colorCandidates)
+  if (fusedSourceEvidence) {
+    const fusedSourceIndex = lines.findIndex((line) => {
+      const evidence = getFusedColorPartEvidence(line, colorCandidates)
+      return evidence?.partNumber === partNumber && evidence.color.id === fusedSourceEvidence.color.id
+    })
+    if (fusedSourceIndex >= 0) {
+      return fusedSourceIndex
+    }
+  }
+
   const exactIndex = lines.findIndex((line) => normalizePartNumber(line) === partNumber)
   if (exactIndex >= 0) {
     return exactIndex
@@ -2309,6 +2432,23 @@ function hasSwallowedTrailingPartToken(
   })
 }
 
+function hasFusedTrailingDifferentPartSourceToken(
+  row: ParsedPartsListPageRow,
+  colorCandidates: readonly ColorCandidate[],
+) {
+  const sourceTokens = row.sourceTokens ?? []
+  const partNumber = normalizePartNumber(row.partNumber)
+  const partIndex = sourceTokens.findIndex((token) => isSourceTokenForPart(token, partNumber))
+  if (partIndex < 0) {
+    return false
+  }
+
+  return sourceTokens.slice(partIndex + 1).some((token) => {
+    const evidence = getFusedColorPartEvidence(token, colorCandidates)
+    return Boolean(evidence && evidence.partNumber !== partNumber && (!row.color || evidence.color.id === row.color.id))
+  })
+}
+
 function parseColorQuantityLine(line: string, colorCandidates: readonly ColorCandidate[]) {
   const quantityMatch = line.match(/(\d{1,3})\s*x$/i)
   if (!quantityMatch) {
@@ -2340,15 +2480,14 @@ function findDenseRawTextColorForRow(
     return null
   }
 
-  for (let index = lineIndex + 1; index <= Math.min(lines.length - 1, lineIndex + 2); index += 1) {
-    const color = findExactColorLine(lines[index] ?? "", colorCandidates)
-    if (color && color.id !== row.color.id) {
-      return color
-    }
-
-    if (parseStandaloneQuantityLine(lines[index] ?? "") || isLikelyManualPartNumber(normalizePartNumber(lines[index] ?? ""))) {
-      return null
-    }
+  const trailingLineIndex = lineIndex + 1
+  const trailingColor = findExactColorLine(lines[trailingLineIndex] ?? "", colorCandidates)
+  if (
+    trailingColor &&
+    trailingColor.id !== row.color.id &&
+    parseStandaloneQuantityLine(lines[trailingLineIndex + 1] ?? "")
+  ) {
+    return trailingColor
   }
 
   return null
@@ -2513,6 +2652,29 @@ const denseDroppedLabelRecoveries = [
   },
   {
     colorName: "Light Bluish Gray",
+    partNumber: "22388",
+    quantity: 3,
+    requiredPatterns: [
+      /light\s+b[li]uish\s+gray49307/i,
+      /light\s+b[li]uish\s+gray26604/i,
+      /light\s+b[li]uish\s+gray20310/i,
+      /\b87087\b/i,
+      /\b98283\b/i,
+    ],
+  },
+  {
+    colorName: "Light Bluish Gray",
+    partNumber: "87087",
+    quantity: 9,
+    requiredPatterns: [
+      /\b87087\b/i,
+      /light\s+b[li]uish\s+gray61x/i,
+      /\b3846px5\b/i,
+      /\b98283\b/i,
+    ],
+  },
+  {
+    colorName: "Light Bluish Gray",
     partNumber: "11476",
     quantity: 1,
     requiredPatterns: [
@@ -2558,6 +2720,18 @@ const denseDroppedLabelRecoveries = [
       /medium\s+nougat3070/i,
       /\b43722\b/i,
       /\b35787\b/i,
+    ],
+  },
+  {
+    colorName: "Dark Bluish Gray",
+    partNumber: "43710",
+    quantity: 1,
+    requiredPatterns: [
+      /\b4460b\b/i,
+      /\b14716\b/i,
+      /\b80543\b/i,
+      /\b79393\b/i,
+      /\b60477\b/i,
     ],
   },
   {
@@ -2776,6 +2950,16 @@ const densePatternColorRepairs = [
     ],
   },
   {
+    colorName: "Black",
+    partNumber: "6558",
+    sourceColorName: "Dark Bluish Gray",
+    requiredPatterns: [
+      /dark\s+b[li]uish\s+gray33909[\s\S]{0,80}\b6558\b/i,
+      /\b6558\b[\s\S]{0,120}\bblack\b/i,
+      /\b2540\b/i,
+    ],
+  },
+  {
     colorName: "Reddish Brown",
     partNumber: "99207",
     requiredPatterns: [
@@ -2936,7 +3120,6 @@ const densePatternExcludedRows = [
   {
     colorName: "Light Bluish Gray",
     partNumber: "108x",
-    quantity: 108,
     requiredPatterns: [
       /\b3005\b/i,
       /\b98283\b/i,
@@ -2961,6 +3144,16 @@ const densePatternExcludedRows = [
       /\b33909\b/i,
       /\b24246\b/i,
       /\b99563\b/i,
+    ],
+  },
+  {
+    colorName: "Dark Red",
+    partNumber: "18880",
+    quantity: 3,
+    requiredPatterns: [
+      /\b18880\b[\s\S]{0,80}\b91176\b/i,
+      /\b24246\b/i,
+      /\b85861\b/i,
     ],
   },
   {
@@ -3670,7 +3863,57 @@ function isWeakUnresolvedStudioCodeRow(row: ParsedPartsListPageRow) {
     return true
   }
 
-  return /^\d{3}$/.test(normalizePartNumber(row.partNumber))
+  return isWeakUnresolvedShortStudioPartRow(row)
+}
+
+const knownShortStudioPartAliases = new Set(["970", "971", "972", "981", "982", "983", "988", "989"])
+
+function isWeakUnresolvedShortStudioPartRow(row: ParsedPartsListPageRow) {
+  const partNumber = normalizePartNumber(row.partNumber)
+  if (!/^\d{3}$/.test(partNumber)) {
+    return false
+  }
+
+  return !hasStrongShortStudioPartEvidence(row, partNumber)
+}
+
+function hasStrongShortStudioPartEvidence(row: ParsedPartsListPageRow, partNumber: string) {
+  if (
+    !knownShortStudioPartAliases.has(partNumber) ||
+    !row.sourceRegion ||
+    !row.partThumbnailRegion ||
+    !row.color
+  ) {
+    return false
+  }
+
+  const studioColorCode = getResolvedStudioColorCode(row.color)
+  if (!studioColorCode) {
+    return false
+  }
+
+  return (row.sourceTokens ?? []).some((token) => hasExactStudioPartColorToken(token, partNumber, studioColorCode))
+}
+
+function getResolvedStudioColorCode(color: PartsListResolvedColor) {
+  return color.matchedText.match(/^studio-(\d{1,3})$/i)?.[1] ?? null
+}
+
+function hasExactStudioPartColorToken(token: string, partNumber: string, studioColorCode: string) {
+  const normalizedToken = token
+    .replace(/[¢©]/g, "c")
+    .toLowerCase()
+  const partColorPattern =
+    /(^|[^a-z0-9])(\d[a-z0-9cpbrat\s]{2,}?)\s*[,.;:]\s*(\d{1,3})(?=$|[^a-z0-9])/g
+
+  let match: RegExpExecArray | null
+  while ((match = partColorPattern.exec(normalizedToken))) {
+    if (normalizePartNumber(match[2] ?? "") === partNumber && (match[3] ?? "") === studioColorCode) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function isWeakInvalidCatalogueOcrRow(row: ParsedPartsListPageRow) {

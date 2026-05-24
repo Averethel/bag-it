@@ -211,6 +211,7 @@ export type PdfPageOcrOptions = {
   onPageStart?: (pageNumber: number, pageTexts: readonly PartsListPageText[]) => void
   onPageText?: (pageText: PartsListPageText, pageTexts: readonly PartsListPageText[]) => void
   retainDefaultWorkerAfterUse?: boolean
+  shouldSkipPage?: (pageNumber: number, pageTexts: readonly PartsListPageText[]) => boolean
   shouldStop?: (pageTexts: readonly PartsListPageText[]) => boolean
   signal?: AbortSignal
 }
@@ -348,6 +349,7 @@ export async function extractPdfPageTextsWithOcr(
     onPageStart,
     onPageText,
     retainDefaultWorkerAfterUse = false,
+    shouldSkipPage,
     shouldStop,
     signal,
   }: PdfPageOcrOptions = {},
@@ -375,6 +377,11 @@ export async function extractPdfPageTextsWithOcr(
   try {
     for (let index = 0; index < boundedPageNumbers.length; index += workers.length) {
       assertOcrCanContinue(remainingMs, signal)
+      const nextPageNumber = boundedPageNumbers[index]
+      if (nextPageNumber && shouldSkipPage?.(nextPageNumber, pageTexts)) {
+        break
+      }
+
       const chunkPageNumbers = boundedPageNumbers.slice(index, index + workers.length)
       const chunkResults = await Promise.all(
         chunkPageNumbers.map((pageNumber, workerIndex) => {
@@ -2823,7 +2830,8 @@ function filterUnexpectedStudioColorCodeRows(
 function repairLikelyTruncatedDominantStudioColorRows(
   rows: readonly OcrReconstructedRow[],
 ): OcrReconstructedRow[] {
-  const dominantStudioColorCode = getDominantStudioColorCode(rows)
+  const studioColorCodeCounts = getStudioColorCodeCounts(rows)
+  const dominantStudioColorCode = getDominantStudioColorCode(rows, studioColorCodeCounts)
   if (!dominantStudioColorCode || dominantStudioColorCode.length < 2) {
     return [...rows]
   }
@@ -2835,6 +2843,11 @@ function repairLikelyTruncatedDominantStudioColorRows(
       !parts ||
       !studioColorCode ||
       studioColorCode === dominantStudioColorCode ||
+      isRepeatedAmbiguousDominantStudioColorPrefix({
+        count: studioColorCodeCounts.get(studioColorCode) ?? 0,
+        dominantStudioColorCode,
+        studioColorCode,
+      }) ||
       !dominantStudioColorCode.startsWith(studioColorCode)
     ) {
       return row
@@ -2847,7 +2860,20 @@ function repairLikelyTruncatedDominantStudioColorRows(
   })
 }
 
-function getDominantStudioColorCode(rows: readonly OcrReconstructedRow[]) {
+function getDominantStudioColorCode(
+  rows: readonly OcrReconstructedRow[],
+  counts = getStudioColorCodeCounts(rows),
+) {
+  const sortedCounts = [...counts.entries()].sort((left, right) => right[1] - left[1])
+  const [dominantColorCode, dominantCount = 0] = sortedCounts[0] ?? []
+  if (!dominantColorCode || dominantCount < 12 || dominantCount < rows.length * 0.65) {
+    return null
+  }
+
+  return dominantColorCode
+}
+
+function getStudioColorCodeCounts(rows: readonly OcrReconstructedRow[]) {
   const counts = new Map<string, number>()
   for (const row of rows) {
     const parts = parseOcrRowParts(row.text)
@@ -2859,13 +2885,19 @@ function getDominantStudioColorCode(rows: readonly OcrReconstructedRow[]) {
     counts.set(studioColorCode, (counts.get(studioColorCode) ?? 0) + 1)
   }
 
-  const sortedCounts = [...counts.entries()].sort((left, right) => right[1] - left[1])
-  const [dominantColorCode, dominantCount = 0] = sortedCounts[0] ?? []
-  if (!dominantColorCode || dominantCount < 12 || dominantCount < rows.length * 0.65) {
-    return null
-  }
+  return counts
+}
 
-  return dominantColorCode
+function isRepeatedAmbiguousDominantStudioColorPrefix({
+  count,
+  dominantStudioColorCode,
+  studioColorCode,
+}: {
+  count: number
+  dominantStudioColorCode: string
+  studioColorCode: string
+}) {
+  return count > 1 && studioColorCode === "8" && dominantStudioColorCode === "88"
 }
 
 function getStudioColorCode(colorText: string) {
