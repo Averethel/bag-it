@@ -2,6 +2,12 @@ import type { PartsListPartPreview } from "./browser-catalogue"
 import type { PartsListPdfExtractionResult } from "./parts-list-pdf-extraction"
 import type { PdfIntakeJobSnapshot, PdfIntakeMetadata } from "./pdf-intake"
 import type { StepCalloutDetectionResult } from "./step-callout-detection"
+import { getStepCalloutBagChecklistRowIds } from "./step-callout-bagging"
+import {
+  createStepCalloutMultiplierEntries,
+  restoreStepCalloutMultiplierEntries,
+  type StepCalloutMultiplierMap,
+} from "./step-callout-multipliers"
 
 export const baggingSessionFileKind = "bag-it-session"
 export const baggingSessionFileVersion = 1
@@ -9,18 +15,21 @@ export const baggingSessionFileVersion = 1
 export type BaggingSessionFileInput = {
   attemptedPartPreviewKeys: ReadonlySet<string>
   checkedRowIds: ReadonlySet<string>
+  checkedStepBagRowIds?: ReadonlySet<string>
   currentExtractorVersion: string
   jobSnapshot: PdfIntakeJobSnapshot | null
   manualFile: File
   metadata: PdfIntakeMetadata | null
   partPreviewByKey: ReadonlyMap<string, PartsListPartPreview>
   partsListResult: PartsListPdfExtractionResult | null
+  stepCalloutMultipliers?: StepCalloutMultiplierMap
   stepCalloutResult?: StepCalloutDetectionResult | null
 }
 
 export type RestoredBaggingSession = {
   attemptedPartPreviewKeys: ReadonlySet<string>
   checkedRowIds: ReadonlySet<string>
+  checkedStepBagRowIds: ReadonlySet<string>
   jobSnapshot: PdfIntakeJobSnapshot | null
   manualFile: File
   metadata: PdfIntakeMetadata | null
@@ -28,6 +37,7 @@ export type RestoredBaggingSession = {
   partsListResult: PartsListPdfExtractionResult | null
   savedExtractorVersion: string | null
   savedStepCalloutDetectorVersion: string | null
+  stepCalloutMultipliers: StepCalloutMultiplierMap
   stepCalloutResult: StepCalloutDetectionResult | null
 }
 
@@ -40,6 +50,7 @@ type BaggingSessionFile = {
     partPreviewEntries: [string, PartsListPartPreview][]
     partsListResult: PartsListPdfExtractionResult | null
     stepCalloutDetectorVersion?: string | null
+    stepCalloutMultiplierEntries?: [string, number][]
     stepCalloutResult?: StepCalloutDetectionResult | null
   }
   createdAt: string
@@ -55,18 +66,23 @@ type BaggingSessionFile = {
   partCompletion: {
     checkedRowIds: string[]
   }
+  stepBagCompletion?: {
+    checkedRowIds: string[]
+  }
   version: typeof baggingSessionFileVersion
 }
 
 export async function createBaggingSessionFile({
   attemptedPartPreviewKeys,
   checkedRowIds,
+  checkedStepBagRowIds = new Set(),
   currentExtractorVersion,
   jobSnapshot,
   manualFile,
   metadata,
   partPreviewByKey,
   partsListResult,
+  stepCalloutMultipliers = {},
   stepCalloutResult = null,
 }: BaggingSessionFileInput) {
   return {
@@ -78,6 +94,7 @@ export async function createBaggingSessionFile({
       partPreviewEntries: [...partPreviewByKey.entries()],
       partsListResult,
       stepCalloutDetectorVersion: stepCalloutResult?.detectorVersion ?? null,
+      stepCalloutMultiplierEntries: createStepCalloutMultiplierEntries(stepCalloutMultipliers, stepCalloutResult),
       stepCalloutResult,
     },
     createdAt: new Date().toISOString(),
@@ -93,6 +110,14 @@ export async function createBaggingSessionFile({
     partCompletion: {
       checkedRowIds: [...checkedRowIds],
     },
+    stepBagCompletion: {
+      checkedRowIds: createStepBagCheckedRowIdEntries({
+        checkedRowIds: checkedStepBagRowIds,
+        partsListResult,
+        stepCalloutMultipliers,
+        stepCalloutResult,
+      }),
+    },
     version: baggingSessionFileVersion,
   } satisfies BaggingSessionFile
 }
@@ -106,10 +131,21 @@ export async function restoreBaggingSessionFile(file: File): Promise<RestoredBag
     lastModified: parsed.manual.lastModified,
     type: parsed.manual.type || "application/pdf",
   })
+  const stepCalloutResult = getRestorableStepCalloutResult(parsed.analysis.stepCalloutResult ?? null)
+  const stepCalloutMultipliers = restoreStepCalloutMultipliers(
+    parsed.analysis.stepCalloutMultiplierEntries ?? [],
+    stepCalloutResult,
+  )
 
   return {
     attemptedPartPreviewKeys: new Set(parsed.analysis.attemptedPartPreviewKeys),
     checkedRowIds: new Set(parsed.partCompletion.checkedRowIds),
+    checkedStepBagRowIds: restoreStepBagCheckedRowIds({
+      checkedRowIds: parsed.stepBagCompletion?.checkedRowIds ?? [],
+      partsListResult: parsed.analysis.partsListResult,
+      stepCalloutMultipliers,
+      stepCalloutResult,
+    }),
     jobSnapshot: parsed.analysis.jobSnapshot,
     manualFile,
     metadata: parsed.analysis.metadata,
@@ -117,7 +153,8 @@ export async function restoreBaggingSessionFile(file: File): Promise<RestoredBag
     partsListResult: parsed.analysis.partsListResult,
     savedExtractorVersion: parsed.analysis.extractorVersion,
     savedStepCalloutDetectorVersion: parsed.analysis.stepCalloutDetectorVersion ?? null,
-    stepCalloutResult: getRestorableStepCalloutResult(parsed.analysis.stepCalloutResult ?? null),
+    stepCalloutMultipliers,
+    stepCalloutResult,
   }
 }
 
@@ -153,6 +190,63 @@ export function getBaggingSessionDownloadName(manualName: string | null | undefi
     .slice(0, 80)
 
   return `${baseName || "bag-it-session"}.bagit.json`
+}
+
+function restoreStepCalloutMultipliers(entries: unknown, resultValue: unknown): StepCalloutMultiplierMap {
+  const result = getRestorableStepCalloutResult(resultValue)
+  return restoreStepCalloutMultiplierEntries(entries, result)
+}
+
+function createStepBagCheckedRowIdEntries({
+  checkedRowIds,
+  partsListResult,
+  stepCalloutMultipliers,
+  stepCalloutResult,
+}: {
+  checkedRowIds: ReadonlySet<string>
+  partsListResult: PartsListPdfExtractionResult | null
+  stepCalloutMultipliers: StepCalloutMultiplierMap
+  stepCalloutResult: StepCalloutDetectionResult | null
+}) {
+  if (!stepCalloutResult || checkedRowIds.size === 0) {
+    return []
+  }
+
+  const validRowIds = getStepCalloutBagChecklistRowIds(stepCalloutResult, {
+    calloutMultipliers: stepCalloutMultipliers,
+    inventoryPartCount: getPartsListTotalQuantity(partsListResult),
+  })
+
+  return [...checkedRowIds]
+    .filter((rowId) => validRowIds.has(rowId))
+    .sort((left, right) => left.localeCompare(right))
+}
+
+function restoreStepBagCheckedRowIds({
+  checkedRowIds,
+  partsListResult,
+  stepCalloutMultipliers,
+  stepCalloutResult,
+}: {
+  checkedRowIds: unknown
+  partsListResult: PartsListPdfExtractionResult | null
+  stepCalloutMultipliers: StepCalloutMultiplierMap
+  stepCalloutResult: StepCalloutDetectionResult | null
+}) {
+  if (!Array.isArray(checkedRowIds)) {
+    return new Set<string>()
+  }
+
+  return new Set(createStepBagCheckedRowIdEntries({
+    checkedRowIds: new Set(checkedRowIds.filter((rowId): rowId is string => typeof rowId === "string")),
+    partsListResult,
+    stepCalloutMultipliers,
+    stepCalloutResult,
+  }))
+}
+
+function getPartsListTotalQuantity(result: PartsListPdfExtractionResult | null) {
+  return result ? result.normalization?.totalQuantity ?? result.rows.reduce((sum, row) => sum + row.quantity, 0) : null
 }
 
 function assertBaggingSessionFile(value: unknown): asserts value is BaggingSessionFile {

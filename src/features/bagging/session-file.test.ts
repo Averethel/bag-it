@@ -8,6 +8,7 @@ import {
 } from "./session-file"
 import type { PartsListPdfExtractionResult } from "./parts-list-pdf-extraction"
 import type { PdfIntakeJobSnapshot, PdfIntakeMetadata } from "./pdf-intake"
+import { getStepCalloutBagChecklistRowIds } from "./step-callout-bagging"
 import { stepCalloutDetectorVersion, type StepCalloutDetectionResult } from "./step-callout-detection"
 
 describe("Bag It session files", () => {
@@ -16,9 +17,19 @@ describe("Bag It session files", () => {
     const metadata = createMetadata(manualFile)
     const jobSnapshot = createJobSnapshot(metadata)
     const partsListResult = createPartsListResult("parts-list-extraction-v26")
+    const stepCalloutResult = createStepCalloutResult()
+    const stepCalloutMultipliers = {
+      "missing-callout": 4,
+      "step-callout:p1:r1": 3.8,
+    }
+    const checkedStepBagRowIds = getStepCalloutBagChecklistRowIds(stepCalloutResult, {
+      calloutMultipliers: { "step-callout:p1:r1": 3 },
+      inventoryPartCount: 14,
+    })
     const sessionFile = await createBaggingSessionFile({
       attemptedPartPreviewKeys: new Set(["3005:0"]),
       checkedRowIds: new Set(["2-0-14-3005-0"]),
+      checkedStepBagRowIds: new Set([...checkedStepBagRowIds, "stale-step-bag-row"]),
       currentExtractorVersion: "parts-list-extraction-v26",
       jobSnapshot,
       manualFile,
@@ -36,7 +47,8 @@ describe("Bag It session files", () => {
         ],
       ]),
       partsListResult,
-      stepCalloutResult: createStepCalloutResult(),
+      stepCalloutMultipliers,
+      stepCalloutResult,
     })
 
     const restored = await restoreBaggingSessionFile(
@@ -49,6 +61,8 @@ describe("Bag It session files", () => {
     expect(restored.jobSnapshot).toEqual(jobSnapshot)
     expect(restored.partsListResult).toEqual(partsListResult)
     expect(restored.stepCalloutResult).toEqual(createStepCalloutResult())
+    expect(restored.stepCalloutMultipliers).toEqual({ "step-callout:p1:r1": 3 })
+    expect(restored.checkedStepBagRowIds).toEqual(checkedStepBagRowIds)
     expect(restored.partPreviewByKey.get("3005:0")?.name).toBe("Brick 1 x 1")
     expect(restored.attemptedPartPreviewKeys.has("3005:0")).toBe(true)
     expect(restored.checkedRowIds.has("2-0-14-3005-0")).toBe(true)
@@ -101,6 +115,7 @@ describe("Bag It session files", () => {
 
     expect(restored.savedStepCalloutDetectorVersion).toBe(stepCalloutDetectorVersion)
     expect(restored.stepCalloutResult).toBeNull()
+    expect(restored.stepCalloutMultipliers).toEqual({})
     expect(isRestoredStepAnalysisCurrent(restored, stepCalloutDetectorVersion)).toBe(false)
     expect(isRestoredAnalysisCurrent(restored, "parts-list-extraction-v26")).toBe(true)
   })

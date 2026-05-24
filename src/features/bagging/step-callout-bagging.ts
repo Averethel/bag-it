@@ -6,8 +6,13 @@ import type {
   StepCalloutSourceImage,
 } from "./step-callout-detection"
 import { compareColorNames } from "./color-sort"
+import { getStepCalloutMultiplier } from "./step-callout-multipliers"
+import type { StepCalloutMultiplierMap } from "./step-callout-multipliers"
 
-export const stepCalloutBaggingHeuristicVersion = "step-callout-bagging-v2"
+export { getStepCalloutMultiplier } from "./step-callout-multipliers"
+export type { StepCalloutMultiplierMap } from "./step-callout-multipliers"
+
+export const stepCalloutBaggingHeuristicVersion = "step-callout-bagging-v4"
 
 export type StepCalloutBaggingPolicy = {
   maxParts: number
@@ -73,18 +78,26 @@ export type StepCalloutBaggingPlan = {
   setPieceCount: number
 }
 
+export type StepCalloutBagChecklistRowIdParts = {
+  bagId: string
+  calloutId: string
+  itemId: string
+  multiplier: number
+}
+
 export function createStepCalloutBaggingPlan(
   result: StepCalloutDetectionResult,
   {
+    calloutMultipliers = {},
     inventoryPartCount = null,
   }: {
+    calloutMultipliers?: StepCalloutMultiplierMap
     inventoryPartCount?: number | null
   } = {},
 ): StepCalloutBaggingPlan {
-  const sortedCallouts = [...result.callouts].sort(
-    (left, right) => left.stepIndex - right.stepIndex || left.pageNumber - right.pageNumber,
-  )
-  const detectedPartCount = sortedCallouts.reduce((sum, callout) => sum + getCalloutPartCount(callout), 0)
+  const sortedCallouts = sortCalloutsForPageContainedBags(result.callouts.filter(hasStepCalloutPartItems))
+  const pageCalloutGroups = groupCalloutsByPage(sortedCallouts)
+  const detectedPartCount = getCalloutsPartCount(sortedCallouts, calloutMultipliers)
   const policy = getStepCalloutBaggingPolicy({
     detectedPartCount,
     detectedStepCount: sortedCallouts.length,
@@ -93,35 +106,35 @@ export function createStepCalloutBaggingPlan(
   const bags: StepCalloutBagPlan[] = []
   let currentCallouts: DetectedStepCallout[] = []
 
-  for (const callout of sortedCallouts) {
-    const calloutPartCount = getCalloutPartCount(callout)
-    const currentPartCount = currentCallouts.reduce((sum, current) => sum + getCalloutPartCount(current), 0)
-    const nextPartCount = currentPartCount + calloutPartCount
+  for (const pageCallouts of pageCalloutGroups) {
+    const pagePartCount = getCalloutsPartCount(pageCallouts, calloutMultipliers)
+    const currentPartCount = getCalloutsPartCount(currentCallouts, calloutMultipliers)
+    const nextPartCount = currentPartCount + pagePartCount
     const hasCurrentCallouts = currentCallouts.length > 0
     const hasReachedPreferredFill = currentPartCount >= Math.min(policy.minParts, Math.floor(policy.targetParts * 0.75))
     const wouldExceedHardLimit =
       nextPartCount > policy.maxParts ||
-      currentCallouts.length >= policy.maxSteps
+      currentCallouts.length + pageCallouts.length > policy.maxSteps
     const wouldExceedPreferredLimit =
       nextPartCount > policy.targetParts ||
-      currentCallouts.length >= policy.targetSteps
+      currentCallouts.length + pageCallouts.length > policy.targetSteps
     const shouldCloseCurrent =
       hasCurrentCallouts &&
       (wouldExceedHardLimit || (hasReachedPreferredFill && wouldExceedPreferredLimit))
 
     if (shouldCloseCurrent) {
-      bags.push(createStepCalloutBag(currentCallouts, bags.length, policy))
+      bags.push(createStepCalloutBag(currentCallouts, bags.length, policy, calloutMultipliers))
       currentCallouts = []
     }
 
-    currentCallouts.push(callout)
+    currentCallouts.push(...pageCallouts)
   }
 
   if (currentCallouts.length > 0) {
-    bags.push(createStepCalloutBag(currentCallouts, bags.length, policy))
+    bags.push(createStepCalloutBag(currentCallouts, bags.length, policy, calloutMultipliers))
   }
 
-  const balancedBags = mergeUndersizedTrailingBag(bags, policy)
+  const balancedBags = mergeUndersizedBags(bags, policy, calloutMultipliers)
 
   return {
     bags: balancedBags,
@@ -136,29 +149,128 @@ export function createStepCalloutBaggingPlan(
   }
 }
 
-function mergeUndersizedTrailingBag(
+export function createStepCalloutBagChecklistRowId({
+  bagId,
+  calloutId,
+  itemId,
+  multiplier,
+}: StepCalloutBagChecklistRowIdParts) {
+  return `${bagId}:m${multiplier}:${calloutId}:${itemId}`
+}
+
+export function getStepCalloutBagChecklistRowIds(
+  result: StepCalloutDetectionResult,
+  {
+    calloutMultipliers = {},
+    inventoryPartCount = null,
+  }: {
+    calloutMultipliers?: StepCalloutMultiplierMap
+    inventoryPartCount?: number | null
+  } = {},
+) {
+  const plan = createStepCalloutBaggingPlan(result, { calloutMultipliers, inventoryPartCount })
+  const rowIds = new Set<string>()
+
+  for (const bag of plan.bags) {
+    for (const callout of bag.callouts) {
+      const multiplier = getStepCalloutMultiplier(callout.id, calloutMultipliers)
+      for (const item of callout.partItems) {
+        rowIds.add(createStepCalloutBagChecklistRowId({
+          bagId: bag.id,
+          calloutId: callout.id,
+          itemId: item.id,
+          multiplier,
+        }))
+      }
+    }
+  }
+
+  return rowIds
+}
+
+function sortCalloutsForPageContainedBags(callouts: readonly DetectedStepCallout[]) {
+  return [...callouts].sort((left, right) =>
+    left.pageNumber - right.pageNumber ||
+    left.sourceRegion.y - right.sourceRegion.y ||
+    left.sourceRegion.x - right.sourceRegion.x ||
+    left.indexOnPage - right.indexOnPage ||
+    left.stepIndex - right.stepIndex
+  )
+}
+
+function hasStepCalloutPartItems(callout: DetectedStepCallout) {
+  return callout.partItems.length > 0
+}
+
+function groupCalloutsByPage(callouts: readonly DetectedStepCallout[]) {
+  const groups: DetectedStepCallout[][] = []
+
+  for (const callout of callouts) {
+    const currentGroup = groups.at(-1)
+    if (currentGroup && currentGroup[0]?.pageNumber === callout.pageNumber) {
+      currentGroup.push(callout)
+    } else {
+      groups.push([callout])
+    }
+  }
+
+  return groups
+}
+
+function mergeUndersizedBags(
   bags: readonly StepCalloutBagPlan[],
   policy: StepCalloutBaggingPolicy,
+  calloutMultipliers: StepCalloutMultiplierMap,
 ) {
   if (bags.length < 2) {
     return bags
   }
 
-  const previous = bags.at(-2)
-  const trailing = bags.at(-1)
-  if (
-    !previous ||
-    !trailing ||
-    trailing.partCount >= policy.minParts ||
-    previous.partCount + trailing.partCount > policy.maxParts
-  ) {
-    return bags
+  const mergedCalloutGroups: DetectedStepCallout[][] = []
+
+  for (const bag of bags) {
+    const previousCallouts = mergedCalloutGroups.at(-1)
+    if (!previousCallouts) {
+      mergedCalloutGroups.push([...bag.callouts])
+      continue
+    }
+
+    const previousPartCount = getCalloutsPartCount(previousCallouts, calloutMultipliers)
+    if (shouldMergeUndersizedBagIntoPrevious(bag, previousPartCount, policy)) {
+      previousCallouts.push(...bag.callouts)
+      continue
+    }
+
+    mergedCalloutGroups.push([...bag.callouts])
   }
 
-  return [
-    ...bags.slice(0, -2),
-    createStepCalloutBag([...previous.callouts, ...trailing.callouts], bags.length - 2, policy),
-  ]
+  return mergedCalloutGroups.map((callouts, index) =>
+    createStepCalloutBag(callouts, index, policy, calloutMultipliers)
+  )
+}
+
+function shouldMergeUndersizedBagIntoPrevious(
+  bag: StepCalloutBagPlan,
+  previousPartCount: number,
+  policy: StepCalloutBaggingPolicy,
+) {
+  if (bag.partCount >= policy.minParts) {
+    return false
+  }
+
+  if (previousPartCount + bag.partCount <= policy.maxParts) {
+    return true
+  }
+
+  return bag.partCount <= getTinyBagPartLimit(policy)
+}
+
+function getTinyBagPartLimit(policy: StepCalloutBaggingPolicy) {
+  return Math.max(
+    5,
+    Math.floor(policy.minParts * 0.15),
+    Math.floor(policy.targetParts * 0.08),
+  )
 }
 
 export function getStepCalloutBaggingPolicy({
@@ -197,8 +309,9 @@ function createStepCalloutBag(
   callouts: readonly DetectedStepCallout[],
   bagIndex: number,
   policy: StepCalloutBaggingPolicy,
+  calloutMultipliers: StepCalloutMultiplierMap,
 ): StepCalloutBagPlan {
-  const partCount = callouts.reduce((sum, callout) => sum + getCalloutPartCount(callout), 0)
+  const partCount = getCalloutsPartCount(callouts, calloutMultipliers)
   const unknownQuantityCount = callouts.reduce(
     (sum, callout) => sum + callout.partItems.filter((item) => !hasTrustedQuantity(item)).length,
     0,
@@ -221,7 +334,7 @@ function createStepCalloutBag(
       start: Math.min(...pageNumbers),
     },
     partCount,
-    partGroups: createBagPartGroups(callouts),
+    partGroups: createBagPartGroups(callouts, calloutMultipliers),
     policy,
     reviewReasons,
     sourceImage: callouts[0]?.sourceImage ?? null,
@@ -234,13 +347,17 @@ function createStepCalloutBag(
   }
 }
 
-function createBagPartGroups(callouts: readonly DetectedStepCallout[]): StepCalloutBagPartGroup[] {
+function createBagPartGroups(
+  callouts: readonly DetectedStepCallout[],
+  calloutMultipliers: StepCalloutMultiplierMap,
+): StepCalloutBagPartGroup[] {
   const groups = new Map<string, MutablePartGroup>()
 
   for (const callout of callouts) {
+    const calloutMultiplier = getCalloutMultiplier(callout, calloutMultipliers)
     for (const item of callout.partItems) {
       const detectedColor = getDetectedColor(item)
-      const quantity = getItemQuantity(item)
+      const quantity = getMultipliedItemQuantity(item, calloutMultiplier)
       const bomMatch: DetectedStepCalloutPartItem["bomImageMatch"] | null = null
       const groupKey = getPartGroupKey(groups, item, detectedColor, callout.stepIndex, bomMatch)
       const existing = groups.get(groupKey)
@@ -681,8 +798,25 @@ function getBagReviewReasons({
   return reasons
 }
 
-function getCalloutPartCount(callout: DetectedStepCallout) {
-  return callout.partItems.reduce((sum, item) => sum + getItemQuantity(item).value, 0)
+function getCalloutsPartCount(
+  callouts: readonly DetectedStepCallout[],
+  calloutMultipliers: StepCalloutMultiplierMap,
+) {
+  return callouts.reduce(
+    (sum, callout) => sum + getCalloutPartCount(callout, getCalloutMultiplier(callout, calloutMultipliers)),
+    0,
+  )
+}
+
+function getCalloutPartCount(callout: DetectedStepCallout, multiplier = 1) {
+  return callout.partItems.reduce((sum, item) => sum + getItemQuantity(item).value * multiplier, 0)
+}
+
+function getCalloutMultiplier(
+  callout: DetectedStepCallout,
+  calloutMultipliers: StepCalloutMultiplierMap,
+) {
+  return getStepCalloutMultiplier(callout.id, calloutMultipliers)
 }
 
 function getDetectedColor(item: DetectedStepCalloutPartItem): {
@@ -714,6 +848,15 @@ function getItemQuantity(item: DetectedStepCalloutPartItem): {
     confidence: 0,
     isEstimated: true,
     value: 1,
+  }
+}
+
+function getMultipliedItemQuantity(item: DetectedStepCalloutPartItem, multiplier: number) {
+  const quantity = getItemQuantity(item)
+
+  return {
+    ...quantity,
+    value: quantity.value * multiplier,
   }
 }
 

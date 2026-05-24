@@ -1,14 +1,16 @@
 import { Stack, Tabs } from "@chakra-ui/react"
-import { Boxes, Bug, PackageCheck } from "lucide-react"
+import { Boxes, Bug, PackageCheck, Search } from "lucide-react"
 import type { ReactNode } from "react"
 
 export function OutputTabs({
   bags,
   debug,
+  matchingDebug,
   parts,
 }: {
   bags: ReactNode
   debug?: ReactNode
+  matchingDebug?: ReactNode
   parts: ReactNode
 }) {
   return (
@@ -30,6 +32,10 @@ export function OutputTabs({
             <Boxes size={16} />
             Part list
           </Tabs.Trigger>
+          <Tabs.Trigger value="matching" flexShrink={0}>
+            <Search size={16} />
+            Build steps
+          </Tabs.Trigger>
           <Tabs.Trigger value="bags" flexShrink={0}>
             <PackageCheck size={16} />
             Bags
@@ -44,6 +50,9 @@ export function OutputTabs({
 
         <Tabs.Content value="parts" display="flex" flex="1" minH="bagging.zero" minW="bagging.zero" maxW="full" overflow={{ lg: "hidden" }}>
           {parts}
+        </Tabs.Content>
+        <Tabs.Content value="matching" display="flex" flex="1" minH="bagging.zero" minW="bagging.zero" maxW="full" overflow={{ lg: "hidden" }}>
+          {matchingDebug}
         </Tabs.Content>
         <Tabs.Content value="bags" display="flex" flex="1" minH="bagging.zero" minW="bagging.zero" maxW="full" overflow={{ lg: "hidden" }}>
           {bags}

@@ -9,6 +9,8 @@ import {
 const sessionPaths = process.argv.slice(2)
 const includeDetails = process.env.BAG_IT_CALLOUT_DETAILS === "1"
 const includeLegacyDifferences = process.env.BAG_IT_CALLOUT_LEGACY === "1"
+const includeReadAttempts = process.env.BAG_IT_CALLOUT_READ_ATTEMPTS === "1"
+const includeVerboseDetails = process.env.BAG_IT_CALLOUT_VERBOSE === "1"
 const showAllDetails = process.env.BAG_IT_CALLOUT_SHOW_ALL === "1"
 const detailSteps = new Set(
   (process.env.BAG_IT_CALLOUT_STEPS ?? "")
@@ -38,9 +40,11 @@ for (const sessionPath of sessionPaths) {
     return {
       anchorCandidates: shouldIncludeDetail ? debug?.anchorCandidates : undefined,
       anchors: shouldIncludeDetail ? debug?.anchors : undefined,
-      components: shouldIncludeDetail ? debug?.components : undefined,
-      likelyComponents: shouldIncludeDetail ? debug?.likelyComponents : undefined,
-      readAttempts: shouldIncludeDetail ? createReadAttempts(imageData, debug?.likelyComponents ?? []) : undefined,
+      components: shouldIncludeDetail && includeVerboseDetails ? debug?.components.map(compactComponent) : undefined,
+      likelyComponents: shouldIncludeDetail && includeVerboseDetails ? debug?.likelyComponents.map(compactComponent) : undefined,
+      readAttempts: shouldIncludeDetail && includeReadAttempts
+        ? createReadAttempts(imageData, debug?.likelyComponents ?? [])
+        : undefined,
       items: shouldIncludeDetail
         ? items.map((item) => ({
           confidence: Number(item.confidence.toFixed(3)),
@@ -70,7 +74,7 @@ for (const sessionPath of sessionPaths) {
     0,
   )
   const invalidDetails = details.filter((detail) =>
-    detail.quantities.some((quantity) => quantity <= 0 || quantity > 30)
+    detail.quantities.some((quantity) => quantity <= 0)
   )
   const legacyDifferences = details.filter((detail) =>
     detail.newItems !== detail.oldItems ||
@@ -151,6 +155,10 @@ function createReadAttempts(imageData, components) {
   }
 
   return attempts
+}
+
+function compactComponent({ count, height, width, x, y }) {
+  return { count, height, width, x, y }
 }
 
 function getRegionCenterY(region) {

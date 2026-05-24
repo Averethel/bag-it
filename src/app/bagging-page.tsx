@@ -1,8 +1,8 @@
 "use client"
 
 import { Box, Stack } from "@chakra-ui/react"
-import { Boxes, PackageCheck } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { Boxes, PackageCheck, Search } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { BaggingOverview } from "@/components/bagging/bagging-overview"
 import { BaggingPageFrame } from "@/components/bagging/bagging-page-frame"
 import { ExtractedPartsPanel, NormalizationAttentionList } from "@/components/bagging/extracted-parts-panel"
@@ -12,7 +12,13 @@ import { PartsListDebugPanel } from "@/components/bagging/parts-list-debug-panel
 import { PendingOutputPanel } from "@/components/bagging/pending-output-panel"
 import { ProcessingStatusCard, type ProcessingStatusStep } from "@/components/bagging/processing-status-card"
 import { SessionControlsCard } from "@/components/bagging/session-controls-card"
-import { StepCalloutDebugPanel, StepCalloutsPanel } from "@/components/bagging/step-callouts-panel"
+import {
+  getStepCalloutQuantityDiagnosticForResult,
+  StepCalloutDebugPanel,
+  StepCalloutMatchingDebugPanel,
+  StepCalloutQuantityDiagnosticPanel,
+  StepCalloutsPanel,
+} from "@/components/bagging/step-callouts-panel"
 import {
   fetchPartsListCatalogueColors,
   fetchPartsListNormalization,
@@ -45,11 +51,13 @@ import {
   formatFileSize,
   getPdfJobProgress,
   getPdfJobStateLabel,
+  renderPdfPages,
   runPrivatePdfProcessingJob,
   sourceByteRetentionMs,
   type PdfIntakeJobState,
   type PdfIntakeJobSnapshot,
   type PdfIntakeMetadata,
+  type PdfPrivatePageRender,
 } from "@/features/bagging/pdf-intake"
 import {
   createBaggingSessionFile,
@@ -66,6 +74,11 @@ import {
   type StepCalloutDetectionProgress,
   type StepCalloutDetectionResult,
 } from "@/features/bagging/step-callout-detection"
+import {
+  pruneStepCalloutMultipliers,
+  setStepCalloutMultiplier,
+  type StepCalloutMultiplierMap,
+} from "@/features/bagging/step-callout-multipliers"
 
 type PartsAnalysisProgress = Pick<PartsListPdfExtractionProgress, "message" | "progress"> &
   Partial<
@@ -116,18 +129,22 @@ export function BaggingPage() {
   const [partsListResult, setPartsListResult] = useState<PartsListPdfExtractionResult | null>(null)
   const [stepAnalysisProgress, setStepAnalysisProgress] = useState<StepAnalysisProgress | null>(null)
   const [stepCalloutResult, setStepCalloutResult] = useState<StepCalloutDetectionResult | null>(null)
+  const [stepCalloutMultipliers, setStepCalloutMultipliers] = useState<StepCalloutMultiplierMap>({})
   const [partPreviewByKey, setPartPreviewByKey] = useState<ReadonlyMap<string, PartsListPartPreview>>(
     new Map(),
   )
   const [attemptedPartPreviewKeys, setAttemptedPartPreviewKeys] = useState<ReadonlySet<string>>(new Set())
   const [previewReadyPageNumbers, setPreviewReadyPageNumbers] = useState<ReadonlySet<number>>(new Set())
   const [checkedPartRowIds, setCheckedPartRowIds] = useState<ReadonlySet<string>>(new Set())
+  const [checkedStepBagRowIds, setCheckedStepBagRowIds] = useState<ReadonlySet<string>>(new Set())
   const [sessionRecoveryNotice, setSessionRecoveryNotice] = useState<SessionRecoveryNotice>(null)
   const [analysisHeartbeat, setAnalysisHeartbeat] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [, startStepCalloutMultiplierTransition] = useTransition()
   const abortControllerRef = useRef<AbortController | null>(null)
   const activeJobIdRef = useRef<string | null>(null)
   const checkedPartRowIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const checkedStepBagRowIdsRef = useRef<ReadonlySet<string>>(new Set())
   const inFlightPartPreviewKeysRef = useRef<Set<string>>(new Set())
   const normalizationPublicationIdRef = useRef(0)
   const attemptedPartPreviewKeysRef = useRef<ReadonlySet<string>>(new Set())
@@ -154,6 +171,17 @@ export function BaggingPage() {
   const hasCurrentStepCalloutAnalysis = hasCurrentStepCalloutResult(stepCalloutResult)
   const visibleStepCalloutResult = hasCurrentStepCalloutAnalysis ? stepCalloutResult : null
   const inventoryPartCount = getPartsListTotalQuantity(partsListResult)
+  const stepCoverageDiagnostic = useMemo(() => {
+    if (!visibleStepCalloutResult) {
+      return null
+    }
+
+    return getStepCalloutQuantityDiagnosticForResult(
+      visibleStepCalloutResult,
+      stepCalloutMultipliers,
+      inventoryPartCount,
+    )
+  }, [inventoryPartCount, stepCalloutMultipliers, visibleStepCalloutResult])
   const hasStaleStepCalloutAnalysis = Boolean(stepCalloutResult && !hasCurrentStepCalloutAnalysis)
   const canRunStepOnlyAnalysis = Boolean(
     selectedManualFile &&
@@ -183,6 +211,38 @@ export function BaggingPage() {
     : canRunStepOnlyAnalysis
       ? "Find steps"
       : "Bag it!"
+  const updateStepCalloutMultiplier = useCallback((calloutId: string, multiplier: number) => {
+    startStepCalloutMultiplierTransition(() => {
+      setStepCalloutMultipliers((current) => setStepCalloutMultiplier(current, calloutId, multiplier))
+    })
+  }, [startStepCalloutMultiplierTransition])
+  const commitCheckedStepBagRowIds = useCallback((rowIds: ReadonlySet<string>) => {
+    const nextRowIds = new Set(rowIds)
+    checkedStepBagRowIdsRef.current = nextRowIds
+    setCheckedStepBagRowIds(nextRowIds)
+  }, [])
+  const loadStepDebugPageRenders = useCallback(async (pageNumbers: readonly number[]): Promise<readonly PdfPrivatePageRender[]> => {
+    if (!selectedManualFile || pageNumbers.length === 0 || !canUseBrowserPdfParser()) {
+      return []
+    }
+
+    const uniquePageNumbers = [...new Set(pageNumbers)].sort((left, right) => left - right)
+    let document: Awaited<ReturnType<typeof parseBrowserPdfDocument>> | null = null
+
+    try {
+      const sourceBytes = new Uint8Array(await selectedManualFile.arrayBuffer())
+      document = await parseBrowserPdfDocument(sourceBytes)
+
+      return await renderPdfPages(document, {
+        onPageRendered: () => undefined,
+        pageNumbers: uniquePageNumbers,
+      })
+    } catch {
+      return []
+    } finally {
+      await document?.destroy?.()
+    }
+  }, [selectedManualFile])
 
   function abortPartPreviewLookups() {
     normalizationPublicationIdRef.current += 1
@@ -225,6 +285,10 @@ export function BaggingPage() {
   function commitStepCalloutResult(result: StepCalloutDetectionResult | null) {
     stepCalloutResultRef.current = result
     setStepCalloutResult(result)
+    setStepCalloutMultipliers((current) => pruneStepCalloutMultipliers(current, result))
+    if (!result) {
+      commitCheckedStepBagRowIds(new Set())
+    }
   }
 
   function commitPartPreviewByKey(previews: ReadonlyMap<string, PartsListPartPreview>) {
@@ -870,12 +934,14 @@ export function BaggingPage() {
       const sessionFile = await createBaggingSessionFile({
         attemptedPartPreviewKeys,
         checkedRowIds: checkedPartRowIds,
+        checkedStepBagRowIds,
         currentExtractorVersion: partsListExtractorVersion,
         jobSnapshot,
         manualFile: selectedManualFile,
         metadata,
         partPreviewByKey,
         partsListResult,
+        stepCalloutMultipliers,
         stepCalloutResult,
       })
 
@@ -911,6 +977,7 @@ export function BaggingPage() {
       const restoredManualFile = restoredSession.manualFile
       const isCurrentAnalysis = isRestoredAnalysisCurrent(restoredSession, partsListExtractorVersion)
       const isCurrentStepAnalysis = isRestoredStepAnalysisCurrent(restoredSession, stepCalloutDetectorVersion)
+      const restoredStepCalloutResult = isCurrentStepAnalysis ? restoredSession.stepCalloutResult : null
       const restoredJobSnapshot = restoredSession.jobSnapshot ?? createQueuedPdfJobSnapshot(restoredManualFile.name)
       const nextJobSnapshot = isCurrentAnalysis
         ? createRestoredCurrentAnalysisJobSnapshot({
@@ -928,6 +995,9 @@ export function BaggingPage() {
       setJobSnapshot(nextJobSnapshot)
       activeJobIdRef.current = nextJobSnapshot.id
       commitCheckedPartRowIds(restoredSession.checkedRowIds)
+      commitCheckedStepBagRowIds(
+        isCurrentStepAnalysis ? restoredSession.checkedStepBagRowIds : new Set(),
+      )
 
       if (isCurrentAnalysis) {
         pendingProgressTransferRef.current = null
@@ -945,7 +1015,10 @@ export function BaggingPage() {
         commitPartPreviewByKey(restoredSession.partPreviewByKey)
         commitAttemptedPartPreviewKeys(restoredSession.attemptedPartPreviewKeys)
         commitPartsListResult(rehydratedResult)
-        commitStepCalloutResult(isCurrentStepAnalysis ? restoredSession.stepCalloutResult : null)
+        commitStepCalloutResult(restoredStepCalloutResult)
+        setStepCalloutMultipliers(
+          pruneStepCalloutMultipliers(restoredSession.stepCalloutMultipliers, restoredStepCalloutResult),
+        )
         setPreviewReadyPageNumbers(new Set())
         setSessionRecoveryNotice(
           restoredSession.savedStepCalloutDetectorVersion && !isCurrentStepAnalysis
@@ -1164,6 +1237,12 @@ export function BaggingPage() {
           {partsListResult?.normalization?.attentionRows.length ? (
             <NormalizationAttentionList rows={partsListResult.normalization.attentionRows} />
           ) : null}
+          {stepCoverageDiagnostic ? (
+            <StepCalloutQuantityDiagnosticPanel
+              diagnostic={stepCoverageDiagnostic}
+              testId="step-callout-quantity-sidebar-diagnostics"
+            />
+          ) : null}
         </Stack>
 
         <Box display="flex" flex="1" minW="bagging.zero" minH={{ lg: "bagging.zero" }}>
@@ -1186,7 +1265,13 @@ export function BaggingPage() {
             }
             bags={
               visibleStepCalloutResult ? (
-                <StepCalloutsPanel inventoryPartCount={inventoryPartCount} result={visibleStepCalloutResult} />
+                <StepCalloutsPanel
+                  calloutMultipliers={stepCalloutMultipliers}
+                  checkedRowIds={checkedStepBagRowIds}
+                  inventoryPartCount={inventoryPartCount}
+                  onCheckedRowIdsChange={commitCheckedStepBagRowIds}
+                  result={visibleStepCalloutResult}
+                />
               ) : (
                 <PendingOutputPanel
                   icon={<PackageCheck size={18} />}
@@ -1203,7 +1288,11 @@ export function BaggingPage() {
             debug={partsListResult || visibleStepCalloutResult ? (
               <Stack gap="4" flex="1" minW="bagging.zero" maxW="full" overflowY={{ base: "visible", lg: "auto" }}>
                 {visibleStepCalloutResult ? (
-                  <StepCalloutDebugPanel inventoryPartCount={inventoryPartCount} result={visibleStepCalloutResult} />
+                  <StepCalloutDebugPanel
+                    calloutMultipliers={stepCalloutMultipliers}
+                    inventoryPartCount={inventoryPartCount}
+                    result={visibleStepCalloutResult}
+                  />
                 ) : null}
                 {partsListResult ? (
                   <PartsListDebugPanel
@@ -1213,6 +1302,29 @@ export function BaggingPage() {
                 ) : null}
               </Stack>
             ) : undefined}
+            matchingDebug={
+              visibleStepCalloutResult ? (
+                <StepCalloutMatchingDebugPanel
+                  calloutMultipliers={stepCalloutMultipliers}
+                  inventoryPartCount={inventoryPartCount}
+                  loadPageRenders={loadStepDebugPageRenders}
+                  onCalloutMultiplierChange={updateStepCalloutMultiplier}
+                  pageRenders={jobSnapshot?.pageRenders ?? []}
+                  result={visibleStepCalloutResult}
+                />
+              ) : (
+                <PendingOutputPanel
+                  icon={<Search size={18} />}
+                  message={
+                    hasStaleStepCalloutAnalysis
+                      ? "Step callout analysis is stale. Find steps to rerun step analysis before build steps can be shown."
+                      : partsListResult
+                        ? "Build steps will appear after step callout analysis is available."
+                        : "Build steps will appear after recognition is available."
+                  }
+                />
+              )
+            }
           />
         </Box>
       </Stack>

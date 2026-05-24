@@ -2,11 +2,13 @@
 
 ## Goal
 
-Detect the build step sequence in the original manual.
+Detect build-step callouts in the original manual and turn them into draft,
+page-contained bagging guidance.
 
 ## User Value
 
-The user gets bag assignments that map cleanly to manual steps.
+The user gets bag assignments that preserve manual page boundaries and map back
+to the original build callouts.
 
 ## Deliverables
 
@@ -23,7 +25,17 @@ The user gets bag assignments that map cleanly to manual steps.
   between bag number and one normalized group per detected color name
 - Previous callout crop and local match diagnostic cards preserved in the Debug
   tab while step-to-BOM matching is paused
+- Separate Build steps tab with one group per scanned step page, page number,
+  assigned build-step indexes for detected rows, batched full page preview
+  loading, and hover previews for enlarged callout crops
+- Per-step bagging multiplier controls in the Build steps tab, defaulting to 1,
+  for manuals that print one callout but expect a step to be repeated
+- Step coverage diagnostic in the persistent sidebar attention area when BOM
+  quantity differs from the current callout-derived bagging quantity, including
+  BOM, callout, and missing or extra counts
 - Page reference and source region per callout
+- Callout-first default detection path, with manual step-number assignment kept
+  as an optional debug path rather than required for draft bag grouping
 - Detector version stored separately from the parts-list extractor version
 - Step-only analysis path when saved part analysis is current
 - Set-size-aware heuristic bag policy derived from the BOM total quantity when
@@ -36,7 +48,6 @@ The user gets bag assignments that map cleanly to manual steps.
 - Weak or ambiguous step items kept separate for review rather than folded into
   broad color groups
 - Later slices:
-  - Step number OCR
   - Step boundary detection
   - Page reference per step
   - Step ordering model
@@ -56,14 +67,34 @@ The user gets bag assignments that map cleanly to manual steps.
   normalized color name even when that color appears in multiple bags.
 - Detected callout crops, source regions, local grouping diagnostics, and
   rejected local candidate crops remain visible in the Debug tab.
+- The Build steps tab renders every scanned step page as a group, including
+  pages with no detected build-step rows, with page, assigned build-step index,
+  callout columns, visible batched full-page preview loading, and enlarged
+  callout crop hovers.
+- The Build steps tab is always visible; before current step analysis is
+  available it shows pending step-analysis state instead of disappearing.
+- Each detected build-step row exposes a multiplier control. The multiplier
+  defaults to 1, cannot be lowered below 1, and multiplies every detected item
+  in that step for draft bagging quantities.
+- Multiplier-adjusted quantities are applied before bag balancing, so changing a
+  multiplier can rebalance draft bags while preserving the same-page bag
+  containment constraint.
+- When the recognized BOM quantity differs from multiplier-adjusted callout
+  quantity, the UI displays a step coverage diagnostic with the BOM quantity,
+  callout quantity, and missing or extra quantity in the same persistent sidebar
+  area as unresolved BOM rows, so the user can see whether multiplier changes
+  are undercorrecting or overcorrecting.
 - Each detected callout reports the number of visible part types and renders
   detected part-image crops with parsed quantity numbers and visual color
   estimates.
+- Default step analysis assigns build-step indexes from callout order and does
+  not require page-wide step-label OCR.
 - Each draft bag part row visibly exposes the detected part crop, parsed
   quantity, detected color, bag number, and source step number for that raw
   callout item.
-- The app displays draft bag groups as contiguous step-callout ranges, with no
-  detected step split across multiple bags.
+- The app displays draft bag groups as contiguous callout ranges, with no
+  detected callout split across multiple bags and no manual page split across
+  draft bags.
 - Draft bag groups are marked draft or review, not ready, and review is used
   when quantities are missing or a single range exceeds the heuristic target.
 - Same-manual BOM row and Rebrickable preview matching are paused while the
@@ -79,7 +110,8 @@ The user gets bag assignments that map cleanly to manual steps.
 - A current saved parts-list analysis can be reused while only step callout
   analysis runs.
 - The product does not expose re-rendered manual pages as a user-facing viewer
-  or replacement instructions.
+  or replacement instructions. Build steps may show page previews as validation
+  context for detected callouts.
 
 ## Later Slice Acceptance Targets
 
@@ -96,11 +128,11 @@ The user gets bag assignments that map cleanly to manual steps.
 - Castle Ramp is the smallest local tuning target. The current pass now scans
   the full non-BOM manual while callout quantity, color, and BOM thumbnail
   matching are evaluated; row-level misses, over-fills, and unmatched items must
-  remain explicit and measurable. The `step-callout-detection-v83` tuning pass
+  remain explicit and measurable. The `step-callout-detection-v86` tuning pass
   anchors BOM image features from the row's centered quantity/part label,
   removes catalogue preview evidence from the matching decision, and disables
   coverage-completion assignment because quantity-perfect or row-filling
-  assignment can still be visually wrong. The `step-callout-detection-v83`
+  assignment can still be visually wrong. The `step-callout-detection-v86`
   rebuild keeps quantity labels as item anchors, treats saved session callout
   crops as measurable fixtures, and requires exact detector totals against the
   recognized BOM totals for the local Castle Ramp and Middle Wall sessions.
@@ -111,22 +143,23 @@ The user gets bag assignments that map cleanly to manual steps.
   quantities.
 - The first quantity reader targets the common visible `Nx` callout label and
   parses the numeric run before the trailing marker. As of
-  `step-callout-detection-v83`, `Nx` labels anchor item detection directly:
+  `step-callout-detection-v86`, `Nx` labels anchor item detection directly:
   the detector finds the nearest foreground component above each trusted label,
   clears only the active label while validating that item, rejects giant
   assembled-model components, and keeps separated part halves together inside
   the label's local zone. A trailing `x` marker is still required before a digit
   run is accepted, only the contiguous digit run immediately before that marker
-  is read, implausible repeated multi-digit reads are rejected, narrow and
-  sloped `1` glyphs are protected from broad `4` fallbacks, and `11x` labels
-  keep both contiguous digits before the marker. The classifier now has explicit
-  6/9 feature guards in addition to the 3/4 crossbar gates, prefers a feature
-  `3` over a weak template `9`, rescues row-supported `1x` labels on busy part
-  pixels, and rejects narrow row-spanning part components before overlap
-  suppression can drop a neighboring item. Regression masks and saved-session
-  callout crop validation cover annotated `1 -> 4`, `11 -> 1`, `3 -> 9`,
-  `4 -> 3`, `6 -> 9`, bad marker-only crops, busy-background `1x`, and
-  split-part cases. The crop-quality pass detects the actual inside of the
+  is read, no artificial quantity ceiling is applied, narrow and sloped `1`
+  glyphs are protected from broad `4` fallbacks, and multi-digit labels keep
+  every contiguous digit before the marker. The classifier now has explicit
+  2/5/7/8/9 feature guards in addition to the 3/4/6 gates, prefers feature
+  reads over weak templates where annotated masks prove the manual shape, rescues
+  row-supported single-digit labels on busy part pixels, and rejects narrow
+  row-spanning part components before overlap suppression can drop a neighboring
+  item. Regression masks and saved-session callout crop validation cover
+  annotated `1 -> 4`, `11 -> 1`, `3 -> 9`, `4 -> 3`, `6 -> 8`, `6 -> 9`,
+  `10/20/30/36` multi-digit reads, bad marker-only crops, busy-background
+  labels, and split-part cases. The crop-quality pass detects the actual inside of the
   callout border before segmentation, clips padded part previews to that
   interior, expands connected foreground beyond a label midpoint so wide parts
   are not cut off, and stops that expansion before it crosses another same-row
@@ -137,12 +170,51 @@ The user gets bag assignments that map cleanly to manual steps.
   callout items keep the component nearest their own label instead of borrowing
   the part or label region above them. All detected quantity-label glyph regions
   are excluded from every displayed part crop so tall-part preview expansion
-  cannot leak a previous item's quantity label.
+  cannot leak a previous item's quantity label. Strongly overlapping part
+  regions are treated as same-row neighbors even when their quantity labels are
+  vertically staggered, and preview expansion clips at the midpoint between
+  neighboring part crops so adjacent wide plates remain separate. Borderless
+  non-blue model fragments are rejected before quantity-anchor detection,
+  page-level callout candidates must show the expected blue callout-fill
+  evidence, quantity-like part texture just above a real lower-row label is
+  discarded, and broad connected row blobs fall back to a label-local foreground
+  search so top-row items are not lost.
   Broader quantity formats still need fixture-driven tuning before the
   whole-manual pass.
-- As of `step-callout-bagging-v2`, undersized trailing bags are merged into the
-  previous bag when that merge stays within the hard part-count limit, avoiding
-  tiny end bags such as a two-step, low-part-count tail.
+- As of `step-callout-bagging-v4`, the bag heuristic groups detected callouts
+  by manual page before it decides bag boundaries. A page group can exceed the
+  normal target and enter review, but it is not split across physical bags.
+  Undersized bags are still merged into the previous bag when possible, and
+  truly tiny bags are folded into the previous review range when needed.
+  User-selected per-step multipliers adjust callout quantities before this
+  heuristic runs, but do not alter the raw detected callout item data.
+  Multipliers are saved in user-owned session bundles alongside current step
+  analysis and are dropped when the saved step analysis is stale or structurally
+  invalid.
+- As of `step-callout-detection-v107`, the default detector returns to
+  callout-first region detection for performance. Printed step-label OCR and
+  label-anchored non-blue callout search remain available behind an explicit
+  debug option for manuals where the callout-only path is insufficient. The
+  callout-first path also proposes tiny bordered blue one-part callouts from
+  their actual rectangle structure: paired dark or soft anti-aliased borders,
+  expected blue interior fill, and either an `x`-delimited quantity label or
+  nearby printed-step glyph evidence are enough evidence even when the part
+  itself is too small or light to provide separate dark foreground. Weak tiny
+  rectangles still need enough true blue-fill share, strong rectangle evidence,
+  and parsed quantity-anchored part items before they can enter Build steps, so
+  neutral grey model panels near printed step labels cannot borrow
+  small-callout context. Zero-part rectangle candidates remain internal
+  detector evidence only, even when they look visually
+  callout-like. The part-item cropper accepts isolated single-item `Nx` labels
+  on busy part pixels when a foreground part image sits above the label, and the
+  quantity classifier distinguishes compact lower-courtyard `9x` labels from
+  open `4x` glyphs. This keeps small one-part callouts while rejecting model
+  geometry fragments that look like small bordered rectangles but do not contain
+  parsed callout part items. The part-only preview cropper rejects thin or
+  bright-connected right-edge callout rule components in addition to top and left
+  rule fragments, and clamps frame-inflated rightmost crops back to the detected
+  part, so rightmost black parts do not keep the callout border in their
+  checklist image.
 - Visible part color estimates should bias toward locally supported part
   surface pixels so outlines, shadows, and detail lines do not dominate small
   parts.
