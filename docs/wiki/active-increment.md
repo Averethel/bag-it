@@ -52,6 +52,19 @@ rendered from its own quantity-label crop. Displayed callout item
 previews now use the detected part-only crop with the sampled callout background
 removed, while trusted quantity glyph pixels are excluded from internal visual
 comparison and color sampling.
+As of `step-callout-detection-v117`, visible part color estimates use the
+Rebrickable catalogue palette available from the current BOM analysis, prefer
+the manual's normalized color set when possible, and rank palette candidates
+with surface-band, hue, brightness, and chroma scores so nearby LEGO colors such
+as green/dark green, light/dark bluish gray, dark tan/trans-orange, and medium
+nougat/yellow are less likely to collapse into the wrong bucket.
+As of `step-callout-detection-v118`, the full-page Build steps previews keep a
+single preview batch active until it resolves instead of canceling the active
+request while marking pages as loading. The detector also keeps isolated dark
+single-part lower-courtyard callouts with a supported `3x` label, rejects low
+wide model fragments that resemble small callout panels, and suppresses
+single-digit quantity-like part texture below a real label so page 107-style
+callouts do not double-count part detail.
 Same-part local image grouping is debug metadata based on
 preserved-aspect mask, structure, detail, and color matching. As of the
 `step-callout-detection-v86` label-anchored cropper pass, detected color name is a
@@ -163,7 +176,9 @@ callout part item remains its own checklist row, while grouping controls only
 choose the section layout: by bag number or by normalized detected color name.
 BOM thumbnail and Rebrickable catalogue preview matching are temporarily
 disabled in the primary step analysis loop until local same-part grouping is
-reliable enough to validate.
+reliable enough to validate. Step color estimation may use Rebrickable catalogue
+color RGB values as a bounded palette prior; it does not reintroduce step-to-BOM
+identity matching.
 Draft bags may use the current BOM total quantity to choose a set-size heuristic;
 they still do not claim ready inventory reconciliation. User-selected step
 multipliers may increase a detected callout's bagging quantity before the draft

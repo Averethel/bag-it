@@ -319,6 +319,43 @@ describe("step callout detection", () => {
     expect(detectStepCalloutRegionsFromImageData(imageData)).toEqual([])
   })
 
+  it("rejects low wide model fragments with quantity-like labels but no nearby step number", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 560, y: 552, width: 154, height: 72 }, [216, 239, 250])
+      drawRect(imageData, { x: 602, y: 570, width: 82, height: 30 }, [156, 164, 168])
+      drawRect(imageData, { x: 622, y: 586, width: 44, height: 16 }, [92, 96, 100])
+      drawSyntheticQuantityText(imageData, { scale: 2, text: "2x", x: 624, y: 606 })
+
+      expect(detectStepCalloutRegionsFromImageData(imageData)).toEqual([])
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        { renderMaxWidth: 1_000 },
+      )
+
+      expect(result.callouts).toHaveLength(0)
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
   it("keeps shallow wide callout panels when they contain a real part row", () => {
     const imageData = createSyntheticPage(1_000, 700)
     drawSyntheticQuantityText(imageData, { scale: 7, text: "34", x: 146, y: 84 })
@@ -3445,6 +3482,218 @@ describe("step callout detection", () => {
       canvasApi.restore()
     }
   })
+
+  it("uses supplied catalogue colors and warm hue scoring for medium nougat", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 260, height: 180 }, [216, 239, 250])
+      drawInkHeavyPartItem(imageData, { x: 150, y: 132, width: 58, height: 42 }, [233, 164, 93])
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        {
+          colors: [
+            { id: "14", name: "Yellow", rgb: "F2CD37" },
+            { id: "84", name: "Medium Nougat", rgb: "AA7D55" },
+          ],
+          renderMaxWidth: 1_000,
+        },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].detectedColor.name).toBe("Medium Nougat")
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("uses supplied catalogue colors to keep light bluish gray out of dark gray buckets", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 260, height: 180 }, [216, 239, 250])
+      drawInkHeavyPartItem(imageData, { x: 150, y: 132, width: 58, height: 42 }, [156, 162, 166])
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        {
+          colors: [
+            { id: "71", name: "Light Bluish Gray", rgb: "A0A5A9" },
+            { id: "72", name: "Dark Bluish Gray", rgb: "6C6E68" },
+          ],
+          renderMaxWidth: 1_000,
+        },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].detectedColor.name).toBe("Light Bluish Gray")
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("uses supplied catalogue colors to keep regular green out of dark green buckets", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 260, height: 180 }, [216, 239, 250])
+      drawInkHeavyPartItem(imageData, { x: 150, y: 132, width: 58, height: 42 }, [35, 120, 35])
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        {
+          colors: [
+            { id: "2", name: "Green", rgb: "237841" },
+            { id: "288", name: "Dark Green", rgb: "184632" },
+          ],
+          renderMaxWidth: 1_000,
+        },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].detectedColor.name).toBe("Green")
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("uses broad translucent tint evidence for trans-orange catalogue colors", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 280, height: 190 }, [216, 239, 250])
+      drawWideTransparentOrangePart(imageData, { x: 150, y: 132, width: 88, height: 44 })
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
+        text: "1x",
+        x: 158,
+        y: 196,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        {
+          colors: [
+            { id: "28", name: "Dark Tan", rgb: "958A73" },
+            { id: "182", isTransparent: true, name: "Trans-Orange", rgb: "F08F1C" },
+          ],
+          renderMaxWidth: 1_000,
+        },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].detectedColor.name).toBe("Trans-Orange")
+    } finally {
+      canvasApi.restore()
+    }
+  })
+
+  it("does not synthesize trans-orange when the supplied catalogue colors exclude it", async () => {
+    const canvasApi = installMockCanvasApi()
+
+    try {
+      const imageData = createSyntheticPage(1_000, 700)
+      drawBorderOnlyRect(imageData, { x: 100, y: 100, width: 280, height: 190 }, [216, 239, 250])
+      drawWideTransparentOrangePart(imageData, { x: 150, y: 132, width: 88, height: 44 })
+      drawSyntheticQuantityText(imageData, {
+        scale: 2,
+        text: "1x",
+        x: 158,
+        y: 196,
+      })
+
+      const result = await detectStepCalloutsFromPdfDocument(
+        {
+          getPage: async (pageNumber) => ({
+            getViewport: ({ scale }) => ({
+              height: 700 * scale,
+              width: 1_000 * scale,
+            }),
+            pageNumber,
+            render: ({ canvas }) => {
+              canvasApi.setCanvasImageData(canvas, imageData)
+
+              return { promise: Promise.resolve() }
+            },
+          }),
+          numPages: 1,
+        },
+        {
+          colors: [
+            { id: "28", name: "Dark Tan", rgb: "958A73" },
+            { id: "14", name: "Yellow", rgb: "F2CD37" },
+          ],
+          renderMaxWidth: 1_000,
+        },
+      )
+
+      expect(result.callouts[0].partItems).toHaveLength(1)
+      expect(result.callouts[0].partItems[0].detectedColor.name).not.toBe("Trans-Orange")
+    } finally {
+      canvasApi.restore()
+    }
+  })
 })
 
 type Rect = {
@@ -3557,6 +3806,24 @@ function drawTransparentOrangeFlameLikePart(imageData: ReturnType<typeof createS
     width: Math.max(5, Math.round(rect.width * 0.24)),
     x: rect.x + Math.round(rect.width * 0.4),
     y: rect.y + Math.round(rect.height * 0.34),
+  }, highlight)
+}
+
+function drawWideTransparentOrangePart(imageData: ReturnType<typeof createSyntheticPage>, rect: Rect) {
+  const outline: Rgb = [74, 51, 25]
+  const tint: Rgb = [196, 184, 154]
+  const highlight: Rgb = [226, 197, 134]
+
+  drawRect(imageData, rect, tint)
+  drawRect(imageData, { height: 3, width: rect.width, x: rect.x, y: rect.y }, outline)
+  drawRect(imageData, { height: 3, width: rect.width, x: rect.x, y: rect.y + rect.height - 3 }, outline)
+  drawRect(imageData, { height: rect.height, width: 4, x: rect.x, y: rect.y }, outline)
+  drawRect(imageData, { height: rect.height, width: 4, x: rect.x + rect.width - 4, y: rect.y }, outline)
+  drawRect(imageData, {
+    height: Math.max(5, Math.round(rect.height * 0.28)),
+    width: Math.max(12, Math.round(rect.width * 0.42)),
+    x: rect.x + Math.round(rect.width * 0.28),
+    y: rect.y + Math.round(rect.height * 0.24),
   }, highlight)
 }
 

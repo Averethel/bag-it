@@ -217,7 +217,22 @@ to the original build callouts.
   checklist image.
 - Visible part color estimates should bias toward locally supported part
   surface pixels so outlines, shadows, and detail lines do not dominate small
-  parts.
+  parts. As of `step-callout-detection-v117`, step analysis passes the
+  Rebrickable colour palette from catalogue normalization into callout
+  detection, narrows it to the manual's normalized BOM colours when row RGB data
+  is available, and scores each candidate by surface-band distance, hue,
+  brightness, and chroma before applying close-family tie-breakers for
+  green/dark green, light/dark bluish gray, warm nougat/yellow/orange/tan, and
+  translucent orange evidence.
+- As of `step-callout-detection-v118`, the Build steps preview loader keeps the
+  current preview-render batch stable until it resolves, so loading-state
+  updates no longer advance to every scanned page and cancel the active page
+  render request. The same detector pass keeps isolated lower-courtyard
+  single-part callouts whose supported busy-background `3x` label sits under a
+  real dark part, rejects low wide model fragments that have small-callout fill
+  and a quantity-like label but no credible callout context, and suppresses
+  single-digit quantity-like part texture below a real label so page 107-style
+  part detail does not become an extra `9x` item.
 - Step-to-BOM and Rebrickable matching are paused in the primary bag checklist.
   The previous match-oriented callout cards remain available under Debug so the
   matching work can resume without reintroducing wrong catalogue labels into the

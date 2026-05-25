@@ -97,7 +97,11 @@ const catalogueMock = vi.hoisted(() => {
     createPreviewMap,
     createNormalization,
     fetchPartsListCatalogueColors: vi.fn(async () => ({
-      colors: [{ id: "0", name: "Black" }],
+      colors: [
+        { id: "0", name: "Black", rgb: "05131D" },
+        { id: "2", name: "Green", rgb: "237841" },
+        { id: "14", name: "Yellow", rgb: "F2CD37" },
+      ],
       snapshot: { id: "test-snapshot" },
     })),
     fetchPartsListColors: vi.fn(async () => [{ id: "0", name: "Black" }]),
@@ -455,10 +459,12 @@ describe("BaggingPage parts list extraction", () => {
     const [, stepOptions] = stepCalloutMock.detectStepCalloutsFromPdfDocument.mock.calls.at(-1) as [
       unknown,
       {
+        colors: readonly { id: string; name: string; rgb?: string }[]
         excludedPageNumbers: ReadonlySet<number>
         maxPages: number | null
       },
     ]
+    expect(stepOptions.colors).toEqual([{ id: "0", name: "Black", rgb: "05131D" }])
     expect([...stepOptions.excludedPageNumbers]).toEqual([2])
     expect(stepOptions).not.toHaveProperty("inventoryRows")
     expect(stepOptions.maxPages).toBeNull()
@@ -1378,7 +1384,15 @@ describe("BaggingPage parts list extraction", () => {
   it("runs only step callout analysis when saved part analysis is current", async () => {
     extractionMock.extractPartsListFromPdfDocument.mockClear()
     stepCalloutMock.detectStepCalloutsFromPdfDocument.mockClear()
-    catalogueMock.fetchPartsListCatalogueColors.mockClear()
+    catalogueMock.fetchPartsListCatalogueColors.mockReset()
+    catalogueMock.fetchPartsListCatalogueColors.mockResolvedValue({
+      colors: [
+        { id: "0", name: "Black", rgb: "05131D" },
+        { id: "2", name: "Green", rgb: "237841" },
+        { id: "14", name: "Yellow", rgb: "F2CD37" },
+      ],
+      snapshot: { id: "test-snapshot" },
+    })
     const manualFile = new File([createTestPdf(2)], "castle.pdf", { type: "application/pdf" })
     const partsListResult = extractionMock.createSupportedPartsListResult() as unknown as PartsListPdfExtractionResult
     const metadata = createSessionMetadata(manualFile)
@@ -1432,14 +1446,19 @@ describe("BaggingPage parts list extraction", () => {
       timeout: 3000,
     })
     expect(extractionMock.extractPartsListFromPdfDocument).not.toHaveBeenCalled()
-    expect(catalogueMock.fetchPartsListCatalogueColors).not.toHaveBeenCalled()
+    expect(catalogueMock.fetchPartsListCatalogueColors).toHaveBeenCalledWith({
+      signal: expect.any(AbortSignal),
+      snapshotId: "test-snapshot",
+    })
     const [, stepOptions] = stepCalloutMock.detectStepCalloutsFromPdfDocument.mock.calls.at(-1) as [
       unknown,
       {
+        colors: readonly { id: string; name: string; rgb?: string }[]
         excludedPageNumbers: ReadonlySet<number>
         maxPages: number | null
       },
     ]
+    expect(stepOptions.colors).toEqual([{ id: "0", name: "Black", rgb: "05131D" }])
     expect([...stepOptions.excludedPageNumbers]).toEqual([2])
     expect(stepOptions).not.toHaveProperty("inventoryRows")
     expect(stepOptions.maxPages).toBeNull()
@@ -1656,7 +1675,7 @@ describe("BaggingPage parts list extraction", () => {
     catalogueMock.fetchPartsListNormalization.mockReset()
     catalogueMock.fetchPartsListPartPreviews.mockReset()
     catalogueMock.fetchPartsListCatalogueColors.mockResolvedValue({
-      colors: [{ id: "0", name: "Black" }],
+      colors: [{ id: "0", name: "Black", rgb: "05131D" }],
       snapshot: { id: "test-snapshot" },
     })
     catalogueMock.fetchPartsListNormalization.mockImplementation(async (rows) => catalogueMock.createNormalization(rows))

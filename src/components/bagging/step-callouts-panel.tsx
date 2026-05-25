@@ -244,11 +244,10 @@ export function StepCalloutMatchingDebugPanel({
       previewPageNumbers
         .filter((pageNumber) =>
           !hasUsablePageRender(pageRenderByNumber.get(pageNumber) ?? null) &&
-          !loadingPageNumbers.has(pageNumber) &&
           !unavailablePageNumbers.has(pageNumber)
         )
         .slice(0, stepCalloutPreviewRenderBatchSize),
-    [loadingPageNumbers, pageRenderByNumber, previewPageNumbers, unavailablePageNumbers],
+    [pageRenderByNumber, previewPageNumbers, unavailablePageNumbers],
   )
   const previewPageNumbersToLoadKey = previewPageNumbersToLoad.join(",")
 
