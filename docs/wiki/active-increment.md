@@ -52,7 +52,7 @@ rendered from its own quantity-label crop. Displayed callout item
 previews now use the detected part-only crop with the sampled callout background
 removed, while trusted quantity glyph pixels are excluded from internal visual
 comparison and color sampling.
-As of `step-callout-detection-v117`, visible part color estimates use the
+As of `step-callout-detection-v118`, visible part color estimates use the
 Rebrickable catalogue palette available from the current BOM analysis, prefer
 the manual's normalized color set when possible, and rank palette candidates
 with surface-band, hue, brightness, and chroma scores so nearby LEGO colors such

@@ -217,7 +217,7 @@ to the original build callouts.
   checklist image.
 - Visible part color estimates should bias toward locally supported part
   surface pixels so outlines, shadows, and detail lines do not dominate small
-  parts. As of `step-callout-detection-v117`, step analysis passes the
+  parts. As of `step-callout-detection-v118`, step analysis passes the
   Rebrickable colour palette from catalogue normalization into callout
   detection, narrows it to the manual's normalized BOM colours when row RGB data
   is available, and scores each candidate by surface-band distance, hue,
