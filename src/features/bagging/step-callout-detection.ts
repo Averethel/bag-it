@@ -1,6 +1,7 @@
+import type { PartsListColor } from "./parts-list-extraction"
 import type { PdfReadableDocument, PdfReadablePage, PdfTextContentItem } from "./pdf-intake"
 
-export const stepCalloutDetectorVersion = "step-callout-detection-v116"
+export const stepCalloutDetectorVersion = "step-callout-detection-v118"
 export const defaultStepCalloutPageLimit: number | null = null
 
 const defaultRenderMaxWidth = 1_400
@@ -236,6 +237,7 @@ export type StepCalloutDetectionProgress = {
 }
 
 export type StepCalloutDetectionOptions = {
+  colors?: readonly PartsListColor[]
   excludedPageNumbers?: ReadonlySet<number> | readonly number[]
   inventoryRows?: readonly StepCalloutInventoryMatchRow[]
   maxPages?: number | null
@@ -298,6 +300,28 @@ type StepQuantityRead = {
 
 type StepPartSurfaceSample = ColorSample & {
   weight: number
+}
+
+type StepPartColorPaletteEntry = {
+  id?: string
+  isTransparent?: boolean
+  name: string
+  rgb: ColorSample
+}
+
+type StepPartColorCandidateScore = {
+  color: StepPartColorPaletteEntry
+  distanceScore: number
+  score: number
+}
+
+type StepPartColorSampleStats = {
+  chroma: number
+  highRgb: ColorSample
+  lowRgb: ColorSample
+  meanRgb: ColorSample
+  sampleCount: number
+  totalWeight: number
 }
 
 type StepPartImageFeature = {
@@ -446,6 +470,7 @@ type HorizontalBorderSegment = PixelRegion & {
 export async function detectStepCalloutsFromPdfDocument(
   document: PdfReadableDocument,
   {
+    colors,
     excludedPageNumbers = [],
     inventoryRows = [],
     maxPages = defaultStepCalloutPageLimit,
@@ -459,6 +484,7 @@ export async function detectStepCalloutsFromPdfDocument(
   const detectionStartedAt = getNowMs()
   const excludedPages = new Set(excludedPageNumbers)
   const pageNumbers = getInitialStepCalloutPageNumbers(document.numPages, excludedPages, maxPages)
+  const colorPalette = createStepPartColorPalette(colors)
   const callouts: DetectedStepCallout[] = []
   const partFeatureEntries: StepCalloutPartItemFeatureEntry[] = []
   const pageTimings: StepCalloutDetectionPageTiming[] = []
@@ -609,6 +635,7 @@ export async function detectStepCalloutsFromPdfDocument(
             const partItems = detectStepCalloutPartItemsFromCanvas(calloutCanvas, {
               calloutIdPrefix: `step-callout:p${pageNumber}:r${index + 1}`,
               calloutIndex,
+              colorPalette,
               nativeTextItems,
               pageOffsetX: paddedRegion.x,
               pageOffsetY: paddedRegion.y,
@@ -1845,6 +1872,15 @@ function isTallNarrowStepCalloutRegionCandidate(imageData: DetectionImageData, r
 function isImplausiblyWideShallowStepCalloutRegion(imageData: DetectionImageData, region: RegionCandidate) {
   const aspectRatio = region.width / Math.max(1, region.height)
   const maxShallowHeight = Math.max(72, imageData.height * 0.112)
+  const isLowCompactModelFragment =
+    aspectRatio >= 1.65 &&
+    region.y > imageData.height * 0.72 &&
+    region.width <= imageData.width * 0.22 &&
+    region.height <= imageData.height * 0.12
+
+  if (isLowCompactModelFragment) {
+    return !hasLowCompactStepCalloutEvidence(imageData, region)
+  }
 
   const isWideShallowRegion =
     aspectRatio >= 3.4 &&
@@ -1852,6 +1888,17 @@ function isImplausiblyWideShallowStepCalloutRegion(imageData: DetectionImageData
     region.width >= imageData.width * 0.16
 
   return isWideShallowRegion && !hasWideShallowStepCalloutEvidence(imageData, region)
+}
+
+function hasLowCompactStepCalloutEvidence(imageData: DetectionImageData, region: RegionCandidate) {
+  if (region.borderScore < 0.72 || region.fillRatio < 0.62 || !hasNearbyStepNumberGlyphEvidence(imageData, region)) {
+    return false
+  }
+
+  const paddedRegion = padRegion(region, imageData.width, imageData.height, cropPaddingPixels)
+  const partItems = detectStepCalloutPartItemRegionsFromImageData(cropDetectionImageDataRegion(imageData, paddedRegion))
+
+  return partItems.length >= 2
 }
 
 function hasWideShallowStepCalloutEvidence(imageData: DetectionImageData, region: RegionCandidate) {
@@ -2661,6 +2708,17 @@ function createSmallBorderedStepCalloutRegionCandidate(
   ) {
     return null
   }
+  const aspectRatio = region.width / Math.max(1, region.height)
+  if (
+    region.y > imageData.height * 0.56 &&
+    aspectRatio >= 1.65 &&
+    (
+      (hasQuantityLabelEvidence && !hasNearbyStepGlyphEvidence) ||
+      region.y > imageData.height * 0.72
+    )
+  ) {
+    return null
+  }
 
   const confidence = clamp(0.18 + (fillRatio * 0.24) + (borderScore * 0.58), 0, 1)
 
@@ -3169,6 +3227,7 @@ function detectStepCalloutPartItemsFromCanvas(
   {
     calloutIdPrefix,
     calloutIndex,
+    colorPalette,
     nativeTextItems,
     pageOffsetX,
     pageOffsetY,
@@ -3177,6 +3236,7 @@ function detectStepCalloutPartItemsFromCanvas(
   }: {
     calloutIdPrefix: string
     calloutIndex: number
+    colorPalette: readonly StepPartColorPaletteEntry[]
     nativeTextItems?: readonly StepPageTextItem[]
     pageOffsetX: number
     pageOffsetY: number
@@ -3256,6 +3316,7 @@ function detectStepCalloutPartItemsFromCanvas(
       ownedPartRegion,
       background,
       quantityGlyphExclusionRegions,
+      colorPalette,
     )
     const feature = createStepPartImageFeature(imageData, ownedPartRegion, quantityGlyphExclusionRegions)
     const itemId = `${calloutIdPrefix}:item${index + 1}:x${itemSourceRegion.x}:y${itemSourceRegion.y}:w${itemSourceRegion.width}:h${itemSourceRegion.height}`
@@ -8148,43 +8209,17 @@ function detectPartColorFromImageData(
   partRegion: PixelRegion,
   background: ColorSample,
   excludedRegions: readonly PixelRegion[] = [],
+  colorPalette: readonly StepPartColorPaletteEntry[] = fallbackStepPartColorPalette,
 ): DetectedColorEstimate {
   const samples = collectPartColorSurfaceSamples(imageData, partRegion, background, excludedRegions)
   if (samples.length === 0) {
     return createUnknownColorEstimate()
   }
 
-  const colorScores = new Map<string, {
-    b: number
-    color: { name: string; rgb: ColorSample }
-    g: number
-    r: number
-    sampleCount: number
-    score: number
-  }>()
-  let totalScore = 0
-
-  for (const sample of samples) {
-    const nearestColor = getNearestStepPartColor(sample)
-    const score = colorScores.get(nearestColor.name) ?? {
-      b: 0,
-      color: nearestColor,
-      g: 0,
-      r: 0,
-      sampleCount: 0,
-      score: 0,
-    }
-    score.b += sample.b * sample.weight
-    score.g += sample.g * sample.weight
-    score.r += sample.r * sample.weight
-    score.sampleCount += 1
-    score.score += sample.weight
-    totalScore += sample.weight
-    colorScores.set(nearestColor.name, score)
-  }
-
-  const dominantColor = [...colorScores.values()].sort((left, right) => right.score - left.score)[0]
-  if (!dominantColor || totalScore === 0) {
+  const stats = createStepPartColorSampleStats(samples)
+  const candidateScores = scoreStepPartColorCandidates(stats, colorPalette)
+  const bestCandidate = selectStepPartColorCandidate(candidateScores, stats)
+  if (!bestCandidate || stats.totalWeight === 0) {
     return createUnknownColorEstimate()
   }
   const transparentOrangeEstimate = detectTransparentOrangeColorEstimate(
@@ -8192,25 +8227,225 @@ function detectPartColorFromImageData(
     partRegion,
     background,
     excludedRegions,
-    dominantColor.color.name,
+    bestCandidate.color.name,
+    colorPalette,
   )
   if (transparentOrangeEstimate) {
     return transparentOrangeEstimate
   }
 
-  const rgb = {
-    b: Math.round(dominantColor.b / dominantColor.score),
-    g: Math.round(dominantColor.g / dominantColor.score),
-    r: Math.round(dominantColor.r / dominantColor.score),
-  }
-  const nearestDistance = getColorDistance(rgb, dominantColor.color.rgb)
+  const selectedCandidate = applyStepPartColorFamilyTieBreakers(candidateScores, stats, bestCandidate)
+  const secondCandidate = candidateScores.find((candidate) => candidate.color.name !== selectedCandidate.color.name)
+  const scoreMargin = selectedCandidate.score - (secondCandidate?.score ?? 0)
 
   return {
-    confidence: clamp((dominantColor.score / totalScore) * 1.15 + Math.max(0, 0.35 - nearestDistance / 220), 0, 1),
-    hex: rgbToHex(rgb),
-    name: dominantColor.color.name,
-    rgb,
+    confidence: clamp((selectedCandidate.score * 0.78) + Math.max(0, scoreMargin) * 1.4, 0, 1),
+    hex: rgbToHex(stats.meanRgb),
+    name: selectedCandidate.color.name,
+    rgb: stats.meanRgb,
   }
+}
+
+function createStepPartColorSampleStats(samples: readonly StepPartSurfaceSample[]): StepPartColorSampleStats {
+  const totalWeight = samples.reduce((sum, sample) => sum + sample.weight, 0)
+  const meanRgb = getWeightedMeanColorSample(samples)
+  const sortedSamples = [...samples].sort((left, right) => getColorBrightness(left) - getColorBrightness(right))
+  const bandSize = Math.max(1, Math.round(sortedSamples.length * 0.35))
+  const lowRgb = getWeightedMeanColorSample(sortedSamples.slice(0, bandSize))
+  const highRgb = getWeightedMeanColorSample(sortedSamples.slice(-bandSize))
+
+  return {
+    chroma: getColorChroma(meanRgb),
+    highRgb,
+    lowRgb,
+    meanRgb,
+    sampleCount: samples.length,
+    totalWeight,
+  }
+}
+
+function getWeightedMeanColorSample(samples: readonly StepPartSurfaceSample[]): ColorSample {
+  const totalWeight = samples.reduce((sum, sample) => sum + sample.weight, 0)
+  if (totalWeight === 0) {
+    return { b: 128, g: 128, r: 128 }
+  }
+
+  return {
+    b: Math.round(samples.reduce((sum, sample) => sum + sample.b * sample.weight, 0) / totalWeight),
+    g: Math.round(samples.reduce((sum, sample) => sum + sample.g * sample.weight, 0) / totalWeight),
+    r: Math.round(samples.reduce((sum, sample) => sum + sample.r * sample.weight, 0) / totalWeight),
+  }
+}
+
+function scoreStepPartColorCandidates(
+  stats: StepPartColorSampleStats,
+  colorPalette: readonly StepPartColorPaletteEntry[],
+): StepPartColorCandidateScore[] {
+  return colorPalette
+    .map((color) => {
+      const distanceScore = Math.max(
+        scoreColorDistance(stats.meanRgb, color.rgb, 210),
+        (scoreColorDistance(stats.meanRgb, color.rgb, 210) * 0.72) +
+          (scoreColorDistance(stats.lowRgb, color.rgb, 235) * 0.28),
+        (scoreColorDistance(stats.meanRgb, color.rgb, 210) * 0.72) +
+          (scoreColorDistance(stats.highRgb, color.rgb, 235) * 0.28),
+      )
+      const hueScore = scoreColorHue(stats.meanRgb, color.rgb)
+      const brightnessScore = scoreAbsoluteDifference(
+        getColorBrightness(stats.meanRgb),
+        getColorBrightness(color.rgb),
+        150,
+      )
+      const chromaScore = scoreAbsoluteDifference(stats.chroma, getColorChroma(color.rgb), 160)
+      const isNeutral = isNeutralStepPartColor(stats.meanRgb) || isNeutralStepPartColor(color.rgb)
+      const score = isNeutral
+        ? (distanceScore * 0.52) + (brightnessScore * 0.34) + (chromaScore * 0.1) + (hueScore * 0.04)
+        : (distanceScore * 0.44) + (hueScore * 0.32) + (chromaScore * 0.12) + (brightnessScore * 0.08) +
+          (Math.max(
+            scoreColorDistance(stats.lowRgb, color.rgb, 235),
+            scoreColorDistance(stats.highRgb, color.rgb, 235),
+          ) * 0.04)
+
+      return {
+        color,
+        distanceScore,
+        score,
+      }
+    })
+    .sort((left, right) =>
+      right.score - left.score ||
+      right.distanceScore - left.distanceScore ||
+      left.color.name.localeCompare(right.color.name)
+    )
+}
+
+function selectStepPartColorCandidate(
+  candidates: readonly StepPartColorCandidateScore[],
+  stats: StepPartColorSampleStats,
+) {
+  const bestCandidate = candidates[0] ?? null
+  if (!bestCandidate) {
+    return null
+  }
+
+  return applyStepPartColorFamilyTieBreakers(candidates, stats, bestCandidate)
+}
+
+function applyStepPartColorFamilyTieBreakers(
+  candidates: readonly StepPartColorCandidateScore[],
+  stats: StepPartColorSampleStats,
+  selected: StepPartColorCandidateScore,
+) {
+  return selectGrayShadeCandidate(candidates, stats, selected) ??
+    selectGreenShadeCandidate(candidates, stats, selected) ??
+    selectWarmNougatCandidate(candidates, stats, selected) ??
+    selected
+}
+
+function selectGrayShadeCandidate(
+  candidates: readonly StepPartColorCandidateScore[],
+  stats: StepPartColorSampleStats,
+  selected: StepPartColorCandidateScore,
+) {
+  const lightBluishGray = getStepPartColorCandidateByName(candidates, "Light Bluish Gray")
+  const darkBluishGray = getStepPartColorCandidateByName(candidates, "Dark Bluish Gray")
+  if (!lightBluishGray || !darkBluishGray) {
+    return null
+  }
+
+  const selectedName = normalizeStepColorName(selected.color.name)
+  if (selectedName !== "lightbluishgray" && selectedName !== "darkbluishgray") {
+    return null
+  }
+
+  const scoreGap = Math.abs(lightBluishGray.score - darkBluishGray.score)
+  if (scoreGap > 0.12) {
+    return null
+  }
+
+  const meanBrightness = getColorBrightness(stats.meanRgb)
+  const highBrightness = getColorBrightness(stats.highRgb)
+  if (highBrightness >= 145 || meanBrightness >= 136) {
+    return lightBluishGray
+  }
+  if (meanBrightness <= 132 && highBrightness <= 145) {
+    return darkBluishGray
+  }
+
+  return null
+}
+
+function selectGreenShadeCandidate(
+  candidates: readonly StepPartColorCandidateScore[],
+  stats: StepPartColorSampleStats,
+  selected: StepPartColorCandidateScore,
+) {
+  const green = getStepPartColorCandidateByName(candidates, "Green")
+  const darkGreen = getStepPartColorCandidateByName(candidates, "Dark Green")
+  if (!green || !darkGreen) {
+    return null
+  }
+
+  const selectedName = normalizeStepColorName(selected.color.name)
+  if (selectedName !== "green" && selectedName !== "darkgreen") {
+    return null
+  }
+
+  const scoreGap = Math.abs(green.score - darkGreen.score)
+  if (scoreGap > 0.16) {
+    return null
+  }
+
+  const meanBrightness = getColorBrightness(stats.meanRgb)
+  const highBrightness = getColorBrightness(stats.highRgb)
+  if (meanBrightness <= 52 && highBrightness <= 58) {
+    return darkGreen
+  }
+  if (highBrightness >= 62 || meanBrightness >= 64) {
+    return green
+  }
+
+  return null
+}
+
+function selectWarmNougatCandidate(
+  candidates: readonly StepPartColorCandidateScore[],
+  stats: StepPartColorSampleStats,
+  selected: StepPartColorCandidateScore,
+) {
+  const mediumNougat = getStepPartColorCandidateByName(candidates, "Medium Nougat")
+  if (!mediumNougat) {
+    return null
+  }
+
+  const selectedName = normalizeStepColorName(selected.color.name)
+  if (!["brightlightorange", "darkorange", "mediumnougat", "tan", "yellow"].includes(selectedName)) {
+    return null
+  }
+
+  const hue = getColorHue(stats.meanRgb)
+  const brightness = getColorBrightness(stats.meanRgb)
+  if (
+    hue == null ||
+    hue < 18 ||
+    hue > 38 ||
+    brightness > 190 ||
+    stats.chroma < 48 ||
+    mediumNougat.score < selected.score - 0.16
+  ) {
+    return null
+  }
+
+  return mediumNougat
+}
+
+function getStepPartColorCandidateByName(
+  candidates: readonly StepPartColorCandidateScore[],
+  name: string,
+) {
+  const normalizedName = normalizeStepColorName(name)
+
+  return candidates.find((candidate) => normalizeStepColorName(candidate.color.name) === normalizedName) ?? null
 }
 
 function detectTransparentOrangeColorEstimate(
@@ -8219,8 +8454,9 @@ function detectTransparentOrangeColorEstimate(
   background: ColorSample,
   excludedRegions: readonly PixelRegion[],
   dominantColorName: string,
+  colorPalette: readonly StepPartColorPaletteEntry[],
 ): DetectedColorEstimate | null {
-  if (!["Brown", "Dark Orange", "Dark Tan", "Reddish Brown", "Tan"].includes(dominantColorName)) {
+  if (!["Bright Light Orange", "Brown", "Dark Orange", "Dark Tan", "Medium Nougat", "Reddish Brown", "Tan", "Yellow"].includes(dominantColorName)) {
     return null
   }
 
@@ -8267,16 +8503,28 @@ function detectTransparentOrangeColorEstimate(
 
   const tintToDarkRatio = warmTintPixels / Math.max(1, darkOpaquePixels)
   const tintToForegroundRatio = warmTintPixels / Math.max(1, foregroundPixels)
+  const hasNarrowTintEvidence = (
+    aspectRatio <= 0.72 &&
+    tintToDarkRatio >= 0.16 &&
+    tintToForegroundRatio >= 0.035
+  )
+  const hasStrongTintEvidence = (
+    aspectRatio <= 2.8 &&
+    tintToDarkRatio >= 0.28 &&
+    tintToForegroundRatio >= 0.08
+  )
   if (
     warmTintPixels < 8 ||
-    aspectRatio > 0.72 ||
-    tintToDarkRatio < 0.16 ||
-    tintToForegroundRatio < 0.035
+    (!hasNarrowTintEvidence && !hasStrongTintEvidence)
   ) {
     return null
   }
 
-  const transOrange = getStepPartColorByName("Trans-Orange")
+  const transOrange = findStepPartColorByName(colorPalette, "Trans-Orange")
+  if (!transOrange) {
+    return null
+  }
+
   return {
     confidence: clamp(0.72 + tintToDarkRatio * 0.7 + tintToForegroundRatio * 1.8, 0, 0.94),
     hex: rgbToHex(transOrange.rgb),
@@ -8395,6 +8643,60 @@ function getColorBrightness({ b, g, r }: ColorSample) {
   return (r + g + b) / 3
 }
 
+function getColorChroma({ b, g, r }: ColorSample) {
+  return Math.max(r, g, b) - Math.min(r, g, b)
+}
+
+function scoreAbsoluteDifference(left: number, right: number, maxDifference: number) {
+  return clamp(1 - Math.abs(left - right) / maxDifference, 0, 1)
+}
+
+function scoreColorHue(left: ColorSample, right: ColorSample) {
+  if (isNeutralStepPartColor(left) || isNeutralStepPartColor(right)) {
+    return 0.5
+  }
+
+  const leftHue = getColorHue(left)
+  const rightHue = getColorHue(right)
+  if (leftHue == null || rightHue == null) {
+    return 0.5
+  }
+
+  const hueDistance = Math.min(
+    Math.abs(leftHue - rightHue),
+    360 - Math.abs(leftHue - rightHue),
+  )
+
+  return clamp(1 - hueDistance / 90, 0, 1)
+}
+
+function getColorHue({ b, g, r }: ColorSample) {
+  const red = r / 255
+  const green = g / 255
+  const blue = b / 255
+  const max = Math.max(red, green, blue)
+  const min = Math.min(red, green, blue)
+  const delta = max - min
+  if (delta === 0) {
+    return null
+  }
+
+  let hue = 0
+  if (max === red) {
+    hue = ((green - blue) / delta) % 6
+  } else if (max === green) {
+    hue = ((blue - red) / delta) + 2
+  } else {
+    hue = ((red - green) / delta) + 4
+  }
+
+  return (hue * 60 + 360) % 360
+}
+
+function isNeutralStepPartColor(color: ColorSample) {
+  return getColorChroma(color) <= 22
+}
+
 function createUnknownColorEstimate(): DetectedColorEstimate {
   return {
     confidence: 0,
@@ -8404,39 +8706,76 @@ function createUnknownColorEstimate(): DetectedColorEstimate {
   }
 }
 
-const stepPartColorPalette: Array<{ name: string; rgb: ColorSample }> = [
-  { name: "Black", rgb: { b: 18, g: 18, r: 18 } },
-  { name: "White", rgb: { b: 242, g: 242, r: 242 } },
-  { name: "Light Bluish Gray", rgb: { b: 169, g: 165, r: 160 } },
-  { name: "Dark Bluish Gray", rgb: { b: 104, g: 110, r: 108 } },
-  { name: "Blue", rgb: { b: 191, g: 85, r: 0 } },
-  { name: "Dark Azure", rgb: { b: 189, g: 155, r: 51 } },
-  { name: "Red", rgb: { b: 9, g: 26, r: 201 } },
-  { name: "Green", rgb: { b: 65, g: 120, r: 35 } },
-  { name: "Bright Green", rgb: { b: 74, g: 159, r: 75 } },
-  { name: "Dark Green", rgb: { b: 30, g: 70, r: 24 } },
-  { name: "Yellow", rgb: { b: 55, g: 205, r: 242 } },
-  { name: "Dark Orange", rgb: { b: 11, g: 83, r: 169 } },
-  { name: "Trans-Orange", rgb: { b: 28, g: 143, r: 240 } },
-  { name: "Reddish Brown", rgb: { b: 18, g: 42, r: 88 } },
-  { name: "Brown", rgb: { b: 20, g: 85, r: 124 } },
-  { name: "Tan", rgb: { b: 158, g: 205, r: 228 } },
-  { name: "Dark Tan", rgb: { b: 116, g: 151, r: 149 } },
-  { name: "Flat Silver", rgb: { b: 140, g: 140, r: 137 } },
-  { name: "Pearl Gold", rgb: { b: 43, g: 142, r: 170 } },
+const fallbackStepPartColorPalette: StepPartColorPaletteEntry[] = [
+  { id: "0", name: "Black", rgb: { b: 18, g: 18, r: 18 } },
+  { id: "15", name: "White", rgb: { b: 242, g: 242, r: 242 } },
+  { id: "71", name: "Light Bluish Gray", rgb: { b: 169, g: 165, r: 160 } },
+  { id: "72", name: "Dark Bluish Gray", rgb: { b: 104, g: 110, r: 108 } },
+  { id: "1", name: "Blue", rgb: { b: 191, g: 85, r: 0 } },
+  { id: "321", name: "Dark Azure", rgb: { b: 189, g: 155, r: 51 } },
+  { id: "4", name: "Red", rgb: { b: 9, g: 26, r: 201 } },
+  { id: "2", name: "Green", rgb: { b: 65, g: 120, r: 35 } },
+  { id: "10", name: "Bright Green", rgb: { b: 74, g: 159, r: 75 } },
+  { id: "288", name: "Dark Green", rgb: { b: 50, g: 70, r: 24 } },
+  { id: "14", name: "Yellow", rgb: { b: 55, g: 205, r: 242 } },
+  { id: "191", name: "Bright Light Orange", rgb: { b: 61, g: 187, r: 248 } },
+  { id: "484", name: "Dark Orange", rgb: { b: 0, g: 85, r: 169 } },
+  { id: "182", isTransparent: true, name: "Trans-Orange", rgb: { b: 28, g: 143, r: 240 } },
+  { id: "70", name: "Reddish Brown", rgb: { b: 18, g: 42, r: 88 } },
+  { id: "6", name: "Brown", rgb: { b: 39, g: 57, r: 88 } },
+  { id: "308", name: "Dark Brown", rgb: { b: 0, g: 33, r: 53 } },
+  { id: "19", name: "Tan", rgb: { b: 158, g: 205, r: 228 } },
+  { id: "28", name: "Dark Tan", rgb: { b: 115, g: 138, r: 149 } },
+  { id: "84", name: "Medium Nougat", rgb: { b: 85, g: 125, r: 170 } },
+  { id: "179", name: "Flat Silver", rgb: { b: 133, g: 135, r: 137 } },
+  { id: "297", name: "Pearl Gold", rgb: { b: 46, g: 127, r: 170 } },
 ]
 
-function getNearestStepPartColor(rgb: ColorSample) {
-  return stepPartColorPalette
-    .map((color) => ({
-      ...color,
-      distance: getColorDistance(rgb, color.rgb),
-    }))
-    .sort((left, right) => left.distance - right.distance)[0] ?? stepPartColorPalette[0]
+function createStepPartColorPalette(colors: readonly PartsListColor[] | undefined) {
+  const entries: StepPartColorPaletteEntry[] = []
+  const seenNames = new Set<string>()
+  for (const color of colors ?? []) {
+    if (!isSupportedStepPartPaletteColor(color)) {
+      continue
+    }
+
+    const normalizedName = normalizeStepColorName(color.name)
+    if (seenNames.has(normalizedName)) {
+      continue
+    }
+
+    entries.push({
+      id: color.id,
+      isTransparent: color.isTransparent,
+      name: color.name,
+      rgb: parseHexColorSample(color.rgb ?? ""),
+    })
+    seenNames.add(normalizedName)
+  }
+
+  return entries.length > 0 ? entries : fallbackStepPartColorPalette
 }
 
-function getStepPartColorByName(name: string) {
-  return stepPartColorPalette.find((color) => color.name === name) ?? stepPartColorPalette[0]
+function isSupportedStepPartPaletteColor(color: PartsListColor) {
+  if (!color.rgb || !/^#?[0-9a-f]{6}$/i.test(color.rgb) || color.id === "-1" || color.id === "9999") {
+    return false
+  }
+
+  const name = color.name.trim()
+  return (
+    Boolean(name) &&
+    !/^\[/.test(name) &&
+    !/^(Clikits|Duplo|HO|Modulex|Vintage)\b/i.test(name)
+  )
+}
+
+function findStepPartColorByName(
+  colorPalette: readonly StepPartColorPaletteEntry[],
+  name: string,
+) {
+  const normalizedName = normalizeStepColorName(name)
+
+  return colorPalette.find((color) => normalizeStepColorName(color.name) === normalizedName) ?? null
 }
 
 function rgbToHex({ b, g, r }: ColorSample) {
@@ -8930,7 +9269,7 @@ function isLooseBusyBackgroundQuantityAnchorCandidate(candidate: QuantityLabelAn
   return (
     value <= 9 &&
     candidate.componentCount === 2 &&
-    candidate.quantity.confidence >= 0.78 &&
+    candidate.quantity.confidence >= getMinimumIsolatedLooseQuantityConfidence(value) &&
     candidate.region.width <= candidate.region.height * 1.8
   )
 }
@@ -8946,7 +9285,7 @@ function isSupportedIsolatedLooseQuantityAnchor(
     !value ||
     value > 9 ||
     candidate.componentCount !== 2 ||
-    candidate.quantity.confidence < 0.78 ||
+    candidate.quantity.confidence < getMinimumIsolatedLooseQuantityConfidence(value) ||
     candidate.region.width > candidate.region.height * 1.8
   ) {
     return false
@@ -8987,6 +9326,10 @@ function isSupportedIsolatedLooseQuantityAnchor(
       component.width >= Math.max(4, Math.round(candidate.region.height * 0.35)) &&
       component.height >= Math.max(4, Math.round(candidate.region.height * 0.35))
     ))
+}
+
+function getMinimumIsolatedLooseQuantityConfidence(value: number) {
+  return value === 1 ? 0.78 : 0.76
 }
 
 function createRowSupportedLooseLabelAnchors(
@@ -9354,7 +9697,10 @@ function suppressOverlappingQuantityLabelAnchors(candidates: readonly QuantityLa
   }
 
   return sortQuantityLabelAnchors(
-    selected.filter((candidate) => !isQuantityAnchorLikelyPartTextureAboveLabel(candidate, selected)),
+    selected.filter((candidate) =>
+      !isQuantityAnchorLikelyPartTextureAboveLabel(candidate, selected) &&
+      !isQuantityAnchorLikelyPartTextureBelowLabel(candidate, selected)
+    ),
   )
 }
 
@@ -9412,6 +9758,51 @@ function isQuantityAnchorLikelyPartTextureAboveLabel(
       verticalGap >= -Math.max(2, candidate.region.height * 0.65) &&
       verticalGap <= Math.max(candidate.region.height, anchor.region.height) * 0.72 &&
       horizontalOverlapRatio >= 0.35
+    )
+  })
+}
+
+function isQuantityAnchorLikelyPartTextureBelowLabel(
+  candidate: QuantityLabelAnchor,
+  anchors: readonly QuantityLabelAnchor[],
+) {
+  const value = candidate.quantity.value
+  if (
+    !value ||
+    value < 3 ||
+    value > 9 ||
+    candidate.componentCount !== 2 ||
+    candidate.region.width > candidate.region.height * 1.8 ||
+    hasTightlyAlignedPeerQuantityAnchor(candidate, anchors)
+  ) {
+    return false
+  }
+
+  return anchors.some((anchor) => {
+    if (anchor === candidate || anchor.region.y >= candidate.region.y) {
+      return false
+    }
+
+    if (anchor.region.height > candidate.region.height * 1.4) {
+      return false
+    }
+
+    const verticalGap = candidate.region.y - (anchor.region.y + anchor.region.height)
+    if (
+      verticalGap < Math.max(2, candidate.region.height * 0.35) ||
+      verticalGap > candidate.region.height * 1.2
+    ) {
+      return false
+    }
+
+    const centerDeltaX = Math.abs(getRegionCenterX(candidate.region) - getRegionCenterX(anchor.region))
+    if (centerDeltaX > candidate.region.height * 1.25) {
+      return false
+    }
+
+    return (
+      candidate.region.x >= anchor.region.x - Math.max(6, candidate.region.height * 0.25) &&
+      candidate.region.x <= anchor.region.x + anchor.region.width + candidate.region.height * 1.25
     )
   })
 }

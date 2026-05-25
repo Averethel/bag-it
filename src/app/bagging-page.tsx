@@ -30,6 +30,7 @@ import {
 } from "@/features/bagging/browser-catalogue"
 import { parseBrowserPdfDocument } from "@/features/bagging/browser-pdf-parser"
 import { mockOverviewContent } from "@/features/bagging/mock-data"
+import type { PartsListColor } from "@/features/bagging/parts-list-extraction"
 import {
   disposePreloadedPartsListOcrWorker,
   extractPartsListFromPdfDocument,
@@ -664,7 +665,9 @@ export function BaggingPage() {
           scannedPageCount: 0,
           targetPageCount: stepTargetPageCount,
         }))
+        const stepDetectionColors = getStepDetectionColors(normalizedPartsList, colors)
         const stepResult = await detectStepCalloutsFromPdfDocument(document, {
+          colors: stepDetectionColors,
           excludedPageNumbers: stepExcludedPageNumbers,
           maxPages: defaultStepCalloutPageLimit,
           onProgress: (progress) => {
@@ -765,6 +768,13 @@ export function BaggingPage() {
 
     const result = await runPrivatePdfProcessingJob(file, {
       analyzeDocument: async (document, { metadata, signal }) => {
+        const catalogueColors = await getCatalogueColorsForStepDetection(currentPartsListResult, signal)
+        if (controller.signal.aborted) {
+          return {
+            pageNumbersToRender: [],
+          }
+        }
+        const stepDetectionColors = getStepDetectionColors(currentPartsListResult, catalogueColors)
         const stepTargetPageCount = getStepCalloutTargetPageCount(metadata.pageCount, stepExcludedPageNumbers)
         setStepAnalysisProgress(createStepAnalysisProgress({
           currentPage: null,
@@ -776,6 +786,7 @@ export function BaggingPage() {
           targetPageCount: stepTargetPageCount,
         }))
         const stepResult = await detectStepCalloutsFromPdfDocument(document, {
+          colors: stepDetectionColors,
           excludedPageNumbers: stepExcludedPageNumbers,
           maxPages: defaultStepCalloutPageLimit,
           onProgress: (progress) => {
@@ -1456,6 +1467,55 @@ function getPartPreviewRequestGroupsByPage(
 
 function getPartsListSourcePageNumbers(result: PartsListPdfExtractionResult) {
   return new Set(result.rows.map((row) => row.sourcePage))
+}
+
+async function getCatalogueColorsForStepDetection(
+  result: PartsListPdfExtractionResult,
+  signal?: AbortSignal,
+) {
+  const colorsFromRows = getStepDetectionColors(result, [])
+  if (colorsFromRows.length > 0) {
+    return colorsFromRows
+  }
+
+  const { colors } = await fetchPartsListCatalogueColors({
+    snapshotId: result.normalization?.catalogueSnapshotId ?? null,
+    signal,
+  })
+
+  return colors
+}
+
+function getStepDetectionColors(
+  result: PartsListPdfExtractionResult,
+  catalogueColors: readonly PartsListColor[],
+) {
+  const catalogueColorById = new Map(catalogueColors.map((color) => [color.id, color] as const))
+  const colorsById = new Map<string, PartsListColor>()
+  const rows = result.normalization?.rows ?? result.rows
+
+  for (const row of rows) {
+    const rowColor = row.color
+    if (!rowColor?.id) {
+      continue
+    }
+
+    const catalogueColor = catalogueColorById.get(rowColor.id)
+    const rgb = rowColor.rgb ?? catalogueColor?.rgb
+    if (!rgb) {
+      continue
+    }
+
+    colorsById.set(rowColor.id, {
+      aliases: catalogueColor?.aliases,
+      id: rowColor.id,
+      isTransparent: rowColor.isTransparent ?? catalogueColor?.isTransparent,
+      name: rowColor.name || catalogueColor?.name || rowColor.matchedText,
+      rgb,
+    })
+  }
+
+  return colorsById.size > 0 ? [...colorsById.values()] : catalogueColors
 }
 
 function getPartsListStepScanExcludedPageNumbers(result: PartsListPdfExtractionResult) {

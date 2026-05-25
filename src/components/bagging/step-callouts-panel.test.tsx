@@ -6,6 +6,7 @@ import {
   stepCalloutDetectorVersion,
   type StepCalloutDetectionResult,
 } from "@/features/bagging/step-callout-detection"
+import type { PdfPrivatePageRender } from "@/features/bagging/pdf-intake"
 import { renderWithProvider } from "@/test/render"
 import { StepCalloutDebugPanel, StepCalloutMatchingDebugPanel, StepCalloutsPanel } from "./step-callouts-panel"
 
@@ -433,6 +434,65 @@ describe("StepCalloutsPanel", () => {
     expect(screen.getByRole("img", { name: "Manual page 2 preview" })).toBeVisible()
     expect(screen.getByRole("img", { name: "Manual page 3 preview" })).toBeVisible()
     expect(screen.getByRole("img", { name: "Manual page 4 preview" })).toBeVisible()
+  })
+
+  it("waits for the active page preview batch before loading the next batch", async () => {
+    let resolveFirstBatch!: (renders: readonly PdfPrivatePageRender[]) => void
+    const firstBatch = new Promise<readonly PdfPrivatePageRender[]>((resolve) => {
+      resolveFirstBatch = resolve
+    })
+    const loadPageRenders = vi.fn((pageNumbers: readonly number[]) => {
+      if (pageNumbers.includes(1)) {
+        return firstBatch
+      }
+
+      return Promise.resolve(
+        pageNumbers.map((pageNumber) => ({
+          dataUrl: `data:image/png;base64,page-${pageNumber}`,
+          height: 1000,
+          pageNumber,
+          renderKind: "canvas" as const,
+          width: 700,
+        })),
+      )
+    })
+    const result = createResult()
+    result.scannedPageNumbers = [1, 2, 3, 4]
+
+    renderWithProvider(<StepCalloutMatchingDebugPanel loadPageRenders={loadPageRenders} result={result} />)
+
+    await waitFor(() => expect(loadPageRenders).toHaveBeenCalledTimes(1))
+    expect(loadPageRenders).toHaveBeenNthCalledWith(1, [1, 2, 3])
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(loadPageRenders).toHaveBeenCalledTimes(1)
+
+    resolveFirstBatch([
+      {
+        dataUrl: "data:image/png;base64,page-1",
+        height: 1000,
+        pageNumber: 1,
+        renderKind: "canvas",
+        width: 700,
+      },
+      {
+        dataUrl: "data:image/png;base64,page-2",
+        height: 1000,
+        pageNumber: 2,
+        renderKind: "canvas",
+        width: 700,
+      },
+      {
+        dataUrl: "data:image/png;base64,page-3",
+        height: 1000,
+        pageNumber: 3,
+        renderKind: "canvas",
+        width: 700,
+      },
+    ])
+
+    await waitFor(() => expect(loadPageRenders).toHaveBeenCalledTimes(2))
+    expect(loadPageRenders).toHaveBeenNthCalledWith(2, [4])
   })
 
   it("loads a usable page preview when an existing render has no image data", async () => {
