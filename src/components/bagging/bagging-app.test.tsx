@@ -2241,7 +2241,7 @@ describe("BaggingApp shell", () => {
     expect(
       within(screen.getByRole("tabpanel", { name: /build steps/i })).queryByText("Waiting for analysis"),
     ).not.toBeInTheDocument()
-    expect(window.__bagItValidationState?.partStatus).toBe("failed")
+    await waitFor(() => expect(window.__bagItValidationState?.partStatus).toBe("failed"))
   })
 
   it("reruns stale detector results before rendering build steps", async () => {
