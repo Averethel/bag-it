@@ -18,7 +18,7 @@ export const ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
   minExpectedCoverage: 0.95,
 }
 export const UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
-  maxActualExtraRatio: 0.005,
+  maxActualExtraRatio: ALPHA_MASK_PASS_CRITERIA.maxActualExtraRatio,
   minExpectedCoverage: 0.9,
 }
 

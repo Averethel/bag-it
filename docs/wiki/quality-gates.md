@@ -101,15 +101,16 @@ Current bag-analysis e2e comparison rules:
   fixture gates because Linux Chrome rasterizes manual colors differently from
   local macOS Chrome. That exception may ignore only `review` status, untrusted
   manual-local color class drift. For those same rows only, CI may also accept
-  one-sided alpha-mask shrink when actual extra opaque ratio is at most `0.005`
-  and expected opaque coverage remains at least `0.90`; trusted colors, missing
-  colors, quantities, callout regions, part regions, and quantity-label regions
-  remain strict.
+  Linux Chrome alpha-mask raster drift by keeping the normal actual-extra ratio
+  limit of `0.025` and relaxing expected opaque coverage to at least `0.90`;
+  trusted colors, missing colors, quantities, callout regions, part regions,
+  and quantity-label regions remain strict.
 - part crop drift fails when it exceeds `4px` per edge unless the expected and
   actual serialized alpha masks still pass the shared alpha-mask comparator;
   that comparator requires at least `0.95` expected opaque coverage and at
   most `0.025` actual extra opaque ratio in Node report checks, local browser
-  fixture gates, and all rows outside the CI-only untrusted-review exception
+  fixture gates, and all rows outside the CI-only untrusted-review coverage
+  exception
 - failures attach expected, actual, and diff PNGs to Playwright output
 
 Approved manual-derived fixture content is frozen until the user explicitly

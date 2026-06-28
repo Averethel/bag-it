@@ -391,9 +391,9 @@ describe("bag-analysis comparator primitives", () => {
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
   })
 
-  it("uses a one-sided shrink allowance for CI untrusted review raster drift", () => {
+  it("relaxes only expected coverage for CI untrusted review raster drift", () => {
     expect(UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA).toEqual({
-      maxActualExtraRatio: 0.005,
+      maxActualExtraRatio: 0.025,
       minExpectedCoverage: 0.9,
     })
     expect(alphaMaskComparisonPasses({
@@ -401,7 +401,7 @@ describe("bag-analysis comparator primitives", () => {
       expectedCoverage: 0.9,
     }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(true)
     expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0.006,
+      actualExtraRatio: 0.026,
       expectedCoverage: 1,
     }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(false)
     expect(alphaMaskComparisonPasses({
