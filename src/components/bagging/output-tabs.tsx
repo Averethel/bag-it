@@ -825,11 +825,11 @@ function PageMultiplierAttention({
         <HStack gap={2}>
           <AlertTriangle size={15} aria-hidden="true" />
           <Text fontSize="sm" fontWeight="semibold">
-            Possible step multiplier
+            Possible repeat subassembly
           </Text>
         </HStack>
         <Text color="bagging.muted" fontSize="sm">
-          Outside-callout labels: {formatPageAttentionLabels(items)}. Review the step multiplier controls.
+          Outside-callout labels: {formatPageAttentionLabels(items)}. Review whether affected steps need a multiplier.
         </Text>
       </Stack>
     </Box>
@@ -838,7 +838,7 @@ function PageMultiplierAttention({
 
 function formatPageAttentionLabels(items: StepPageAttentionItem[]) {
   return items
-    .map((item) => `${item.text} ${item.source === "text" ? "text" : "raster"}`)
+    .map((item) => item.text)
     .join(", ")
 }
 

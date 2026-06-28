@@ -19,13 +19,15 @@ import {
 import type {
   StepCalloutCandidate,
   StepCalloutCandidateEvidence,
+  StepCalloutPageAdvisory,
   StepCalloutPageInput,
   StepCalloutResolvedCallout,
   StepCalloutStageSnapshot,
 } from "./contracts"
 import { createPageInputStageSnapshot } from "./page-input"
+import { detectStepCalloutPageAdvisories } from "./page-advisories"
 
-export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.18"
+export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.19"
 
 export interface StepCalloutDetection {
   evidence: StepCalloutCandidateEvidence | null
@@ -38,6 +40,7 @@ export interface StepCalloutDetectionReport {
   candidates: StepCalloutCandidate[]
   detections: StepCalloutDetection[]
   evidence: StepCalloutCandidateEvidence[]
+  pageAdvisories: StepCalloutPageAdvisory[]
   resolvedCallouts: StepCalloutResolvedCallout[]
   stageSnapshots: StepCalloutStageSnapshot[]
 }
@@ -111,6 +114,11 @@ function createDetectionReport(
     candidates: candidateStage.candidates,
     detections: createDetections(resolutionStage.resolvedCallouts, evidenceStage.evidence),
     evidence: evidenceStage.evidence,
+    pageAdvisories: detectStepCalloutPageAdvisories(
+      pages,
+      resolutionStage.resolvedCallouts,
+      evidenceStage.evidence,
+    ),
     resolvedCallouts: resolutionStage.resolvedCallouts,
     stageSnapshots: [
       createPageInputStageSnapshot(pages),

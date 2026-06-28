@@ -11,12 +11,14 @@ import {
 } from "@bag-it/step-callouts"
 import type {
   StepDetectorV2CandidateEvidence,
+  StepDetectorV2PageAdvisory,
   StepDetectorV2PageInput,
   StepDetectorV2Region,
   StepDetectorV2ResolvedCallout,
   StepDetectorV2RgbColor,
 } from "./contracts"
 import type {
+  StepPageAttentionItem,
   StepProcessingTimingSummary,
   StepSectionBoundaryHint,
 } from "../step-detection-contracts"
@@ -54,6 +56,7 @@ export interface StepDetectorV2OutputAssemblyOptions {
   detectorVersion: string
   pageCount: number
   pageLimit: number | null
+  pageAdvisories?: readonly StepDetectorV2PageAdvisory[]
   partColorCalibrationVersion?: string
   partItems?: readonly CalloutPartItem[]
   partExtractorVersion?: string
@@ -62,7 +65,7 @@ export interface StepDetectorV2OutputAssemblyOptions {
 export interface StepDetectorV2BuildStepsResult {
   callouts: StepDetectorV2BuildStepsCallout[]
   detectorVersion: string
-  pageAttentionItems: []
+  pageAttentionItems: StepPageAttentionItem[]
   pageCount: number
   pageLimit: number | null
   partColorCalibrationVersion?: string
@@ -153,7 +156,7 @@ export function assembleV2BuildStepsResult(
   return {
     callouts: createBuildStepCallouts(acceptedCallouts, evidence, pages, options.partItems ?? []),
     detectorVersion: options.detectorVersion,
-    pageAttentionItems: [],
+    pageAttentionItems: createPageAttentionItems(options.pageAdvisories ?? []),
     pageCount: options.pageCount,
     pageLimit: options.pageLimit,
     partColorCalibrationVersion: options.partColorCalibrationVersion,
@@ -168,6 +171,21 @@ export function assembleV2BuildStepsResult(
     skippedPageNumbers: [],
     status: acceptedCallouts.length > 0 ? "detected" : "empty",
   }
+}
+
+function createPageAttentionItems(
+  advisories: readonly StepDetectorV2PageAdvisory[],
+): StepPageAttentionItem[] {
+  return advisories.map((advisory) => ({
+    confidence: advisory.confidence,
+    id: advisory.id,
+    kind: advisory.kind,
+    pageNumber: advisory.pageNumber,
+    source: advisory.source,
+    sourceRegion: advisory.sourceRegion,
+    text: advisory.text,
+    value: advisory.value,
+  }))
 }
 
 function createSectionBoundaryHints(

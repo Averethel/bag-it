@@ -19,7 +19,7 @@ local callout background color from interior pixels.
 Keep explicit detector versioning. The current detector version is:
 
 ```ts
-2.0.0-alpha.18
+2.0.0-alpha.19
 ```
 
 Part image and quantity-label extraction has its own version:
@@ -91,7 +91,7 @@ probe or the extraction response, the app terminates the worker pool and
 retries the whole part-extraction pass once so partial stale output is not
 rendered.
 
-The production route currently emits detector version `2.0.0-alpha.18` from
+The production route currently emits detector version `2.0.0-alpha.19` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
 part extractor version `2.0.0-alpha.163` from package
@@ -104,6 +104,16 @@ labels after glyph assembly are rejected by raster glyph spacing plus
 page-relative area and position checks, not by reading source text or manual
 ids; strong border/background/quantity evidence can still accept a genuinely
 wide callout panel without a predefined callout aspect-ratio contract.
+Detector `2.0.0-alpha.19` preserves the alpha18 accepted-callout contract and
+adds review-only page advisories for possible repeat-subassembly multiplication
+panels. Advisory detection is raster-only: a rejected or diagnostic off-style
+bordered panel with no internal raster quantity-label evidence may emit a
+`possible-step-multiplier` `pageAttentionItems` entry when a nearby outside
+raster `Nx` label from `2x` through `99x` is found in bounded edge bands. These
+advisories mark pages for user review only; they do not promote the panel to an
+accepted callout, do not trigger part extraction, and do not change bag or row
+quantities unless the user edits step multipliers.
+
 Detector `2.0.0-alpha.18` scores non-dark raster edge
 contrast against the inferred fill-panel background, capped as weak border
 evidence, so Animals-style green outlines can support raster quantity anchored
@@ -879,7 +889,7 @@ larger same-row crop that swallowed multiple panels, without relying on manual,
 page, or step identifiers.
 
 Version `0.143.0` adds page-level possible-step-multiplier advisories. The
-detector scans text items and a bounded raster glyph pass for `Nx` labels
+current rebuilt detector implements this as raster-only bounded `Nx` detection
 outside accepted callout regions, emits only advisory `pageAttentionItems`, and
 never applies those values to quantities or bagging automatically.
 
@@ -1120,8 +1130,8 @@ exact private coordinates.
 - `pagePreviews`: per scanned page preview metadata and optional in-memory image
   data for UI validation context
 - `pageAttentionItems`: advisory page-level findings such as possible
-  outside-callout step multipliers; these are review markers only and must not
-  change quantities automatically
+  outside-callout repeat-subassembly multipliers; these are raster-only review
+  markers and must not change quantities automatically
 - optional `sectionBoundaryHints`: detector-owned page-level signals that the
   bagger may use as preferred bag delimiters. The initial hint kind is
   `off-style-rejected-callout` with `position: "before-page"` for rejected

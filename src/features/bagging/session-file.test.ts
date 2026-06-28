@@ -262,7 +262,7 @@ describe("session-file", () => {
             id: "attention-1",
             kind: "possible-step-multiplier",
             pageNumber: 1,
-            source: "text",
+            source: "raster",
             sourceRegion: { height: "bad", width: 12, x: 2, y: 3 },
             text: "2x",
             value: 2,

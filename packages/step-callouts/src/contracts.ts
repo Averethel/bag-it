@@ -73,6 +73,17 @@ export interface StepCalloutResolvedCallout {
   status: StepCalloutResolutionStatus
 }
 
+export interface StepCalloutPageAdvisory {
+  confidence: number
+  id: string
+  kind: "possible-step-multiplier"
+  pageNumber: number
+  source: "raster"
+  sourceRegion: StepCalloutRegion
+  text: string
+  value: number
+}
+
 export type StepCalloutFailureTaxonomy = Record<StepCalloutFailureKind, number>
 
 export interface StepCalloutStageCounts {

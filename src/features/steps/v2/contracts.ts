@@ -4,6 +4,7 @@ import type {
   StepCalloutCandidateSource,
   StepCalloutEvidenceScore,
   StepCalloutEvidenceSignal,
+  StepCalloutPageAdvisory,
   StepCalloutPageInput,
   StepCalloutRegion,
   StepCalloutResolvedCallout,
@@ -45,6 +46,7 @@ export type StepDetectorV2CalloutCandidate = StepCalloutCandidate
 export type StepDetectorV2EvidenceSignal = StepCalloutEvidenceSignal
 export type StepDetectorV2EvidenceScore = StepCalloutEvidenceScore
 export type StepDetectorV2CandidateEvidence = StepCalloutCandidateEvidence
+export type StepDetectorV2PageAdvisory = StepCalloutPageAdvisory
 export type StepDetectorV2ResolutionStatus = StepCalloutResolutionStatus
 export type StepDetectorV2ResolvedCallout = StepCalloutResolvedCallout
 

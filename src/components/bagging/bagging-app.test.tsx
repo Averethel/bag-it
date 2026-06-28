@@ -289,9 +289,8 @@ function fakeRuntimePageInput(pageNumber: number): StepDetectorV2PageInput {
     data: new Uint8ClampedArray(width * height * 4),
     height,
     pageNumber,
-    textItems: [],
     width,
-  } as StepDetectorV2PageInput
+  }
 }
 
 function flushTimers(): Promise<void> {
@@ -2056,10 +2055,10 @@ describe("BaggingApp shell", () => {
       ...detectedStepResult(1),
       pageAttentionItems: [
         {
-          id: "page-1-attention-0-text-2x-40-20-80-12",
+          id: "page-1-attention-0-raster-2x-40-20-80-12",
           pageNumber: 1,
           kind: "possible-step-multiplier" as const,
-          source: "text" as const,
+          source: "raster" as const,
           text: "2x",
           value: 2,
           confidence: 0.92,
@@ -2081,7 +2080,7 @@ describe("BaggingApp shell", () => {
       '[data-attention-kind="possible-step-multiplier"]',
     )
     const attentionDescription = screen
-      .getByText("Possible step multiplier")
+      .getByText("Possible repeat subassembly")
       .closest("[id]")
 
     if (!(highlightedPageGroup instanceof HTMLElement)) {
@@ -2096,8 +2095,9 @@ describe("BaggingApp shell", () => {
       "possible-step-multiplier",
     )
     expect(pageTrigger).toHaveAttribute("aria-describedby", attentionDescription.id)
-    expect(screen.getByText("Possible step multiplier")).toBeInTheDocument()
-    expect(screen.getByText(/outside-callout labels: 2x text/i)).toBeInTheDocument()
+    expect(screen.getByText("Possible repeat subassembly")).toBeInTheDocument()
+    expect(screen.getByText(/outside-callout labels: 2x/i)).toBeInTheDocument()
+    expect(screen.getByText(/review whether affected steps need a multiplier/i)).toBeInTheDocument()
   })
 
   it("keeps zero-part callouts marked as not bagged", async () => {

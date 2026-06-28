@@ -43,6 +43,7 @@ export type {
   StepCalloutEvidenceSignal,
   StepCalloutFailureKind,
   StepCalloutFailureTaxonomy,
+  StepCalloutPageAdvisory,
   StepCalloutPageInput,
   StepCalloutRegion,
   StepCalloutResolvedCallout,
