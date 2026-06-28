@@ -1,0 +1,129 @@
+{
+  "fixtureId": "repeated-step-multiplier",
+  "source": {
+    "sourceKind": "synthetic",
+    "sourceSpecPath": "tests/fixtures/steps/sources/step-fixture-sources.ts",
+    "generatedPdfPath": "tests/fixtures/steps/generated/repeated-step-multiplier.pdf",
+    "expectedPath": "tests/fixtures/steps/expected/repeated-step-multiplier.json",
+    "purpose": "baseline for repeated-step multiplier handling",
+    "browserE2eCandidate": false
+  },
+  "renderWidth": 1200,
+  "pageCount": 1,
+  "expectedScannedPageNumbers": [
+    1
+  ],
+  "expectedCallouts": [
+    {
+      "id": "repeat-callout-base",
+      "pageNumber": 1,
+      "indexOnPage": 0,
+      "sourceRegion": {
+        "x": 136,
+        "y": 260,
+        "width": 504,
+        "height": 252
+      },
+      "cropRegion": {
+        "x": 120,
+        "y": 244,
+        "width": 536,
+        "height": 284
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "repeat-red-plate",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "2x",
+            "value": 2
+          },
+          "quantityLabelRegion": {
+            "x": 228,
+            "y": 418,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 192,
+            "y": 310,
+            "width": 140,
+            "height": 92
+          },
+          "ldrawPartId": "3023-plate-1x2",
+          "imageSignatureId": "repeat-red-plate-signature"
+        },
+        {
+          "id": "repeat-black-pin",
+          "indexOnCallout": 1,
+          "quantity": {
+            "text": "1x",
+            "value": 1
+          },
+          "quantityLabelRegion": {
+            "x": 432,
+            "y": 418,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 420,
+            "y": 310,
+            "width": 92,
+            "height": 92
+          },
+          "ldrawPartId": "6141-round-plate-1x1",
+          "imageSignatureId": "repeat-black-pin-signature"
+        }
+      ]
+    },
+    {
+      "id": "repeat-callout-multiplied",
+      "pageNumber": 1,
+      "indexOnPage": 1,
+      "sourceRegion": {
+        "x": 660,
+        "y": 656,
+        "width": 440,
+        "height": 260
+      },
+      "cropRegion": {
+        "x": 644,
+        "y": 640,
+        "width": 472,
+        "height": 292
+      },
+      "baggable": true,
+      "expectedMultiplier": 2,
+      "partItems": [
+        {
+          "id": "repeat-yellow-tile",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "3x",
+            "value": 3
+          },
+          "quantityLabelRegion": {
+            "x": 852,
+            "y": 836,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 816,
+            "y": 736,
+            "width": 140,
+            "height": 84
+          },
+          "ldrawPartId": "3069b-tile-1x2",
+          "imageSignatureId": "repeat-yellow-tile-signature"
+        }
+      ]
+    }
+  ],
+  "falsePositiveTraps": [],
+  "expectedBaggableRowCount": 9,
+  "expectedZeroPartCalloutCount": 0
+}

@@ -1,582 +1,513 @@
 import { describe, expect, it } from "vitest"
 import {
-  stepCalloutDetectorVersion,
-  type DetectedStepCallout,
-  type DetectedStepCalloutPartImageSignature,
-  type DetectedStepCalloutPartItem,
-  type StepCalloutDetectionResult,
-} from "./step-callout-detection"
-import { createStepCalloutBaggingPlan, getStepCalloutBaggingPolicy } from "./step-callout-bagging"
+  createStepCalloutBagRows,
+  createStepCalloutBaggingPlan,
+  restoreCheckedBagRowsById,
+} from "./step-callout-bagging"
+import { transferCheckedBagRowsByAnchor } from "./bag-completion-anchors"
+import {
+  STEP_CALLOUT_DETECTOR_V2_VERSION as STEP_CALLOUT_DETECTOR_VERSION,
+  STEP_PART_COLOR_CALIBRATION_V2_VERSION as STEP_PART_COLOR_CALIBRATION_VERSION,
+  STEP_PART_EXTRACTOR_V2_VERSION as STEP_PART_EXTRACTOR_VERSION,
+} from "@/features/steps/v2/browser-step-detector-adapter"
+import type {
+  DetectedStepCallout,
+  DetectedStepCalloutPartItem,
+  StepCalloutDetectionResult,
+  StepSectionBoundaryHint,
+} from "@/features/steps/step-detection-contracts"
 
-describe("step callout bagging heuristics", () => {
-  it("uses inventory size when available to pick the set-size policy", () => {
-    const policy = getStepCalloutBaggingPolicy({
-      detectedPartCount: 40,
-      detectedStepCount: 8,
-      inventoryPartCount: 1_500,
-    })
-
-    expect(policy).toMatchObject({
-      maxParts: 140,
-      minParts: 90,
-      setSizeBand: "large",
-      setSizeSource: "inventory",
-      targetParts: 115,
-    })
-  })
-
-  it("groups contiguous callouts into bags without splitting a step", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [20]),
-      createCallout(2, 1, [20]),
-      createCallout(3, 1, [20]),
-      createCallout(4, 2, [20]),
-      createCallout(5, 2, [20]),
-      createCallout(6, 2, [20]),
-    ]), { inventoryPartCount: 480 })
-
-    expect(plan.policy).toMatchObject({
-      maxParts: 75,
-      minParts: 45,
-      setSizeBand: "small",
-      targetParts: 60,
-    })
-    expect(plan.bags).toHaveLength(2)
-    expect(plan.bags[0]).toMatchObject({
-      partCount: 60,
-      stepRange: { end: 3, start: 1 },
-    })
-    expect(plan.bags[1]).toMatchObject({
-      partCount: 60,
-      stepRange: { end: 6, start: 4 },
-    })
-  })
-
-  it("keeps an oversized page group intact and marks the bag for review", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [90]),
-      createCallout(2, 1, [10]),
-    ]), { inventoryPartCount: 400 })
-
-    expect(plan.bags[0]).toMatchObject({
-      partCount: 100,
-      status: "review",
-      stepRange: { end: 2, start: 1 },
-    })
-    expect(plan.bags[0].reviewReasons).toContain("over 75 part target")
-  })
-
-  it("merges an undersized trailing bag when the previous bag can absorb it", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [80]),
-      createCallout(2, 1, [40]),
-      createCallout(3, 2, [13]),
-    ]), { inventoryPartCount: 1_500 })
-
-    expect(plan.policy).toMatchObject({
-      maxParts: 140,
-      minParts: 90,
-      setSizeBand: "large",
-      targetParts: 115,
-    })
-    expect(plan.bags).toHaveLength(1)
-    expect(plan.bags[0]).toMatchObject({
-      partCount: 133,
-      stepRange: { end: 3, start: 1 },
-    })
-  })
-
-  it("merges a tiny bag into the previous bag even when the merged range stays in review", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [150]),
-      createCallout(2, 1, [5]),
-    ]), { inventoryPartCount: 1_500 })
-
-    expect(plan.policy).toMatchObject({
-      maxParts: 140,
-      minParts: 90,
-      setSizeBand: "large",
-      targetParts: 115,
-    })
-    expect(plan.bags).toHaveLength(1)
-    expect(plan.bags[0]).toMatchObject({
-      partCount: 155,
-      status: "review",
-      stepRange: { end: 2, start: 1 },
-    })
-    expect(plan.bags[0].reviewReasons).toContain("over 140 part target")
-  })
-
-  it("keeps same-page callouts together even when they exceed the hard part target", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [40]),
-      createCallout(2, 1, [40]),
-    ]), { inventoryPartCount: 480 })
-
-    expect(plan.bags).toHaveLength(1)
-    expect(plan.bags[0]).toMatchObject({
-      partCount: 80,
-      status: "review",
-      pageRange: { end: 1, start: 1 },
-      stepRange: { end: 2, start: 1 },
-    })
-  })
-
-  it("applies step multipliers before balancing while keeping page groups intact", () => {
-    const result = createResult([
-      createCallout(1, 1, [30]),
-      createCallout(2, 1, [30]),
-      createCallout(3, 2, [30]),
+describe("step-callout-bagging", () => {
+  it("uses detected callout quantity for policy size when inventory is absent", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 60 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 60 }),
+      callout({ id: "c3", pageNumber: 3, quantity: 60 }),
     ])
-    const plan = createStepCalloutBaggingPlan(result, {
-      calloutMultipliers: {
-        "step-callout:p1:s2": 2,
-      },
-      inventoryPartCount: 480,
-    })
 
-    expect(plan.detectedPartCount).toBe(120)
-    expect(plan.bags).toHaveLength(2)
-    expect(plan.bags[0]).toMatchObject({
-      pageRange: { end: 1, start: 1 },
-      partCount: 90,
-      status: "review",
-      stepRange: { end: 2, start: 1 },
-    })
-    expect(plan.bags[0].reviewReasons).toContain("over 75 part target")
-    expect(plan.bags[1]).toMatchObject({
-      pageRange: { end: 2, start: 2 },
-      partCount: 30,
-      stepRange: { end: 3, start: 3 },
-    })
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.setPieceCount).toBe(180)
+    expect(plan.policy.source).toBe("detected-callout-quantity")
+    expect(plan.policy.band).toBe("small")
+    expect(plan.policy.targetParts).toBe(105)
   })
 
-  it("closes a draft bag before exceeding the hard part target at a page boundary", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [40]),
-      createCallout(2, 2, [40]),
-    ]), { inventoryPartCount: 480 })
-
-    expect(plan.bags).toHaveLength(2)
-    expect(plan.bags.map((bag) => bag.partCount)).toEqual([40, 40])
-    expect(plan.bags.map((bag) => bag.pageRange)).toEqual([
-      { end: 1, start: 1 },
-      { end: 2, start: 2 },
+  it("keeps one manual page inside one bag even when the page is oversized", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 90 }),
+      callout({ id: "c2", pageNumber: 1, quantity: 90 }),
+      callout({ id: "c3", pageNumber: 2, quantity: 80 }),
     ])
-    expect(plan.bags.map((bag) => bag.status)).toEqual(["draft", "draft"])
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags[0].pageRange.pages).toEqual([1])
+    expect(plan.bags[0].partCount).toBe(180)
+    expect(plan.bags[0].status).toBe("draft")
+    expect(plan.bags[0].reviewReasons).toEqual([])
   })
 
-  it("keeps unmatched parts separate instead of collapsing them by detected color", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], "step-local-image:g1:m1"),
-      createCallout(2, 1, [3], "step-local-image:g1:m9"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags).toHaveLength(1)
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.matchStatus)).toEqual(["unmatched", "unmatched"])
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("aggregates unmatched parts by local image group and color", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], "step-local-image:g1:m1", "Green", "#237823"),
-      createCallout(2, 1, [3], "step-local-image:g1:m1", "Green", "#2a842a"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags).toHaveLength(1)
-    expect(plan.bags[0].partGroups).toHaveLength(1)
-    expect(plan.bags[0].partGroups[0]).toMatchObject({
-      colorName: "Green",
-      itemCount: 2,
-      matchStatus: "unmatched",
-      partNumber: null,
-      quantity: 5,
-      quantityIsEstimated: false,
-      rowId: null,
-      stepIndexes: [1, 2],
-    })
-  })
-
-  it("keeps same local image groups separate when color differs", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], "step-local-image:g1:m1", "Green", "#237823"),
-      createCallout(2, 1, [3], "step-local-image:g1:m1", "Dark Green", "#184632"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.colorName)).toEqual(["Dark Green", "Green"])
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([3, 2])
-  })
-
-  it("aggregates unmatched parts by image signature and color when local grouping is missing", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823", undefined, "plate"),
-      createCallout(2, 1, [3], undefined, "Green", "#2a842a", undefined, "plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(1)
-    expect(plan.bags[0].partGroups[0]).toMatchObject({
-      itemCount: 2,
-      matchStatus: "unmatched",
-      quantity: 5,
-      stepIndexes: [1, 2],
-    })
-  })
-
-  it("does not aggregate legacy image signatures without outline and size evidence", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823", undefined, "legacyPlate"),
-      createCallout(2, 1, [3], undefined, "Green", "#2a842a", undefined, "legacyPlate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("does not override local image separation inside one step window", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], "step-local-image:g1:m1", "Green", "#237823", undefined, "plate"),
-      createCallout(2, 1, [3], "step-local-image:g1:m2", "Green", "#2a842a", undefined, "plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("does not aggregate image signatures from the same step", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2, 3], undefined, "Green", "#237823", undefined, "plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("keeps different unmatched image signatures separate", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823", undefined, "plate"),
-      createCallout(2, 1, [3], undefined, "Green", "#237823", undefined, "brick"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("ignores BOM row matches without local visual evidence", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], "step-local-image:g1:m1", "Green", "#237823", "row-green-plate"),
-      createCallout(2, 1, [3], "step-local-image:g1:m9", "Green", "#2a842a", "row-green-plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags).toHaveLength(1)
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.matchStatus)).toEqual(["unmatched", "unmatched"])
-    expect(plan.bags[0].partGroups.map((group) => group.rowId)).toEqual([null, null])
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("aggregates visually matching rows without exposing BOM identity", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823", "row-green-plate", "plate"),
-      createCallout(2, 1, [3], undefined, "Green", "#2a842a", "row-green-plate", "plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(1)
-    expect(plan.bags[0].partGroups[0]).toMatchObject({
-      itemCount: 2,
-      matchStatus: "unmatched",
-      partNumber: null,
-      quantity: 5,
-      rowId: null,
-      stepIndexes: [1, 2],
-    })
-  })
-
-  it("aggregates visually matching rows even when stale BOM data is present", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823", undefined, "plate"),
-      createCallout(2, 1, [3], undefined, "Green", "#237823", "row-green-plate", "plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(1)
-    expect(plan.bags[0].partGroups[0]).toMatchObject({
-      itemCount: 2,
-      matchStatus: "unmatched",
-      partNumber: null,
-      quantity: 5,
-      rowId: null,
-      stepIndexes: [1, 2],
-    })
-  })
-
-  it("keeps visually matching rows local when stale BOM assignments conflict", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823", "row-green-plate", "plate"),
-      createCallout(2, 1, [3], undefined, "Green", "#237823", "row-green-brick", "plate"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(1)
-    expect(plan.bags[0].partGroups[0]).toMatchObject({
-      itemCount: 2,
-      matchStatus: "unmatched",
-      partNumber: null,
-      quantity: 5,
-      rowId: null,
-      stepIndexes: [1, 2],
-    })
-  })
-
-  it("does not merge unmatched same-color items when sampled hex differs", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [2], undefined, "Green", "#237823"),
-      createCallout(2, 1, [3], undefined, "Green", "#2a842a"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups).toHaveLength(2)
-    expect(plan.bags[0].partGroups.map((group) => group.colorName)).toEqual(["Green", "Green"])
-    expect(plan.bags[0].partGroups.map((group) => group.quantity)).toEqual([2, 3])
-  })
-
-  it("sorts bag part groups by detected color", () => {
-    const plan = createStepCalloutBaggingPlan(createResult([
-      createCallout(1, 1, [1], undefined, "Blue"),
-      createCallout(2, 1, [1], undefined, "Black"),
-      createCallout(3, 1, [1], undefined, "Green"),
-    ]), { inventoryPartCount: 200 })
-
-    expect(plan.bags[0].partGroups.map((group) => group.colorName)).toEqual([
-      "Black",
-      "Green",
-      "Blue",
+  it("merges small neighbor bags within the overfill tolerance", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 120 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 45 }),
+      callout({ id: "c3", pageNumber: 3, quantity: 130 }),
     ])
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([165, 130])
+    expect(plan.bags[0].status).toBe("draft")
+    expect(plan.bags[0].reviewReasons).toEqual([])
+  })
+
+  it("carries across a no-baggable scanned page when the active bag is still small", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 60 }),
+      callout({ id: "c2", pageNumber: 3, quantity: 40 }),
+    ], {
+      scannedPageNumbers: [1, 2, 3],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.pageRange.pages)).toEqual([[1, 3]])
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([100])
+  })
+
+  it("carries across a zero-part callout page when the active bag is still small", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 60 }),
+      emptyCallout({ id: "zero", pageNumber: 2 }),
+      callout({ id: "c2", pageNumber: 3, quantity: 40 }),
+    ], {
+      scannedPageNumbers: [1, 2, 3],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.pageRange.pages)).toEqual([[1, 3]])
+  })
+
+  it("closes before a new-section hint when the active bag has useful fill", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 90 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 10 }),
+      callout({ id: "c3", pageNumber: 3, quantity: 50 }),
+    ], {
+      sectionBoundaryHints: [sectionBoundaryHint(2)],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.pageRange.pages)).toEqual([[1], [2, 3]])
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([90, 60])
+  })
+
+  it("does not merge undersized bags across a useful section boundary hint", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 120 }),
+      callout({ id: "c2", pageNumber: 3, quantity: 45 }),
+    ], {
+      scannedPageNumbers: [1, 3],
+      sectionBoundaryHints: [sectionBoundaryHint(3)],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([120, 45])
+  })
+
+  it("merges an abnormally small bag across a useful section boundary", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 120 }),
+      callout({ id: "c2", pageNumber: 3, quantity: 16 }),
+    ], {
+      scannedPageNumbers: [1, 3],
+      sectionBoundaryHints: [sectionBoundaryHint(3)],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.pageRange.pages)).toEqual([[1, 3]])
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([136])
+  })
+
+  it("keeps a section-ending page when it completes a nearly full bag", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 90 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 35 }),
+      callout({ id: "c3", pageNumber: 4, quantity: 50 }),
+    ], {
+      scannedPageNumbers: [1, 2, 3, 4],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.pageRange.pages)).toEqual([[1, 2], [4]])
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([125, 50])
+  })
+
+  it("still uses target sizing when no section anchor exists", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 120 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 45 }),
+    ])
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([165])
+  })
+
+  it("does not let step count alone create tiny low-part bags", () => {
+    const result = resultWithCallouts([
+      ...Array.from({ length: 10 }, (_value, index) =>
+        callout({ id: `p1-c${index}`, pageNumber: 1, quantity: 1, x: 10 + index }),
+      ),
+      ...Array.from({ length: 10 }, (_value, index) =>
+        callout({ id: `p2-c${index}`, pageNumber: 2, quantity: 1, x: 10 + index }),
+      ),
+    ])
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.policy.targetSteps).toBe(18)
+    expect(plan.bags).toHaveLength(1)
+    expect(plan.bags[0].partCount).toBe(20)
+  })
+
+  it("keeps section-aware bags under the soft hard cap when pages allow it", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 150 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 20 }),
+    ], {
+      scannedPageNumbers: [1, 2, 3],
+    })
+
+    const plan = createStepCalloutBaggingPlan(result)
+
+    expect(plan.policy.maxParts + plan.policy.overfillToleranceParts).toBe(166)
+    expect(plan.bags.map((bag) => bag.partCount)).toEqual([150, 20])
+  })
+
+  it("recalculates row ids and quantities when a callout multiplier changes", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 4 }),
+    ])
+    const firstPlan = createStepCalloutBaggingPlan(result)
+    const firstRows = createStepCalloutBagRows(firstPlan, {
+      manualFingerprint: "manual:1",
+      pagePreviews: result.pagePreviews,
+    })
+    const secondPlan = createStepCalloutBaggingPlan(result, {
+      calloutMultipliers: { c1: 3 },
+    })
+    const secondRows = createStepCalloutBagRows(secondPlan, {
+      manualFingerprint: "manual:1",
+      pagePreviews: result.pagePreviews,
+    })
+
+    expect(firstRows[0].quantity).toBe(4)
+    expect(firstRows[0].calloutBackgroundHex).toBe("#eef5ff")
+    expect(secondRows[0].quantity).toBe(12)
+    expect(secondRows[0].id).not.toBe(firstRows[0].id)
+  })
+
+  it("restores checked rows by id for current plans", () => {
+    const result = resultWithCallouts([
+      callout({ id: "c1", pageNumber: 1, quantity: 2 }),
+      callout({ id: "c2", pageNumber: 2, quantity: 2 }),
+    ])
+    const rows = createStepCalloutBagRows(createStepCalloutBaggingPlan(result), {
+      manualFingerprint: "manual:1",
+      pagePreviews: result.pagePreviews,
+    })
+
+    expect(Object.keys(restoreCheckedBagRowsById([rows[0].id, "missing"], rows))).toEqual([
+      rows[0].id,
+    ])
+  })
+
+  it("transfers checked rows through coordinate anchors when exactly one row matches", () => {
+    const original = resultWithCallouts([
+      callout({ id: "old-c1", pageNumber: 1, quantity: 2, x: 10 }),
+    ])
+    const next = resultWithCallouts([
+      callout({ id: "new-c1", pageNumber: 1, quantity: 2, x: 11 }),
+    ])
+    const originalRows = createStepCalloutBagRows(createStepCalloutBaggingPlan(original), {
+      manualFingerprint: "manual:1",
+      pagePreviews: original.pagePreviews,
+    })
+    const nextRows = createStepCalloutBagRows(createStepCalloutBaggingPlan(next), {
+      manualFingerprint: "manual:1",
+      pagePreviews: next.pagePreviews,
+    })
+
+    const transferred = transferCheckedBagRowsByAnchor(
+      [originalRows[0].anchor],
+      nextRows,
+      "manual:1",
+    )
+
+    expect(transferred.restoredCount).toBe(1)
+    expect(Object.keys(transferred.checkedRows)).toEqual([nextRows[0].id])
+  })
+
+  it("drops ambiguous anchor transfers", () => {
+    const original = resultWithCallouts([
+      callout({ id: "old-c1", pageNumber: 1, quantity: 2, x: 10 }),
+    ])
+    const next = resultWithCallouts([
+      callout({ id: "new-c1", pageNumber: 1, quantity: 2, x: 10 }),
+      callout({ id: "new-c2", pageNumber: 1, quantity: 2, x: 10 }),
+    ])
+    const originalRows = createStepCalloutBagRows(createStepCalloutBaggingPlan(original), {
+      manualFingerprint: "manual:1",
+      pagePreviews: original.pagePreviews,
+    })
+    const nextRows = createStepCalloutBagRows(createStepCalloutBaggingPlan(next), {
+      manualFingerprint: "manual:1",
+      pagePreviews: next.pagePreviews,
+    })
+
+    const transferred = transferCheckedBagRowsByAnchor(
+      [originalRows[0].anchor],
+      nextRows,
+      "manual:1",
+    )
+
+    expect(transferred.restoredCount).toBe(0)
+    expect(transferred.droppedCount).toBe(1)
   })
 })
 
-function createResult(callouts: readonly DetectedStepCallout[]): StepCalloutDetectionResult {
-  return {
-    callouts: [...callouts],
-    detectorVersion: stepCalloutDetectorVersion,
-    pageCount: 2,
-    pageLimit: null,
-    scannedPageNumbers: [1, 2],
-    skippedBomPageNumbers: [],
-    status: callouts.length > 0 ? "detected" : "empty",
-  } as StepCalloutDetectionResult
-}
+function resultWithCallouts(
+  callouts: DetectedStepCallout[],
+  options: {
+    scannedPageNumbers?: number[]
+    sectionBoundaryHints?: StepSectionBoundaryHint[]
+  } = {},
+): StepCalloutDetectionResult {
+  const scannedPageNumbers = options.scannedPageNumbers ?? [
+    ...new Set(callouts.map((callout) => callout.pageNumber)),
+  ]
 
-function createCallout(
-  stepIndex: number,
-  pageNumber: number,
-  quantities: readonly number[],
-  groupId?: string,
-  colorName = "Green",
-  colorHex = "#237823",
-  bomRowId?: string,
-  signatureKind?: "brick" | "legacyPlate" | "plate",
-): DetectedStepCallout {
   return {
-    confidence: 0.84,
-    crop: {
-      dataUrl: `data:image/png;base64,callout-${stepIndex}`,
-      height: 140,
+    detectorVersion: STEP_CALLOUT_DETECTOR_VERSION,
+    partColorCalibrationVersion: STEP_PART_COLOR_CALIBRATION_VERSION,
+    partExtractorVersion: STEP_PART_EXTRACTOR_VERSION,
+    pageCount: scannedPageNumbers.length,
+    pageLimit: null,
+    scannedPageNumbers,
+    skippedPageNumbers: [],
+    status: callouts.length > 0 ? "detected" : "empty",
+    pagePreviews: scannedPageNumbers.map((pageNumber) => ({
+      pageNumber,
       width: 200,
-    },
-    id: `step-callout:p${pageNumber}:s${stepIndex}`,
-    indexOnPage: stepIndex,
+      height: 300,
+    })),
+    pageAttentionItems: [],
+    sectionBoundaryHints: options.sectionBoundaryHints,
+    callouts,
+  }
+}
+function callout({
+  id,
+  pageNumber,
+  quantity,
+  x = 10,
+}: {
+  id: string
+  pageNumber: number
+  quantity: number
+  x?: number
+}): DetectedStepCallout {
+  return {
+    id,
     pageNumber,
-    partItems: quantities.map((quantity, index) =>
-      createPartItem(stepIndex, index + 1, quantity, groupId, colorName, colorHex, bomRowId, signatureKind),
-    ),
-    sourceImage: {
-      height: 900,
-      unit: "step_pixel",
-      width: 700,
+    indexOnPage: 0,
+    stepIndex: pageNumber,
+    confidence: 0.9,
+    sourceRegion: { x, y: pageNumber * 20, width: 80, height: 40 },
+    crop: {
+      region: { x, y: pageNumber * 20, width: 80, height: 40 },
     },
-    sourceRegion: {
-      height: 140,
-      unit: "step_pixel",
-      width: 200,
-      x: 10,
-      y: 20,
+    inferredBackground: {
+      hex: "#eef5ff",
+      rgb: { r: 238, g: 245, b: 255 },
+      confidence: 0.8,
     },
-    stepIndex,
+    partItems: [
+      partItem({
+        id: `${id}-item`,
+        quantity,
+        x: x + 10,
+      }),
+    ],
   }
 }
 
-function createPartItem(
-  stepIndex: number,
-  index: number,
-  quantity: number,
-  groupId?: string,
-  colorName = "Green",
-  colorHex = "#237823",
-  bomRowId?: string,
-  signatureKind?: "brick" | "legacyPlate" | "plate",
-): DetectedStepCalloutPartItem {
+function emptyCallout({
+  id,
+  pageNumber,
+  x = 10,
+}: {
+  id: string
+  pageNumber: number
+  x?: number
+}): DetectedStepCallout {
   return {
-    bomImageMatch: bomRowId
-      ? {
-          cataloguePartNumber: "3005",
-          colorId: "6",
-          colorName,
-          colorScore: 0.98,
-          confidence: 0.96,
-          fallbackPreviewImageUrl: "https://example.test/parts/3005-fallback.png",
-          partName: "Brick 1 x 1",
-          partNumber: "3005",
-          previewImageUrl: "https://example.test/parts/3005.png",
-          quantity: 5,
-          rowId: bomRowId,
-          sourcePage: 12,
-          visualScore: 0.94,
-        }
-      : null,
-    confidence: 0.7,
-    detectedColor: {
-      confidence: 0.82,
-      hex: colorHex,
-      name: colorName,
-      rgb: { b: 35, g: 120, r: 35 },
-    },
-    id: `step-callout:s${stepIndex}:item${index}`,
-    imageSignature: signatureKind ? createImageSignature(signatureKind) : null,
-    indexOnCallout: index,
-    localImageMatch: groupId
-      ? {
-          confidence: 0.92,
-          groupId,
-          groupIndex: 1,
-          itemCount: 2,
-          stepGroupIndex: 1,
-          stepGroupRange: {
-            end: 5,
-            start: 1,
-          },
-        }
-      : null,
-    partCrop: {
-      dataUrl: `data:image/png;base64,part-${stepIndex}-${index}`,
-      height: 36,
-      width: 44,
-    },
-    partRegion: {
-      height: 36,
-      unit: "step_pixel",
-      width: 44,
-      x: 24,
-      y: 42,
+    ...callout({ id, pageNumber, quantity: 1, x }),
+    partItems: [],
+  }
+}
+
+function sectionBoundaryHint(pageNumber: number): StepSectionBoundaryHint {
+  return {
+    confidence: 0.8,
+    id: `section-boundary-page-${pageNumber}`,
+    kind: "off-style-rejected-callout",
+    pageNumber,
+    position: "before-page",
+    sourceRegion: { height: 40, width: 80, x: 10, y: pageNumber * 20 },
+  }
+}
+
+function calloutWithPartItems({
+  id,
+  items,
+  pageNumber,
+  x = 10,
+}: {
+  id: string
+  items: Array<{
+    colorName?: "Bright Green" | "Dark Bluish Gray" | "Dark Green" | "Green" | "Light Bluish Gray"
+    imageDataUrl: string
+    manualClassId?: string
+    manualClassTrusted?: boolean
+    quantity: number
+    rawManualClassId?: string
+    size?: {
+      height: number
+      width: number
+    }
+  }>
+  pageNumber: number
+  x?: number
+}): DetectedStepCallout {
+  return {
+    ...callout({ id, pageNumber, quantity: 1, x }),
+    partItems: items.map((item, index) =>
+      partItem({
+        colorName: item.colorName,
+        id: `${id}-item-${index}`,
+        imageDataUrl: item.imageDataUrl,
+        indexOnCallout: index,
+        manualClassId: item.manualClassId,
+        manualClassTrusted: item.manualClassTrusted,
+        quantity: item.quantity,
+        rawManualClassId: item.rawManualClassId,
+        size: item.size,
+        x: x + index * 40,
+      }),
+    ),
+  }
+}
+
+function partItem({
+  colorName,
+  id,
+  imageDataUrl,
+  indexOnCallout = 0,
+  manualClassId,
+  manualClassTrusted,
+  quantity,
+  rawManualClassId,
+  size = { height: 14, width: 24 },
+  x,
+}: {
+  colorName?: "Bright Green" | "Dark Bluish Gray" | "Dark Green" | "Green" | "Light Bluish Gray"
+  id: string
+  imageDataUrl?: string
+  indexOnCallout?: number
+  manualClassId?: string
+  manualClassTrusted?: boolean
+  quantity: number
+  rawManualClassId?: string
+  size?: {
+    height: number
+    width: number
+  }
+  x: number
+}): DetectedStepCalloutPartItem {
+  return {
+    id,
+    indexOnCallout,
+    confidence: 0.9,
+    sourceRegion: { x, y: 10, width: 32, height: 18 },
+    detectedColor: colorName ? testDetectedColor(colorName, { manualClassId, manualClassTrusted, rawManualClassId }) : undefined,
+    partRegion: { x: x + 8, y: 10, width: size.width, height: size.height },
+    quantityLabel: {
+      region: { x, y: 20, width: 8, height: 8 },
+      crop: {
+        region: { x, y: 20, width: 8, height: 8 },
+      },
     },
     quantity: {
-      confidence: 0.86,
-      text: `${quantity}`,
       value: quantity,
+      text: `${quantity}x`,
+      confidence: 0.9,
     },
-    quantityLabel: {
-      crop: {
-        dataUrl: `data:image/png;base64,quantity-${stepIndex}-${index}`,
-        height: 12,
-        width: 26,
-      },
-      region: {
-        height: 12,
-        unit: "step_pixel",
-        width: 26,
-        x: 32,
-        y: 86,
-      },
-    },
-    sourceRegion: {
-      height: 58,
-      unit: "step_pixel",
-      width: 44,
-      x: 24,
-      y: 42,
+    partCrop: {
+      imageDataUrl,
+      region: { x: x + 8, y: 10, width: size.width, height: size.height },
     },
   }
 }
 
-function createImageSignature(kind: "brick" | "legacyPlate" | "plate"): DetectedStepCalloutPartImageSignature {
-  if (kind === "legacyPlate") {
-    return {
-      aspectRatio: 1.46,
-      compactness: 0.86,
-      coverage: 0.78,
-      detailGrid: [
-        "1001",
-        "0110",
-        "0110",
-        "1001",
-      ].join(""),
-      grid: [
-        "1111",
-        "1111",
-        "1111",
-        "1111",
-      ].join(""),
-      surfaceHex: "#237823",
-    }
-  }
-
-  if (kind === "brick") {
-    return {
-      aspectRatio: 0.72,
-      bottomProfile: "3333",
-      boundsHeight: 42,
-      boundsWidth: 30,
-      compactness: 0.62,
-      coverage: 0.66,
-      detailGrid: [
-        "1100",
-        "1100",
-        "1100",
-        "1100",
-      ].join(""),
-      edgeGrid: [
-        "1100",
-        "1000",
-        "1000",
-        "1100",
-      ].join(""),
-      grid: [
-        "1100",
-        "1100",
-        "1100",
-        "1100",
-      ].join(""),
-      pixelCount: 90,
-      surfaceHex: "#237823",
-      topProfile: "0000",
-    }
-  }
+function testDetectedColor(
+  colorName: "Bright Green" | "Dark Bluish Gray" | "Dark Green" | "Green" | "Light Bluish Gray",
+  options: {
+    manualClassId?: string
+    manualClassTrusted?: boolean
+    rawManualClassId?: string
+  } = {},
+) {
+  const hex = colorName === "Dark Bluish Gray"
+    ? "#6c6e68"
+    : colorName === "Dark Green"
+      ? "#184632"
+    : colorName === "Green"
+      ? "#237841"
+      : colorName === "Bright Green"
+        ? "#4b9f4a"
+        : "#a0a5a9"
 
   return {
-    aspectRatio: 1.46,
-    bottomProfile: "3333",
-    boundsHeight: 30,
-    boundsWidth: 44,
-    compactness: 0.86,
-    coverage: 0.78,
-    detailGrid: [
-      "1001",
-      "0110",
-      "0110",
-      "1001",
-    ].join(""),
-    edgeGrid: [
-      "1111",
-      "1001",
-      "1001",
-      "1111",
-    ].join(""),
-    grid: [
-      "1111",
-      "1111",
-      "1111",
-      "1111",
-    ].join(""),
-    pixelCount: 140,
-    surfaceHex: "#237823",
-    topProfile: "0000",
-  }
+    alternatives: [],
+    confidence: 0.8,
+    distance: 0,
+    family: colorName === "Green" || colorName === "Bright Green" || colorName === "Dark Green" ? "green" : "gray",
+    hex,
+    ...(options.manualClassId
+      ? {
+          manualClassConfidence: 0.8,
+          manualClassHex: hex,
+          manualClassId: options.manualClassId,
+          manualClassRgb: { r: 160, g: 165, b: 169 },
+          manualClassTrusted: options.manualClassTrusted ?? true,
+          rawManualClassId: options.rawManualClassId ?? options.manualClassId,
+        }
+      : {}),
+    name: colorName,
+    ...(options.manualClassId ? { nameSource: "palette-match" } : {}),
+    observedHex: hex,
+    observedRgb: { r: 160, g: 165, b: 169 },
+    rarityTier: "common",
+    rgb: { r: 160, g: 165, b: 169 },
+    status: "review",
+    swatchHex: hex,
+  } as DetectedStepCalloutPartItem["detectedColor"]
 }

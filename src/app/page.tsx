@@ -1,5 +1,5 @@
-import { BaggingPage } from "./bagging-page"
+import { BaggingApp } from "@/components/bagging/bagging-app"
 
 export default function Home() {
-  return <BaggingPage />
+  return <BaggingApp />
 }

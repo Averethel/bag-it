@@ -1,105 +1,96 @@
-import { Badge, Box, HStack, Progress, Stack, Text } from "@chakra-ui/react"
-import { AlertCircle, CheckCircle2, CircleDashed } from "lucide-react"
+import { Badge, Box, HStack, Stack, Text } from "@chakra-ui/react"
+import { CheckCircle2, CircleDashed, LoaderCircle, XCircle } from "lucide-react"
+import { Panel } from "./panel"
 
-export type ProcessingStatusStep = {
-  activity?: string | null
-  detail?: string | null
+type StatusState = "pending" | "active" | "complete" | "failed"
+
+export type StatusRow = {
   label: string
+  detail: string
+  state: StatusState
   progress: number
-  state: "active" | "complete" | "failed" | "pending"
 }
 
-export function ProcessingStatusCard({
-  steps,
-}: {
-  steps: readonly ProcessingStatusStep[]
-}) {
+const icons = {
+  pending: CircleDashed,
+  active: LoaderCircle,
+  complete: CheckCircle2,
+  failed: XCircle,
+}
+
+const palettes = {
+  pending: "gray",
+  active: "blue",
+  complete: "green",
+  failed: "red",
+}
+
+export function ProcessingStatusCard({ rows }: { rows: StatusRow[] }) {
   return (
-    <Box border="sm" borderColor="bagging.border" bg="white" rounded="md" p="4">
-      <Stack gap="3">
+    <Panel>
+      <Stack gap={4}>
         <Text fontWeight="semibold">Processing status</Text>
-        <Stack gap="3">
-          {steps.map((step) => (
-            <StatusRow key={step.label} {...step} />
-          ))}
+        <Stack gap={3}>
+          {rows.map((row) => {
+            const Icon = icons[row.state]
+
+            return (
+              <Stack key={row.label} gap={2}>
+                <HStack justify="space-between" gap={2} minW={0}>
+                  <HStack gap={2} minW={0} overflow="hidden">
+                    <Box
+                      alignItems="center"
+                      animation={
+                        row.state === "active"
+                          ? "bagging-status-spin 0.9s linear infinite"
+                          : undefined
+                      }
+                      data-processing-status-icon={row.state}
+                      display="inline-flex"
+                      flexShrink={0}
+                      justifyContent="center"
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                    </Box>
+                    <HStack gap={1.5} minW={0} overflow="hidden" whiteSpace="nowrap">
+                      <Text flexShrink={0} fontSize="sm" fontWeight="medium">
+                        {row.label}
+                      </Text>
+                      <Text
+                        color="bagging.muted"
+                        fontSize="xs"
+                        lineHeight="1"
+                        minW={0}
+                        overflow="hidden"
+                        textOverflow="ellipsis"
+                        whiteSpace="nowrap"
+                      >
+                        {row.detail}
+                      </Text>
+                    </HStack>
+                  </HStack>
+                  <Badge colorPalette={palettes[row.state]} flexShrink={0} size="sm">
+                    {row.state}
+                  </Badge>
+                </HStack>
+                <Box
+                  aria-label={`${row.label} progress`}
+                  bg="bagging.surface.subtle"
+                  borderRadius="full"
+                  h="2"
+                  overflow="hidden"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={row.progress}
+                >
+                  <Box bg="bagging.action" h="full" width={`${row.progress}%`} />
+                </Box>
+              </Stack>
+            )
+          })}
         </Stack>
       </Stack>
-    </Box>
-  )
-}
-
-function StatusRow({ activity, detail, label, progress, state }: ProcessingStatusStep) {
-  const color = state === "failed" ? "red.700" : state === "complete" ? "bagging.done" : "bagging.muted"
-  const colorPalette = state === "failed" ? "red" : state === "complete" ? "green" : "yellow"
-  const icon = state === "failed"
-    ? <AlertCircle size={16} />
-    : state === "complete"
-      ? <CheckCircle2 size={16} />
-      : <CircleDashed size={16} />
-  const stateLabel =
-    state === "complete"
-      ? "Completed"
-      : state === "active"
-        ? "In progress"
-        : state === "failed"
-          ? "Failed"
-          : "Waiting"
-
-  return (
-    <Stack gap="2">
-      <HStack gap="2" justify="space-between" align="center">
-        <HStack gap="2" color={color} minW="bagging.zero" align="center">
-          <Box
-            as="span"
-            alignItems="center"
-            aria-hidden="true"
-            boxSize="4"
-            display="inline-flex"
-            flexShrink={0}
-            justifyContent="center"
-          >
-            {icon}
-          </Box>
-          <Stack gap="bagging.none" minW="bagging.zero">
-            <Text fontSize="sm" fontWeight="semibold">
-              {label}
-            </Text>
-            {detail ? (
-              <Text color="fg.muted" fontSize="xs" lineHeight="short">
-                {detail}
-              </Text>
-            ) : null}
-            {activity ? (
-              <Text color="fg.muted" fontSize="xs" lineHeight="short">
-                {activity}
-              </Text>
-            ) : null}
-          </Stack>
-        </HStack>
-        <Badge colorPalette={colorPalette} flexShrink={0} variant="subtle">
-          {stateLabel}
-        </Badge>
-      </HStack>
-      <Progress.Root value={progress} colorPalette={colorPalette} size="xs">
-        <Progress.Track aria-label={`${label} progress`} overflow="hidden" position="relative">
-          <Progress.Range />
-          {state === "active" ? (
-            <Box
-              aria-hidden="true"
-              bg="yellow.500"
-              style={{
-                animation: "bagging-progress-activity 1.4s ease-in-out infinite",
-                bottom: 0,
-                left: "-35%",
-                opacity: 0.42,
-                position: "absolute",
-                top: 0,
-                width: "35%",
-              }}
-            />
-          ) : null}
-        </Progress.Track>
-      </Progress.Root>
-    </Stack>
+    </Panel>
   )
 }

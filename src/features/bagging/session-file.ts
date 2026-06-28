@@ -1,392 +1,315 @@
-import type { PartsListPartPreview } from "./browser-catalogue"
-import type { PartsListPdfExtractionResult } from "./parts-list-pdf-extraction"
-import type { PdfIntakeJobSnapshot, PdfIntakeMetadata } from "./pdf-intake"
-import type { StepCalloutDetectionResult } from "./step-callout-detection"
-import { getStepCalloutBagChecklistRowIds } from "./step-callout-bagging"
 import {
-  createStepCalloutMultiplierEntries,
-  restoreStepCalloutMultiplierEntries,
+  PdfIntakeError,
+  type PdfMetadata,
+  normalizePdfIntakeError,
+  validatePdfFile,
+} from "@/features/pdf/pdf-intake"
+import type { StepCalloutDetectionResult } from "@/features/steps/step-detection-contracts"
+import { stripRuntimePreviewObjectUrls } from "@/features/steps/preview-object-urls"
+import {
+  sanitizeBagCompletionAnchors,
+  type StepCalloutBagCompletionAnchor,
+} from "./bag-completion-anchors"
+import { isStepCalloutDetectionResult } from "./step-detection-session-validation"
+import {
+  sanitizeCheckedBagRowIds,
+} from "./step-callout-bagging"
+import {
+  hasCalloutMultipliers,
+  sanitizeCalloutMultipliers,
   type StepCalloutMultiplierMap,
 } from "./step-callout-multipliers"
 
-export const baggingSessionFileKind = "bag-it-session"
-export const baggingSessionFileVersion = 1
+const SESSION_KIND = "bag-it-session"
+const SESSION_VERSION = 1
 
-export type BaggingSessionFileInput = {
-  attemptedPartPreviewKeys: ReadonlySet<string>
-  checkedRowIds: ReadonlySet<string>
-  checkedStepBagRowIds?: ReadonlySet<string>
-  currentExtractorVersion: string
-  jobSnapshot: PdfIntakeJobSnapshot | null
-  manualFile: File
-  metadata: PdfIntakeMetadata | null
-  partPreviewByKey: ReadonlyMap<string, PartsListPartPreview>
-  partsListResult: PartsListPdfExtractionResult | null
-  stepCalloutMultipliers?: StepCalloutMultiplierMap
-  stepCalloutResult?: StepCalloutDetectionResult | null
-}
-
-export type RestoredBaggingSession = {
-  attemptedPartPreviewKeys: ReadonlySet<string>
-  checkedRowIds: ReadonlySet<string>
-  checkedStepBagRowIds: ReadonlySet<string>
-  jobSnapshot: PdfIntakeJobSnapshot | null
-  manualFile: File
-  metadata: PdfIntakeMetadata | null
-  partPreviewByKey: ReadonlyMap<string, PartsListPartPreview>
-  partsListResult: PartsListPdfExtractionResult | null
-  savedExtractorVersion: string | null
-  savedStepCalloutDetectorVersion: string | null
-  stepCalloutMultipliers: StepCalloutMultiplierMap
-  stepCalloutResult: StepCalloutDetectionResult | null
-}
-
-type BaggingSessionFile = {
-  analysis: {
-    attemptedPartPreviewKeys: string[]
-    extractorVersion: string | null
-    jobSnapshot: PdfIntakeJobSnapshot | null
-    metadata: PdfIntakeMetadata | null
-    partPreviewEntries: [string, PartsListPartPreview][]
-    partsListResult: PartsListPdfExtractionResult | null
-    stepCalloutDetectorVersion?: string | null
-    stepCalloutMultiplierEntries?: [string, number][]
-    stepCalloutResult?: StepCalloutDetectionResult | null
-  }
-  createdAt: string
-  currentExtractorVersion: string
-  kind: typeof baggingSessionFileKind
+type PdfIntakeSessionFile = {
+  kind: typeof SESSION_KIND
+  version: typeof SESSION_VERSION
+  savedAt: string
   manual: {
-    dataBase64: string
     fileName: string
-    lastModified: number
+    mimeType: string
     sizeBytes: number
-    type: string
+    lastModified: number
+    dataBase64: string
   }
-  partCompletion: {
-    checkedRowIds: string[]
-  }
-  stepBagCompletion?: {
-    checkedRowIds: string[]
-  }
-  version: typeof baggingSessionFileVersion
+  metadata: PdfMetadata
+  stepDetectionResult?: StepCalloutDetectionResult
+  calloutMultipliers?: StepCalloutMultiplierMap
+  checkedBagRowIds?: string[]
+  checkedBagCompletionAnchors?: StepCalloutBagCompletionAnchor[]
 }
 
-export async function createBaggingSessionFile({
-  attemptedPartPreviewKeys,
-  checkedRowIds,
-  checkedStepBagRowIds = new Set(),
-  currentExtractorVersion,
-  jobSnapshot,
+export type RestoredPdfIntakeSession = {
+  manualFile: File
+  metadata: PdfMetadata
+  savedAt: string
+  stepDetectionResult: StepCalloutDetectionResult | null
+  calloutMultipliers: StepCalloutMultiplierMap
+  checkedBagRowIds: string[]
+  checkedBagCompletionAnchors: StepCalloutBagCompletionAnchor[]
+}
+
+export async function createPdfIntakeSessionFile({
+  calloutMultipliers,
+  checkedBagCompletionAnchors,
+  checkedBagRowIds,
   manualFile,
   metadata,
-  partPreviewByKey,
-  partsListResult,
-  stepCalloutMultipliers = {},
-  stepCalloutResult = null,
-}: BaggingSessionFileInput) {
-  return {
-    analysis: {
-      attemptedPartPreviewKeys: [...attemptedPartPreviewKeys],
-      extractorVersion: partsListResult?.extractorVersion ?? null,
-      jobSnapshot,
-      metadata,
-      partPreviewEntries: [...partPreviewByKey.entries()],
-      partsListResult,
-      stepCalloutDetectorVersion: stepCalloutResult?.detectorVersion ?? null,
-      stepCalloutMultiplierEntries: createStepCalloutMultiplierEntries(stepCalloutMultipliers, stepCalloutResult),
-      stepCalloutResult,
-    },
-    createdAt: new Date().toISOString(),
-    currentExtractorVersion,
-    kind: baggingSessionFileKind,
-    manual: {
-      dataBase64: encodeBytesToBase64(new Uint8Array(await manualFile.arrayBuffer())),
-      fileName: manualFile.name,
-      lastModified: manualFile.lastModified,
-      sizeBytes: manualFile.size,
-      type: manualFile.type || "application/pdf",
-    },
-    partCompletion: {
-      checkedRowIds: [...checkedRowIds],
-    },
-    stepBagCompletion: {
-      checkedRowIds: createStepBagCheckedRowIdEntries({
-        checkedRowIds: checkedStepBagRowIds,
-        partsListResult,
-        stepCalloutMultipliers,
-        stepCalloutResult,
-      }),
-    },
-    version: baggingSessionFileVersion,
-  } satisfies BaggingSessionFile
-}
-
-export async function restoreBaggingSessionFile(file: File): Promise<RestoredBaggingSession> {
-  const parsed = JSON.parse(await file.text()) as unknown
-  assertBaggingSessionFile(parsed)
-
-  const manualBytes = decodeBase64ToBytes(parsed.manual.dataBase64)
-  const manualFile = new File([manualBytes], parsed.manual.fileName, {
-    lastModified: parsed.manual.lastModified,
-    type: parsed.manual.type || "application/pdf",
-  })
-  const stepCalloutResult = getRestorableStepCalloutResult(parsed.analysis.stepCalloutResult ?? null)
-  const stepCalloutMultipliers = restoreStepCalloutMultipliers(
-    parsed.analysis.stepCalloutMultiplierEntries ?? [],
-    stepCalloutResult,
+  stepDetectionResult,
+}: {
+  calloutMultipliers?: StepCalloutMultiplierMap | null
+  checkedBagCompletionAnchors?: StepCalloutBagCompletionAnchor[] | null
+  checkedBagRowIds?: string[] | null
+  manualFile: File
+  metadata: PdfMetadata
+  stepDetectionResult?: StepCalloutDetectionResult | null
+}): Promise<Blob> {
+  const validation = validatePdfFile(manualFile)
+  if (!validation.ok) {
+    throw validation.error
+  }
+  const normalizedMultipliers = sanitizeCalloutMultipliers(calloutMultipliers)
+  const normalizedCheckedRowIds = sanitizeCheckedBagRowIds(checkedBagRowIds)
+  const normalizedCompletionAnchors = sanitizeBagCompletionAnchors(
+    checkedBagCompletionAnchors,
   )
 
-  return {
-    attemptedPartPreviewKeys: new Set(parsed.analysis.attemptedPartPreviewKeys),
-    checkedRowIds: new Set(parsed.partCompletion.checkedRowIds),
-    checkedStepBagRowIds: restoreStepBagCheckedRowIds({
-      checkedRowIds: parsed.stepBagCompletion?.checkedRowIds ?? [],
-      partsListResult: parsed.analysis.partsListResult,
-      stepCalloutMultipliers,
-      stepCalloutResult,
-    }),
-    jobSnapshot: parsed.analysis.jobSnapshot,
-    manualFile,
-    metadata: parsed.analysis.metadata,
-    partPreviewByKey: new Map(parsed.analysis.partPreviewEntries),
-    partsListResult: parsed.analysis.partsListResult,
-    savedExtractorVersion: parsed.analysis.extractorVersion,
-    savedStepCalloutDetectorVersion: parsed.analysis.stepCalloutDetectorVersion ?? null,
-    stepCalloutMultipliers,
-    stepCalloutResult,
+  const session: PdfIntakeSessionFile = {
+    kind: SESSION_KIND,
+    version: SESSION_VERSION,
+    savedAt: new Date().toISOString(),
+    manual: {
+      fileName: manualFile.name,
+      mimeType: manualFile.type || "application/pdf",
+      sizeBytes: manualFile.size,
+      lastModified: manualFile.lastModified,
+      dataBase64: arrayBufferToBase64(await readFileAsArrayBuffer(manualFile)),
+    },
+    metadata,
+    ...(stepDetectionResult
+      ? { stepDetectionResult: stripRuntimePreviewObjectUrls(stepDetectionResult) }
+      : {}),
+    ...(hasCalloutMultipliers(normalizedMultipliers)
+      ? { calloutMultipliers: normalizedMultipliers }
+      : {}),
+    ...(normalizedCheckedRowIds.length > 0
+      ? { checkedBagRowIds: normalizedCheckedRowIds }
+      : {}),
+    ...(normalizedCompletionAnchors.length > 0
+      ? { checkedBagCompletionAnchors: normalizedCompletionAnchors }
+      : {}),
+  }
+
+  return new Blob([JSON.stringify(session, null, 2)], {
+    type: "application/json",
+  })
+}
+
+export async function restorePdfIntakeSessionFile(
+  sessionFile: File,
+): Promise<RestoredPdfIntakeSession> {
+  try {
+    const parsed = JSON.parse(await readFileAsText(sessionFile)) as unknown
+    const session = parseSession(parsed)
+    const manualBytes = base64ToBytes(session.manual.dataBase64)
+    const manualBuffer = manualBytes.buffer.slice(
+      manualBytes.byteOffset,
+      manualBytes.byteOffset + manualBytes.byteLength,
+    ) as ArrayBuffer
+    const manualBlob = new Blob([manualBuffer], {
+      type: session.manual.mimeType || "application/pdf",
+    })
+    const manualFile = new File([manualBlob], session.manual.fileName, {
+      type: session.manual.mimeType || "application/pdf",
+      lastModified: session.manual.lastModified,
+    })
+    const validation = validatePdfFile(manualFile)
+
+    if (!validation.ok) {
+      throw validation.error
+    }
+
+    return {
+      manualFile,
+      metadata: session.metadata,
+      savedAt: session.savedAt,
+      stepDetectionResult: session.stepDetectionResult ?? null,
+      calloutMultipliers: session.calloutMultipliers ?? {},
+      checkedBagRowIds: session.checkedBagRowIds ?? [],
+      checkedBagCompletionAnchors: session.checkedBagCompletionAnchors ?? [],
+    }
+  } catch (error) {
+    throw normalizeSessionError(error)
   }
 }
 
-export function isRestoredAnalysisCurrent(
-  session: Pick<RestoredBaggingSession, "partsListResult" | "savedExtractorVersion">,
-  currentExtractorVersion: string,
-) {
-  return (
-    !session.partsListResult ||
-    (
-      session.savedExtractorVersion === currentExtractorVersion &&
-      Boolean(session.partsListResult.normalization)
-    )
-  )
-}
-
-export function isRestoredStepAnalysisCurrent(
-  session: Pick<RestoredBaggingSession, "savedStepCalloutDetectorVersion" | "stepCalloutResult">,
-  currentStepCalloutDetectorVersion: string,
-) {
-  return Boolean(
-    isRestorableStepCalloutResult(session.stepCalloutResult) &&
-      session.stepCalloutResult.detectorVersion === currentStepCalloutDetectorVersion &&
-      session.savedStepCalloutDetectorVersion === currentStepCalloutDetectorVersion,
-  )
-}
-
-export function getBaggingSessionDownloadName(manualName: string | null | undefined) {
-  const baseName = (manualName || "bag-it-session")
+export function getSessionDownloadName(fileName: string): string {
+  const baseName = fileName
     .replace(/\.pdf$/i, "")
     .replace(/[^a-z0-9._-]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80)
 
-  return `${baseName || "bag-it-session"}.bagit.json`
+  return `${baseName || "manual"}.bagit-session.json`
 }
 
-function restoreStepCalloutMultipliers(entries: unknown, resultValue: unknown): StepCalloutMultiplierMap {
-  const result = getRestorableStepCalloutResult(resultValue)
-  return restoreStepCalloutMultiplierEntries(entries, result)
-}
-
-function createStepBagCheckedRowIdEntries({
-  checkedRowIds,
-  partsListResult,
-  stepCalloutMultipliers,
-  stepCalloutResult,
-}: {
-  checkedRowIds: ReadonlySet<string>
-  partsListResult: PartsListPdfExtractionResult | null
-  stepCalloutMultipliers: StepCalloutMultiplierMap
-  stepCalloutResult: StepCalloutDetectionResult | null
-}) {
-  if (!stepCalloutResult || checkedRowIds.size === 0) {
-    return []
+function parseSession(value: unknown): PdfIntakeSessionFile {
+  if (!isRecord(value)) {
+    throw malformedSession()
   }
 
-  const validRowIds = getStepCalloutBagChecklistRowIds(stepCalloutResult, {
-    calloutMultipliers: stepCalloutMultipliers,
-    inventoryPartCount: getPartsListTotalQuantity(partsListResult),
-  })
-
-  return [...checkedRowIds]
-    .filter((rowId) => validRowIds.has(rowId))
-    .sort((left, right) => left.localeCompare(right))
-}
-
-function restoreStepBagCheckedRowIds({
-  checkedRowIds,
-  partsListResult,
-  stepCalloutMultipliers,
-  stepCalloutResult,
-}: {
-  checkedRowIds: unknown
-  partsListResult: PartsListPdfExtractionResult | null
-  stepCalloutMultipliers: StepCalloutMultiplierMap
-  stepCalloutResult: StepCalloutDetectionResult | null
-}) {
-  if (!Array.isArray(checkedRowIds)) {
-    return new Set<string>()
+  if (value.kind !== SESSION_KIND || value.version !== SESSION_VERSION) {
+    throw malformedSession()
   }
 
-  return new Set(createStepBagCheckedRowIdEntries({
-    checkedRowIds: new Set(checkedRowIds.filter((rowId): rowId is string => typeof rowId === "string")),
-    partsListResult,
-    stepCalloutMultipliers,
-    stepCalloutResult,
-  }))
-}
-
-function getPartsListTotalQuantity(result: PartsListPdfExtractionResult | null) {
-  return result ? result.normalization?.totalQuantity ?? result.rows.reduce((sum, row) => sum + row.quantity, 0) : null
-}
-
-function assertBaggingSessionFile(value: unknown): asserts value is BaggingSessionFile {
-  if (!value || typeof value !== "object") {
-    throw new Error("Choose a valid Bag It session file.")
-  }
-
-  const session = value as Partial<BaggingSessionFile>
   if (
-    session.kind !== baggingSessionFileKind ||
-    session.version !== baggingSessionFileVersion ||
-    !session.manual ||
-    typeof session.manual.dataBase64 !== "string" ||
-    typeof session.manual.fileName !== "string" ||
-    !session.analysis ||
-    !Array.isArray(session.analysis.attemptedPartPreviewKeys) ||
-    !Array.isArray(session.analysis.partPreviewEntries) ||
-    !session.partCompletion ||
-    !Array.isArray(session.partCompletion.checkedRowIds)
+    typeof value.savedAt !== "string" ||
+    !isRecord(value.manual) ||
+    !isRecord(value.metadata)
   ) {
-    throw new Error("Choose a valid Bag It session file.")
+    throw malformedSession()
+  }
+
+  const manual = value.manual
+  const metadata = value.metadata
+
+  if (
+    typeof manual.fileName !== "string" ||
+    typeof manual.mimeType !== "string" ||
+    typeof manual.sizeBytes !== "number" ||
+    typeof manual.lastModified !== "number" ||
+    typeof manual.dataBase64 !== "string" ||
+    typeof metadata.fileName !== "string" ||
+    typeof metadata.sizeBytes !== "number" ||
+    typeof metadata.pageCount !== "number" ||
+    (metadata.title !== null && typeof metadata.title !== "string") ||
+    (metadata.author !== null && typeof metadata.author !== "string")
+  ) {
+    throw malformedSession()
+  }
+
+  let stepDetectionResult: StepCalloutDetectionResult | undefined
+  const hasStepDetectionResult = Object.prototype.hasOwnProperty.call(value, "stepDetectionResult")
+
+  if (hasStepDetectionResult) {
+    if (!isStepCalloutDetectionResult(value.stepDetectionResult)) {
+      throw malformedSession()
+    }
+
+    stepDetectionResult = value.stepDetectionResult
+  }
+
+  return {
+    kind: SESSION_KIND,
+    version: SESSION_VERSION,
+    savedAt: value.savedAt,
+    manual: {
+      fileName: manual.fileName,
+      mimeType: manual.mimeType,
+      sizeBytes: manual.sizeBytes,
+      lastModified: manual.lastModified,
+      dataBase64: manual.dataBase64,
+    },
+    metadata: {
+      fileName: metadata.fileName,
+      sizeBytes: metadata.sizeBytes,
+      pageCount: metadata.pageCount,
+      title: metadata.title,
+      author: metadata.author,
+    },
+    ...(stepDetectionResult
+      ? { stepDetectionResult }
+      : {}),
+    calloutMultipliers: sanitizeCalloutMultipliers(value.calloutMultipliers),
+    checkedBagRowIds: sanitizeCheckedBagRowIds(value.checkedBagRowIds),
+    checkedBagCompletionAnchors: sanitizeBagCompletionAnchors(
+      value.checkedBagCompletionAnchors,
+    ),
   }
 }
 
-function getRestorableStepCalloutResult(value: unknown): StepCalloutDetectionResult | null {
-  return isRestorableStepCalloutResult(value) ? value : null
-}
-
-function isRestorableStepCalloutResult(value: unknown): value is StepCalloutDetectionResult {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const result = value as Partial<StepCalloutDetectionResult>
-  return (
-    typeof result.detectorVersion === "string" &&
-    typeof result.pageCount === "number" &&
-    (typeof result.pageLimit === "number" || result.pageLimit === null) &&
-    Array.isArray(result.scannedPageNumbers) &&
-    Array.isArray(result.skippedBomPageNumbers) &&
-    (result.status === "detected" || result.status === "empty") &&
-    Array.isArray(result.callouts) &&
-    result.callouts.every(isRestorableStepCallout)
-  )
-}
-
-function isRestorableStepCallout(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const callout = value as Partial<StepCalloutDetectionResult["callouts"][number]>
-  return (
-    typeof callout.id === "string" &&
-    typeof callout.stepIndex === "number" &&
-    Number.isFinite(callout.stepIndex) &&
-    typeof callout.pageNumber === "number" &&
-    typeof callout.indexOnPage === "number" &&
-    isSessionCrop(callout.crop) &&
-    isSessionStepRegion(callout.sourceRegion) &&
-    isSessionStepImage(callout.sourceImage) &&
-    Array.isArray(callout.partItems) &&
-    callout.partItems.every(isRestorableStepCalloutPartItem)
-  )
-}
-
-function isRestorableStepCalloutPartItem(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const item = value as Partial<StepCalloutDetectionResult["callouts"][number]["partItems"][number]>
-  return (
-    typeof item.id === "string" &&
-    typeof item.indexOnCallout === "number" &&
-    isSessionCrop(item.partCrop) &&
-    isSessionStepRegion(item.partRegion) &&
-    isSessionStepRegion(item.sourceRegion) &&
-    Boolean(item.detectedColor) &&
-    typeof item.detectedColor?.name === "string" &&
-    typeof item.detectedColor?.hex === "string" &&
-    typeof item.detectedColor?.confidence === "number" &&
-    Boolean(item.quantity) &&
-    typeof item.quantity?.confidence === "number" &&
-    (typeof item.quantity?.value === "number" || item.quantity?.value === null) &&
-    Boolean(item.quantityLabel) &&
-    isSessionCrop(item.quantityLabel?.crop) &&
-    isSessionStepRegion(item.quantityLabel?.region)
-  )
-}
-
-function isSessionCrop(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const crop = value as { dataUrl?: unknown; height?: unknown; width?: unknown }
-  return typeof crop.dataUrl === "string" && typeof crop.height === "number" && typeof crop.width === "number"
-}
-
-function isSessionStepRegion(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const region = value as { height?: unknown; unit?: unknown; width?: unknown; x?: unknown; y?: unknown }
-  return (
-    region.unit === "step_pixel" &&
-    typeof region.height === "number" &&
-    typeof region.width === "number" &&
-    typeof region.x === "number" &&
-    typeof region.y === "number"
-  )
-}
-
-function isSessionStepImage(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const image = value as { height?: unknown; unit?: unknown; width?: unknown }
-  return image.unit === "step_pixel" && typeof image.height === "number" && typeof image.width === "number"
-}
-
-function encodeBytesToBase64(bytes: Uint8Array) {
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 8192
   let binary = ""
-  const chunkSize = 0x8000
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
   }
 
   return btoa(binary)
 }
 
-function decodeBase64ToBytes(base64: string) {
+function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === "function") {
+    return file.arrayBuffer()
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.addEventListener("load", () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result)
+        return
+      }
+
+      reject(malformedSession())
+    })
+    reader.addEventListener("error", () => reject(reader.error ?? malformedSession()))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === "function") {
+    return file.text()
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result)
+        return
+      }
+
+      reject(malformedSession())
+    })
+    reader.addEventListener("error", () => reject(reader.error ?? malformedSession()))
+    reader.readAsText(file)
+  })
+}
+
+function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
+
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index)
   }
 
   return bytes
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function malformedSession(): PdfIntakeError {
+  return new PdfIntakeError(
+    "unknown",
+    "Session file could not be read. Choose a Bag It session file.",
+  )
+}
+
+function normalizeSessionError(error: unknown): PdfIntakeError {
+  if (error instanceof SyntaxError) {
+    return malformedSession()
+  }
+
+  return normalizePdfIntakeError(error)
 }

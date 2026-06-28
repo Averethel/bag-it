@@ -1,0 +1,12 @@
+{
+  "name": "@bag-it/step-callouts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bag-it/raster-quantity-labels": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

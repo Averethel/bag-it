@@ -11,7 +11,9 @@
     {
       "customType": "regex",
       "managerFilePatterns": ["/^\\.circleci\\/config\\.yml$/"],
-      "matchStrings": ["VERCEL_CLI_VERSION: (?<currentValue>[^\\s]+)"],
+      "matchStrings": [
+        "vercel_cli_version:\\n\\s+type: string\\n\\s+default: \"(?<currentValue>[^\"]+)\""
+      ],
       "depNameTemplate": "vercel",
       "datasourceTemplate": "npm"
     }
@@ -31,9 +33,20 @@
       "automerge": true
     },
     {
+      "description": "Group workspace packages together.",
+      "groupName": "bag-it workspace packages",
+      "matchPackageNames": ["/^@bag-it\\//"]
+    },
+    {
       "description": "Group the framework runtime together.",
       "groupName": "next and react",
-      "matchPackageNames": ["next", "eslint-config-next", "react", "react-dom"]
+      "matchPackageNames": [
+        "next",
+        "eslint-config-next",
+        "react",
+        "react-dom",
+        "next-themes"
+      ]
     },
     {
       "description": "Group Chakra UI packages together.",
@@ -41,15 +54,20 @@
       "matchPackageNames": ["@chakra-ui/react", "@chakra-ui/cli", "@emotion/react"]
     },
     {
-      "description": "Group recognition and PDF runtime packages together.",
+      "description": "Group manual analysis runtime packages together.",
       "groupName": "manual analysis runtime",
-      "matchPackageNames": ["@paddleocr/paddleocr-js", "pdfjs-dist"]
+      "matchPackageNames": [
+        "@huggingface/transformers",
+        "onnxruntime-web",
+        "pdfjs-dist",
+        "three"
+      ]
     },
     {
       "description": "Group unit and browser test tooling together.",
       "groupName": "test tooling",
       "matchPackageNames": [
-        "playwright",
+        "@playwright/test",
         "@testing-library/**",
         "jsdom",
         "vitest"
@@ -59,7 +77,7 @@
       "description": "Group CI runtime images together.",
       "groupName": "ci runtime images",
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["cimg/node"]
+      "matchPackageNames": ["cimg/node", "mcr.microsoft.com/playwright"]
     }
   ]
 }

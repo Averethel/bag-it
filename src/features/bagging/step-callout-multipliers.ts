@@ -1,117 +1,79 @@
-export type StepCalloutMultiplierMap = Readonly<Record<string, number>>
+import type { StepCalloutDetectionResult } from "@/features/steps/step-detection-contracts"
 
-type StepCalloutMultiplierScope = {
-  callouts: readonly {
-    id: string
-  }[]
-}
+export type StepCalloutMultiplierMap = Record<string, number>
 
-export function normalizeStepCalloutMultiplier(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 1
-  }
+export const DEFAULT_STEP_CALLOUT_MULTIPLIER = 1
+export const MAX_STEP_CALLOUT_MULTIPLIER = 99
 
-  return Math.max(1, Math.floor(value))
-}
-
-export function getStepCalloutMultiplier(
+export function calloutMultiplierFor(
+  multipliers: StepCalloutMultiplierMap,
   calloutId: string,
-  calloutMultipliers: StepCalloutMultiplierMap = {},
-) {
-  return normalizeStepCalloutMultiplier(calloutMultipliers[calloutId])
+): number {
+  return normalizeStepCalloutMultiplier(multipliers[calloutId])
 }
 
-export function setStepCalloutMultiplier(
-  current: StepCalloutMultiplierMap,
+export function setCalloutMultiplier(
+  multipliers: StepCalloutMultiplierMap,
   calloutId: string,
-  multiplier: unknown,
+  multiplier: number,
 ): StepCalloutMultiplierMap {
-  const nextMultiplier = normalizeStepCalloutMultiplier(multiplier)
-  const currentMultiplier = getStepCalloutMultiplier(calloutId, current)
-  if (nextMultiplier === currentMultiplier) {
-    return current
-  }
+  const normalized = normalizeStepCalloutMultiplier(multiplier)
+  const next = { ...multipliers }
 
-  const next = { ...current }
-  if (nextMultiplier <= 1) {
+  if (normalized === DEFAULT_STEP_CALLOUT_MULTIPLIER) {
     delete next[calloutId]
-  } else {
-    next[calloutId] = nextMultiplier
+    return next
   }
 
+  next[calloutId] = normalized
   return next
 }
 
-export function pruneStepCalloutMultipliers(
-  current: StepCalloutMultiplierMap,
-  result: StepCalloutMultiplierScope | null,
-): StepCalloutMultiplierMap {
-  const entries = Object.entries(current)
-  if (entries.length === 0) {
-    return current
+export function normalizeStepCalloutMultiplier(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_STEP_CALLOUT_MULTIPLIER
   }
-  if (!result) {
+
+  return Math.max(
+    DEFAULT_STEP_CALLOUT_MULTIPLIER,
+    Math.min(MAX_STEP_CALLOUT_MULTIPLIER, Math.round(value)),
+  )
+}
+
+export function sanitizeCalloutMultipliers(value: unknown): StepCalloutMultiplierMap {
+  if (!isRecord(value)) {
     return {}
   }
 
-  const calloutIds = getStepCalloutIds(result)
-  const next: Record<string, number> = {}
-  let changed = false
-
-  for (const [calloutId, multiplier] of entries) {
-    const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
-    if (!calloutIds.has(calloutId) || normalizedMultiplier <= 1) {
-      changed = true
-      continue
-    }
-
-    next[calloutId] = normalizedMultiplier
-    if (normalizedMultiplier !== multiplier) {
-      changed = true
-    }
-  }
-
-  return changed || Object.keys(next).length !== entries.length ? next : current
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([calloutId, multiplier]) => [
+        calloutId,
+        normalizeStepCalloutMultiplier(multiplier),
+      ] as const)
+      .filter(([_calloutId, multiplier]) => multiplier !== DEFAULT_STEP_CALLOUT_MULTIPLIER),
+  )
 }
 
-export function createStepCalloutMultiplierEntries(
+export function pruneCalloutMultipliers(
   multipliers: StepCalloutMultiplierMap,
-  result: StepCalloutMultiplierScope | null,
-): [string, number][] {
-  if (!result) {
-    return []
-  }
-
-  return Object.entries(pruneStepCalloutMultipliers(multipliers, result))
-    .sort(([leftCalloutId], [rightCalloutId]) => leftCalloutId.localeCompare(rightCalloutId))
-}
-
-export function restoreStepCalloutMultiplierEntries(
-  entries: unknown,
-  result: StepCalloutMultiplierScope | null,
+  result: StepCalloutDetectionResult | null,
 ): StepCalloutMultiplierMap {
-  if (!result || !Array.isArray(entries)) {
+  if (!result) {
     return {}
   }
 
-  const calloutIds = getStepCalloutIds(result)
-  const multipliers: Record<string, number> = {}
+  const calloutIds = new Set(result.callouts.map((callout) => callout.id))
 
-  for (const entry of entries) {
-    if (!Array.isArray(entry) || entry.length !== 2) {
-      continue
-    }
-
-    const [calloutId, multiplier] = entry
-    const normalizedMultiplier = normalizeStepCalloutMultiplier(multiplier)
-    if (typeof calloutId === "string" && calloutIds.has(calloutId) && normalizedMultiplier > 1) {
-      multipliers[calloutId] = normalizedMultiplier
-    }
-  }
-
-  return multipliers
+  return Object.fromEntries(
+    Object.entries(multipliers).filter(([calloutId]) => calloutIds.has(calloutId)),
+  )
 }
 
-function getStepCalloutIds(result: StepCalloutMultiplierScope) {
-  return new Set(result.callouts.map((callout) => callout.id))
+export function hasCalloutMultipliers(multipliers: StepCalloutMultiplierMap): boolean {
+  return Object.keys(multipliers).length > 0
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
 }

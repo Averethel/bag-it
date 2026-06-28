@@ -1,0 +1,1254 @@
+{
+  "schemaVersion": 2,
+  "caseId": "manual-010",
+  "callouts": [
+    {
+      "ordinal": 0,
+      "pageNumber": 1,
+      "crop": {
+        "region": {
+          "x": 89,
+          "y": 41,
+          "width": 333,
+          "height": 172
+        }
+      }
+    },
+    {
+      "ordinal": 1,
+      "pageNumber": 1,
+      "crop": {
+        "region": {
+          "x": 470,
+          "y": 41,
+          "width": 195,
+          "height": 104
+        }
+      }
+    },
+    {
+      "ordinal": 2,
+      "pageNumber": 2,
+      "crop": {
+        "region": {
+          "x": 89,
+          "y": 41,
+          "width": 269,
+          "height": 130
+        }
+      }
+    },
+    {
+      "ordinal": 3,
+      "pageNumber": 2,
+      "crop": {
+        "region": {
+          "x": 470,
+          "y": 41,
+          "width": 281,
+          "height": 110
+        }
+      }
+    },
+    {
+      "ordinal": 4,
+      "pageNumber": 3,
+      "crop": {
+        "region": {
+          "x": 89,
+          "y": 41,
+          "width": 269,
+          "height": 174
+        }
+      }
+    },
+    {
+      "ordinal": 5,
+      "pageNumber": 3,
+      "crop": {
+        "region": {
+          "x": 470,
+          "y": 41,
+          "width": 231,
+          "height": 164
+        }
+      }
+    },
+    {
+      "ordinal": 6,
+      "pageNumber": 4,
+      "crop": {
+        "region": {
+          "x": 89,
+          "y": 41,
+          "width": 275,
+          "height": 104
+        }
+      }
+    },
+    {
+      "ordinal": 7,
+      "pageNumber": 4,
+      "crop": {
+        "region": {
+          "x": 470,
+          "y": 41,
+          "width": 315,
+          "height": 138
+        }
+      }
+    },
+    {
+      "ordinal": 8,
+      "pageNumber": 5,
+      "crop": {
+        "region": {
+          "x": 89,
+          "y": 41,
+          "width": 211,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 9,
+      "pageNumber": 5,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 227,
+          "height": 184
+        }
+      }
+    },
+    {
+      "ordinal": 10,
+      "pageNumber": 6,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 229,
+          "height": 204
+        }
+      }
+    },
+    {
+      "ordinal": 11,
+      "pageNumber": 6,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 283,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 12,
+      "pageNumber": 7,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 181,
+          "height": 92
+        }
+      }
+    },
+    {
+      "ordinal": 13,
+      "pageNumber": 7,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 149,
+          "height": 90
+        }
+      }
+    },
+    {
+      "ordinal": 14,
+      "pageNumber": 8,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 223,
+          "height": 80
+        }
+      }
+    },
+    {
+      "ordinal": 15,
+      "pageNumber": 8,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 259,
+          "height": 158
+        }
+      }
+    },
+    {
+      "ordinal": 16,
+      "pageNumber": 9,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 221,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 17,
+      "pageNumber": 9,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 259,
+          "height": 184
+        }
+      }
+    },
+    {
+      "ordinal": 18,
+      "pageNumber": 10,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 265,
+          "height": 172
+        }
+      }
+    },
+    {
+      "ordinal": 19,
+      "pageNumber": 10,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 213,
+          "height": 78
+        }
+      }
+    },
+    {
+      "ordinal": 20,
+      "pageNumber": 11,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 279,
+          "height": 96
+        }
+      }
+    },
+    {
+      "ordinal": 21,
+      "pageNumber": 11,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 227,
+          "height": 154
+        }
+      }
+    },
+    {
+      "ordinal": 22,
+      "pageNumber": 12,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 161,
+          "height": 108
+        }
+      }
+    },
+    {
+      "ordinal": 23,
+      "pageNumber": 12,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 245,
+          "height": 118
+        }
+      }
+    },
+    {
+      "ordinal": 24,
+      "pageNumber": 13,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 187,
+          "height": 118
+        }
+      }
+    },
+    {
+      "ordinal": 25,
+      "pageNumber": 13,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 193,
+          "height": 118
+        }
+      }
+    },
+    {
+      "ordinal": 26,
+      "pageNumber": 14,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 191,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 27,
+      "pageNumber": 14,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 207,
+          "height": 118
+        }
+      }
+    },
+    {
+      "ordinal": 28,
+      "pageNumber": 15,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 203,
+          "height": 104
+        }
+      }
+    },
+    {
+      "ordinal": 29,
+      "pageNumber": 15,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 223,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 30,
+      "pageNumber": 16,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 243,
+          "height": 166
+        }
+      }
+    },
+    {
+      "ordinal": 31,
+      "pageNumber": 16,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 171,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 32,
+      "pageNumber": 17,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 245,
+          "height": 136
+        }
+      }
+    },
+    {
+      "ordinal": 33,
+      "pageNumber": 17,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 281,
+          "height": 194
+        }
+      }
+    },
+    {
+      "ordinal": 34,
+      "pageNumber": 18,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 297,
+          "height": 96
+        }
+      }
+    },
+    {
+      "ordinal": 35,
+      "pageNumber": 18,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 191,
+          "height": 90
+        }
+      }
+    },
+    {
+      "ordinal": 36,
+      "pageNumber": 19,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 177,
+          "height": 84
+        }
+      }
+    },
+    {
+      "ordinal": 37,
+      "pageNumber": 19,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 139,
+          "height": 96
+        }
+      }
+    },
+    {
+      "ordinal": 38,
+      "pageNumber": 20,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 111,
+          "height": 66
+        }
+      }
+    },
+    {
+      "ordinal": 39,
+      "pageNumber": 20,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 243,
+          "height": 94
+        }
+      }
+    },
+    {
+      "ordinal": 40,
+      "pageNumber": 21,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 207,
+          "height": 98
+        }
+      }
+    },
+    {
+      "ordinal": 41,
+      "pageNumber": 21,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 97,
+          "height": 84
+        }
+      }
+    },
+    {
+      "ordinal": 42,
+      "pageNumber": 22,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 151,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 43,
+      "pageNumber": 22,
+      "crop": {
+        "region": {
+          "x": 665,
+          "y": 41,
+          "width": 136,
+          "height": 208
+        }
+      }
+    },
+    {
+      "ordinal": 44,
+      "pageNumber": 23,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 199,
+          "height": 100
+        }
+      }
+    },
+    {
+      "ordinal": 45,
+      "pageNumber": 23,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 147,
+          "height": 96
+        }
+      }
+    },
+    {
+      "ordinal": 46,
+      "pageNumber": 24,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 273,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 47,
+      "pageNumber": 24,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 153,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 48,
+      "pageNumber": 25,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 149,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 49,
+      "pageNumber": 25,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 299,
+          "height": 144
+        }
+      }
+    },
+    {
+      "ordinal": 50,
+      "pageNumber": 26,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 277,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 51,
+      "pageNumber": 26,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 147,
+          "height": 74
+        }
+      }
+    },
+    {
+      "ordinal": 52,
+      "pageNumber": 27,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 111,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 53,
+      "pageNumber": 27,
+      "crop": {
+        "region": {
+          "x": 372,
+          "y": 41,
+          "width": 128,
+          "height": 94
+        }
+      }
+    },
+    {
+      "ordinal": 54,
+      "pageNumber": 27,
+      "crop": {
+        "region": {
+          "x": 624,
+          "y": 41,
+          "width": 179,
+          "height": 106
+        }
+      }
+    },
+    {
+      "ordinal": 55,
+      "pageNumber": 28,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 142,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 56,
+      "pageNumber": 28,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 114,
+          "width": 116,
+          "height": 74
+        }
+      }
+    },
+    {
+      "ordinal": 57,
+      "pageNumber": 28,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 140,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 58,
+      "pageNumber": 28,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 372,
+          "width": 106,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 59,
+      "pageNumber": 29,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 140,
+          "height": 74
+        }
+      }
+    },
+    {
+      "ordinal": 60,
+      "pageNumber": 29,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 114,
+          "width": 114,
+          "height": 100
+        }
+      }
+    },
+    {
+      "ordinal": 61,
+      "pageNumber": 29,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 136,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 62,
+      "pageNumber": 29,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 372,
+          "width": 106,
+          "height": 80
+        }
+      }
+    },
+    {
+      "ordinal": 63,
+      "pageNumber": 30,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 175,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 64,
+      "pageNumber": 31,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 106,
+          "height": 138
+        }
+      }
+    },
+    {
+      "ordinal": 65,
+      "pageNumber": 31,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 114,
+          "width": 90,
+          "height": 124
+        }
+      }
+    },
+    {
+      "ordinal": 66,
+      "pageNumber": 31,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 94,
+          "height": 160
+        }
+      }
+    },
+    {
+      "ordinal": 67,
+      "pageNumber": 31,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 372,
+          "width": 108,
+          "height": 132
+        }
+      }
+    },
+    {
+      "ordinal": 68,
+      "pageNumber": 32,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 135,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 69,
+      "pageNumber": 33,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 130,
+          "height": 150
+        }
+      }
+    },
+    {
+      "ordinal": 70,
+      "pageNumber": 33,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 130,
+          "height": 188
+        }
+      }
+    },
+    {
+      "ordinal": 71,
+      "pageNumber": 34,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 196,
+          "height": 180
+        }
+      }
+    },
+    {
+      "ordinal": 72,
+      "pageNumber": 34,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 96,
+          "height": 118
+        }
+      }
+    },
+    {
+      "ordinal": 73,
+      "pageNumber": 35,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 133,
+          "height": 146
+        }
+      }
+    },
+    {
+      "ordinal": 74,
+      "pageNumber": 35,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 216,
+          "width": 111,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 75,
+      "pageNumber": 35,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 386,
+          "width": 83,
+          "height": 126
+        }
+      }
+    },
+    {
+      "ordinal": 76,
+      "pageNumber": 36,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 160,
+          "height": 154
+        }
+      }
+    },
+    {
+      "ordinal": 77,
+      "pageNumber": 36,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 162,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 78,
+      "pageNumber": 37,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 92,
+          "height": 74
+        }
+      }
+    },
+    {
+      "ordinal": 79,
+      "pageNumber": 37,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 114,
+          "width": 96,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 80,
+      "pageNumber": 37,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 94,
+          "height": 76
+        }
+      }
+    },
+    {
+      "ordinal": 81,
+      "pageNumber": 37,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 372,
+          "width": 124,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 82,
+      "pageNumber": 38,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 96,
+          "height": 74
+        }
+      }
+    },
+    {
+      "ordinal": 83,
+      "pageNumber": 38,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 114,
+          "width": 128,
+          "height": 72
+        }
+      }
+    },
+    {
+      "ordinal": 84,
+      "pageNumber": 38,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 372,
+          "width": 84,
+          "height": 70
+        }
+      }
+    },
+    {
+      "ordinal": 85,
+      "pageNumber": 38,
+      "crop": {
+        "region": {
+          "x": 422,
+          "y": 372,
+          "width": 96,
+          "height": 82
+        }
+      }
+    },
+    {
+      "ordinal": 86,
+      "pageNumber": 40,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 303,
+          "height": 96
+        }
+      }
+    },
+    {
+      "ordinal": 87,
+      "pageNumber": 40,
+      "crop": {
+        "region": {
+          "x": 41,
+          "y": 114,
+          "width": 188,
+          "height": 158
+        }
+      }
+    },
+    {
+      "ordinal": 88,
+      "pageNumber": 41,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 223,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 89,
+      "pageNumber": 41,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 215,
+          "height": 184
+        }
+      }
+    },
+    {
+      "ordinal": 90,
+      "pageNumber": 42,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 277,
+          "height": 188
+        }
+      }
+    },
+    {
+      "ordinal": 91,
+      "pageNumber": 42,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 247,
+          "height": 100
+        }
+      }
+    },
+    {
+      "ordinal": 92,
+      "pageNumber": 43,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 249,
+          "height": 92
+        }
+      }
+    },
+    {
+      "ordinal": 93,
+      "pageNumber": 43,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 143,
+          "height": 84
+        }
+      }
+    },
+    {
+      "ordinal": 94,
+      "pageNumber": 44,
+      "crop": {
+        "region": {
+          "x": 121,
+          "y": 41,
+          "width": 227,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 95,
+      "pageNumber": 44,
+      "crop": {
+        "region": {
+          "x": 502,
+          "y": 41,
+          "width": 181,
+          "height": 84
+        }
+      }
+    },
+    {
+      "ordinal": 96,
+      "pageNumber": 45,
+      "crop": {
+        "region": {
+          "x": 155,
+          "y": 41,
+          "width": 123,
+          "height": 100
+        }
+      }
+    },
+    {
+      "ordinal": 97,
+      "pageNumber": 45,
+      "crop": {
+        "region": {
+          "x": 536,
+          "y": 41,
+          "width": 123,
+          "height": 88
+        }
+      }
+    },
+    {
+      "ordinal": 98,
+      "pageNumber": 46,
+      "crop": {
+        "region": {
+          "x": 155,
+          "y": 41,
+          "width": 191,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 99,
+      "pageNumber": 46,
+      "crop": {
+        "region": {
+          "x": 536,
+          "y": 41,
+          "width": 193,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 100,
+      "pageNumber": 47,
+      "crop": {
+        "region": {
+          "x": 155,
+          "y": 41,
+          "width": 229,
+          "height": 102
+        }
+      }
+    },
+    {
+      "ordinal": 101,
+      "pageNumber": 47,
+      "crop": {
+        "region": {
+          "x": 536,
+          "y": 41,
+          "width": 181,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 102,
+      "pageNumber": 48,
+      "crop": {
+        "region": {
+          "x": 155,
+          "y": 41,
+          "width": 111,
+          "height": 86
+        }
+      }
+    },
+    {
+      "ordinal": 103,
+      "pageNumber": 48,
+      "crop": {
+        "region": {
+          "x": 536,
+          "y": 41,
+          "width": 145,
+          "height": 82
+        }
+      }
+    }
+  ]
+}

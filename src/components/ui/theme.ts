@@ -1,69 +1,94 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react"
 
-const bagItConfig = defineConfig({
-  strictTokens: true,
+const config = defineConfig({
   theme: {
     tokens: {
-      borderStyles: {
-        dashed: { value: "dashed" },
-      },
       colors: {
-        bagging: {
-          swatch: {
-            black: { value: "#1f2020" },
-            darkRed: { value: "#7f1d1d" },
-            lightBluishGray: { value: "#a9aaa6" },
-            tan: { value: "#d6b883" },
-          },
+        moss: {
+          50: { value: "#edf8ef" },
+          100: { value: "#d5ecd8" },
+          200: { value: "#a9dab0" },
+          400: { value: "#99d8a8" },
+          500: { value: "#18a84f" },
+          600: { value: "#11863f" },
+          700: { value: "#1e5f31" },
+          900: { value: "#12381f" },
+        },
+        paper: {
+          50: { value: "#f8faf7" },
+          100: { value: "#edf0eb" },
+          200: { value: "#d9ded5" },
+          800: { value: "#273026" },
+          900: { value: "#151a14" },
         },
       },
-      borders: {
-        bagging: {
-          accent: { value: "3px solid" },
-        },
+      fonts: {
+        heading: { value: "var(--font-geist-sans), sans-serif" },
+        body: { value: "var(--font-geist-sans), sans-serif" },
+        mono: { value: "var(--font-geist-mono), monospace" },
       },
-      lineHeights: {
-        bagging: {
-          hero: { value: "1.05" },
-        },
-      },
-      sizes: {
-        bagging: {
-          overviewMax: { value: "920px" },
-          panelMax: { value: "360px" },
-          sidebar: { value: "360px" },
-          pendingIcon: { value: "34px" },
-          partListMax: { value: "560px" },
-          zero: { value: "0" },
-        },
-      },
-      spacing: {
-        bagging: {
-          none: { value: "0" },
-        },
+      radii: {
+        panel: { value: "0.5rem" },
       },
     },
     semanticTokens: {
       colors: {
-        bagging: {
-          accent: { value: "#668c5a" },
-          border: { value: "#d9dfd1" },
-          borderStrong: { value: "#aeb8a8" },
-          done: { value: "#2f6b3d" },
-          iconBg: { value: "#e8efe2" },
-          iconFg: { value: "#33513b" },
-          imageBg: { value: "#eef1ea" },
-          muted: { value: "#6a7168" },
-          pageBg: { value: "#f7f8f5" },
-          rowBorder: { value: "#e0e5db" },
-          subtleBg: { value: "#fbfcf8" },
-          text: { value: "#20251f" },
+        "bagging.canvas": {
+          value: { base: "{colors.paper.50}", _dark: "{colors.paper.900}" },
+        },
+        "bagging.surface": {
+          value: { base: "white", _dark: "{colors.paper.800}" },
+        },
+        "bagging.surface.subtle": {
+          value: { base: "{colors.paper.100}", _dark: "{colors.gray.800}" },
+        },
+        "bagging.border": {
+          value: { base: "{colors.paper.200}", _dark: "{colors.gray.700}" },
+        },
+        "bagging.text": {
+          value: { base: "{colors.gray.900}", _dark: "{colors.gray.50}" },
+        },
+        "bagging.muted": {
+          value: { base: "{colors.gray.600}", _dark: "{colors.gray.400}" },
+        },
+        "bagging.action": {
+          value: { base: "{colors.moss.500}", _dark: "{colors.moss.200}" },
+        },
+        "bagging.action.disabled": {
+          value: { base: "{colors.moss.400}", _dark: "{colors.moss.900}" },
+        },
+        "bagging.action.subtle": {
+          value: { base: "{colors.moss.50}", _dark: "{colors.moss.900}" },
+        },
+        "bagging.warning": {
+          value: { base: "{colors.orange.600}", _dark: "{colors.orange.300}" },
+        },
+        "bagging.review.surface": {
+          value: { base: "{colors.orange.50}", _dark: "{colors.orange.950}" },
+        },
+        "bagging.review.surface.hover": {
+          value: { base: "{colors.orange.100}", _dark: "{colors.orange.900}" },
+        },
+        "bagging.review.border": {
+          value: { base: "{colors.orange.300}", _dark: "{colors.orange.400}" },
+        },
+        "bagging.review.border.subtle": {
+          value: { base: "{colors.orange.200}", _dark: "{colors.orange.400}" },
+        },
+        "bagging.preview": {
+          value: { base: "{colors.blue.50}", _dark: "{colors.blue.950}" },
+        },
+      },
+      shadows: {
+        "bagging.review.ring": {
+          value: {
+            base: "0 0 0 1px {colors.orange.300}",
+            _dark: "0 0 0 1px {colors.orange.400}",
+          },
         },
       },
     },
   },
 })
 
-export const bagItSystem = createSystem(defaultConfig, bagItConfig)
-
-export default bagItSystem
+export const system = createSystem(defaultConfig, config)

@@ -1,0 +1,109 @@
+{
+  "fixtureId": "noisy-false-positive",
+  "source": {
+    "sourceKind": "synthetic",
+    "sourceSpecPath": "tests/fixtures/steps/sources/step-fixture-sources.ts",
+    "generatedPdfPath": "tests/fixtures/steps/generated/noisy-false-positive.pdf",
+    "expectedPath": "tests/fixtures/steps/expected/noisy-false-positive.json",
+    "purpose": "false-positive pressure from callout-like decorations",
+    "browserE2eCandidate": false
+  },
+  "renderWidth": 1200,
+  "pageCount": 1,
+  "expectedScannedPageNumbers": [
+    1
+  ],
+  "expectedCallouts": [
+    {
+      "id": "noisy-real-callout",
+      "pageNumber": 1,
+      "indexOnPage": 0,
+      "sourceRegion": {
+        "x": 140,
+        "y": 224,
+        "width": 436,
+        "height": 240
+      },
+      "cropRegion": {
+        "x": 124,
+        "y": 208,
+        "width": 468,
+        "height": 272
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "noisy-real-blue",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "2x",
+            "value": 2
+          },
+          "quantityLabelRegion": {
+            "x": 326,
+            "y": 372,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 272,
+            "y": 276,
+            "width": 176,
+            "height": 80
+          },
+          "ldrawPartId": "3710-plate-1x4",
+          "imageSignatureId": "noisy-real-blue-signature"
+        }
+      ]
+    }
+  ],
+  "falsePositiveTraps": [
+    {
+      "id": "noisy-title-panel",
+      "pageNumber": 1,
+      "region": {
+        "x": 672,
+        "y": 192,
+        "width": 380,
+        "height": 132
+      },
+      "label": "blue title panel"
+    },
+    {
+      "id": "noisy-empty-box",
+      "pageNumber": 1,
+      "region": {
+        "x": 144,
+        "y": 640,
+        "width": 440,
+        "height": 180
+      },
+      "label": "empty callout-like box"
+    },
+    {
+      "id": "noisy-model-frame",
+      "pageNumber": 1,
+      "region": {
+        "x": 660,
+        "y": 600,
+        "width": 380,
+        "height": 352
+      },
+      "label": "model frame"
+    },
+    {
+      "id": "noisy-label-chip",
+      "pageNumber": 1,
+      "region": {
+        "x": 184,
+        "y": 1040,
+        "width": 216,
+        "height": 76
+      },
+      "label": "page label chip"
+    }
+  ],
+  "expectedBaggableRowCount": 2,
+  "expectedZeroPartCalloutCount": 0
+}

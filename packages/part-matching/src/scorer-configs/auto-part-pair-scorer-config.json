@@ -1,0 +1,404 @@
+{
+  "evidenceRules": [
+    {
+      "conditions": [
+        {
+          "featureName": "nearConfidence",
+          "operator": "gt",
+          "threshold": -1
+        }
+      ]
+    }
+  ],
+  "featureNames": [
+    "alignedAlpha8Distance",
+    "alignedAlpha8Overlap",
+    "alignedEdge8Distance",
+    "alignedLuma8Distance",
+    "alignmentScaleDelta",
+    "alignmentShiftDistance",
+    "alpha32Distance",
+    "alpha32ShiftDistance",
+    "alpha32ShiftRatio",
+    "alphaChamferDistance",
+    "alphaChamferShiftDistance",
+    "alphaChamferShiftRatio",
+    "alphaCorrelation",
+    "alphaDistance",
+    "alphaEdge32Distance",
+    "alphaEdgeDistance",
+    "alphaOrientationDistance",
+    "alphaShiftDistance",
+    "alphaShiftRatio",
+    "areaRatio",
+    "aspectRatio",
+    "centerDistance",
+    "coverageDelta",
+    "leftProfileDistance",
+    "lowerProfileDistance",
+    "lowerSegmentDelta",
+    "luma32Distance",
+    "luma32ShiftDistance",
+    "luma32ShiftRatio",
+    "lumaCorrelation",
+    "lumaDistance",
+    "lumaEdgeCorrelation",
+    "lumaEdgeDistance",
+    "lumaEdgeShiftDistance",
+    "lumaOrientationDistance",
+    "lumaShiftDistance",
+    "lumaShiftRatio",
+    "baseMatched",
+    "nearConfidence",
+    "baseProbability",
+    "profileMaxDistance",
+    "projectionDistance",
+    "rightProfileDistance",
+    "silhouetteDistance",
+    "silhouetteShiftDistance",
+    "silhouetteShiftRatio",
+    "tightAlpha32Distance",
+    "tightAlpha32ShiftDistance",
+    "tightAlpha32ShiftRatio",
+    "tightAlphaEdge32Distance",
+    "tightLuma32Distance",
+    "tightLuma32ShiftDistance",
+    "tightLuma32ShiftRatio",
+    "topPeakDelta",
+    "topProfileDistance",
+    "wideAlpha32ShiftDistance",
+    "wideAlpha32ShiftRatio",
+    "wideLuma32ShiftDistance",
+    "wideLuma32ShiftRatio",
+    "wideSilhouetteShiftDistance",
+    "wideSilhouetteShiftRatio"
+  ],
+  "intercept": -0.5328229933995272,
+  "kind": "linear",
+  "metadata": {
+    "correctionBurden": 0,
+    "falseGroups": 0,
+    "falsePositivePairs": 0,
+    "groupedRows": 211,
+    "hardNegativeFalsePositivePairs": 0,
+    "lane": "auto",
+    "matchedPositivePairs": 179,
+    "positivePairs": 1333,
+    "recall": 0.1342835708927232,
+    "runtimeGroupReplay": "134/1322 expected active pairs, 0 false groups, 0/201 wrong active grouped rows",
+    "strategyName": "score-threshold",
+    "trustedColorGateRequired": true,
+    "wrongRowMemberships": 0
+  },
+  "normalization": {
+    "alignedAlpha8Distance": {
+      "mean": 14.562279194501542,
+      "std": 7.954027154017212
+    },
+    "alignedAlpha8Overlap": {
+      "mean": 0.7996867974951779,
+      "std": 0.09632327400400073
+    },
+    "alignedEdge8Distance": {
+      "mean": 14.756777725141315,
+      "std": 7.505311805363066
+    },
+    "alignedLuma8Distance": {
+      "mean": 7.571016066610997,
+      "std": 3.0306342007404936
+    },
+    "alignmentScaleDelta": {
+      "mean": 0.10871659815005139,
+      "std": 0.042074648607405556
+    },
+    "alignmentShiftDistance": {
+      "mean": 0.006553935129851188,
+      "std": 0.030208137079674086
+    },
+    "alpha32Distance": {
+      "mean": 16.534309410730344,
+      "std": 8.47177836590222
+    },
+    "alpha32ShiftDistance": {
+      "mean": 13.71954791077852,
+      "std": 8.076577088734291
+    },
+    "alpha32ShiftRatio": {
+      "mean": 0.8262163872154744,
+      "std": 0.20173542123575658
+    },
+    "alphaChamferDistance": {
+      "mean": 12.146045659316997,
+      "std": 7.844055273131487
+    },
+    "alphaChamferShiftDistance": {
+      "mean": 9.69491957879184,
+      "std": 7.324047643732984
+    },
+    "alphaChamferShiftRatio": {
+      "mean": 0.807788431439222,
+      "std": 0.2055023334157033
+    },
+    "alphaCorrelation": {
+      "mean": 0.9015835289306597,
+      "std": 0.07397286086052399
+    },
+    "alphaDistance": {
+      "mean": 15.711910047854573,
+      "std": 8.563148716977015
+    },
+    "alphaEdge32Distance": {
+      "mean": 21.584022263216212,
+      "std": 7.135679772373644
+    },
+    "alphaEdgeDistance": {
+      "mean": 22.729079682682425,
+      "std": 9.718131044326721
+    },
+    "alphaOrientationDistance": {
+      "mean": 0.03041122110656654,
+      "std": 0.015056090250701162
+    },
+    "alphaShiftDistance": {
+      "mean": 13.96706485258222,
+      "std": 7.926615056475344
+    },
+    "alphaShiftRatio": {
+      "mean": 0.8973826567070341,
+      "std": 0.18674571016171163
+    },
+    "areaRatio": {
+      "mean": 1.23430071377883,
+      "std": 0.3038825354509099
+    },
+    "aspectRatio": {
+      "mean": 1.0942733754200356,
+      "std": 0.097962425528553
+    },
+    "centerDistance": {
+      "mean": 0.032082477087971364,
+      "std": 0.020698170228185157
+    },
+    "coverageDelta": {
+      "mean": 0.0270608552548718,
+      "std": 0.028558220325435556
+    },
+    "leftProfileDistance": {
+      "mean": 0.05975933538883173,
+      "std": 0.03649238521755292
+    },
+    "lowerProfileDistance": {
+      "mean": 0.06092947070914691,
+      "std": 0.043741182085764
+    },
+    "lowerSegmentDelta": {
+      "mean": 0.0017985611510791368,
+      "std": 0.04237129132874048
+    },
+    "luma32Distance": {
+      "mean": 11.32694645065198,
+      "std": 3.8977650569832107
+    },
+    "luma32ShiftDistance": {
+      "mean": 9.69233488767022,
+      "std": 3.521668875940224
+    },
+    "luma32ShiftRatio": {
+      "mean": 0.858132280970188,
+      "std": 0.15688576497560722
+    },
+    "lumaCorrelation": {
+      "mean": 0.3971245314803802,
+      "std": 0.24436266363585
+    },
+    "lumaDistance": {
+      "mean": 11.590893579779033,
+      "std": 4.2580972977460405
+    },
+    "lumaEdgeCorrelation": {
+      "mean": 0.7990113729438518,
+      "std": 0.08111419811185784
+    },
+    "lumaEdgeDistance": {
+      "mean": 14.342909935444501,
+      "std": 4.694737024010831
+    },
+    "lumaEdgeShiftDistance": {
+      "mean": 14.339836724370503,
+      "std": 4.688111621851498
+    },
+    "lumaOrientationDistance": {
+      "mean": 0.029118952694059022,
+      "std": 0.011603308930420034
+    },
+    "lumaShiftDistance": {
+      "mean": 10.342074889195786,
+      "std": 3.5893878235950334
+    },
+    "lumaShiftRatio": {
+      "mean": 0.9013753571563272,
+      "std": 0.13949152155107125
+    },
+    "baseMatched": {
+      "mean": 0.19270298047276466,
+      "std": 0.39442178158626046
+    },
+    "nearConfidence": {
+      "mean": 0.17341633201897805,
+      "std": 0.3336471609421879
+    },
+    "baseProbability": {
+      "mean": 0.34988959337350967,
+      "std": 0.4362065393042508
+    },
+    "profileMaxDistance": {
+      "mean": 0.08195122473449779,
+      "std": 0.042598707968227734
+    },
+    "projectionDistance": {
+      "mean": 0.048317591987334596,
+      "std": 0.027717071150353833
+    },
+    "rightProfileDistance": {
+      "mean": 0.05975826481671799,
+      "std": 0.03862967541977172
+    },
+    "silhouetteDistance": {
+      "mean": 18.924857489496684,
+      "std": 10.113220025617755
+    },
+    "silhouetteShiftDistance": {
+      "mean": 18.26786382347805,
+      "std": 9.803335809587571
+    },
+    "silhouetteShiftRatio": {
+      "mean": 0.9544708333040236,
+      "std": 0.13756772943263834
+    },
+    "tightAlpha32Distance": {
+      "mean": 34.16416186247431,
+      "std": 17.890728350892214
+    },
+    "tightAlpha32ShiftDistance": {
+      "mean": 28.501942837471095,
+      "std": 15.574178029670625
+    },
+    "tightAlpha32ShiftRatio": {
+      "mean": 0.8304911450143806,
+      "std": 0.19422378350720512
+    },
+    "tightAlphaEdge32Distance": {
+      "mean": 36.71479155960945,
+      "std": 13.769168017840753
+    },
+    "tightLuma32Distance": {
+      "mean": 26.43119098471223,
+      "std": 10.783255449661965
+    },
+    "tightLuma32ShiftDistance": {
+      "mean": 22.883630233090315,
+      "std": 10.038542004716023
+    },
+    "tightLuma32ShiftRatio": {
+      "mean": 0.861859423988836,
+      "std": 0.15665991561539186
+    },
+    "topPeakDelta": {
+      "mean": 0.008478931140801645,
+      "std": 0.09168990602847639
+    },
+    "topProfileDistance": {
+      "mean": 0.05976254710517313,
+      "std": 0.03932204470267063
+    },
+    "wideAlpha32ShiftDistance": {
+      "mean": 13.673192305530575,
+      "std": 7.976978714622742
+    },
+    "wideAlpha32ShiftRatio": {
+      "mean": 0.8248662557792947,
+      "std": 0.20298726301431746
+    },
+    "wideLuma32ShiftDistance": {
+      "mean": 9.575179504833633,
+      "std": 3.414103039595868
+    },
+    "wideLuma32ShiftRatio": {
+      "mean": 0.849953586538292,
+      "std": 0.15701836756537055
+    },
+    "wideSilhouetteShiftDistance": {
+      "mean": 18.23248099692679,
+      "std": 9.645647954612324
+    },
+    "wideSilhouetteShiftRatio": {
+      "mean": 0.9538943440204767,
+      "std": 0.13787980859550358
+    }
+  },
+  "threshold": 0.9946933059826942,
+  "version": "0.1.0-alpha.10",
+  "weights": {
+    "alignedAlpha8Distance": -0.02568635160485793,
+    "alignedAlpha8Overlap": 0.12456898632393101,
+    "alignedEdge8Distance": 0.003736728214925103,
+    "alignedLuma8Distance": -0.2368795876900262,
+    "alignmentScaleDelta": 0.00954836140283399,
+    "alignmentShiftDistance": -0.0650977954655308,
+    "alpha32Distance": 0.015119795603529928,
+    "alpha32ShiftDistance": 0.007928262338941599,
+    "alpha32ShiftRatio": -0.020266793687292978,
+    "alphaChamferDistance": -0.035508808213609765,
+    "alphaChamferShiftDistance": -0.04887084904741657,
+    "alphaChamferShiftRatio": -0.0756895573511148,
+    "alphaCorrelation": 0.0895417033444775,
+    "alphaDistance": -0.009982988050972825,
+    "alphaEdge32Distance": 0.07279634192742675,
+    "alphaEdgeDistance": -0.012103669215008791,
+    "alphaOrientationDistance": -0.10070661440570965,
+    "alphaShiftDistance": -0.005719243668597886,
+    "alphaShiftRatio": -0.0033969219497443667,
+    "areaRatio": -0.08552588350185059,
+    "aspectRatio": -0.05601907592206962,
+    "centerDistance": 0.0876521178355143,
+    "coverageDelta": 0.14795797262499213,
+    "leftProfileDistance": 0.11778598053868237,
+    "lowerProfileDistance": 0.03923685729196518,
+    "lowerSegmentDelta": 0.06147345518954897,
+    "luma32Distance": -0.1105801006434074,
+    "luma32ShiftDistance": -0.2605574475532375,
+    "luma32ShiftRatio": -0.2640477235470513,
+    "lumaCorrelation": 0.35269806893761374,
+    "lumaDistance": -0.09859441927326694,
+    "lumaEdgeCorrelation": -0.0811295536380259,
+    "lumaEdgeDistance": 0.028969847693860486,
+    "lumaEdgeShiftDistance": 0.028259367989962602,
+    "lumaOrientationDistance": -0.21331474676969328,
+    "lumaShiftDistance": -0.14305686746232998,
+    "lumaShiftRatio": -0.05244718943538875,
+    "baseMatched": 0.2923899621923015,
+    "nearConfidence": 0.12943108134650555,
+    "baseProbability": 0.9246861537136504,
+    "profileMaxDistance": 0.06067119586812235,
+    "projectionDistance": 0.0621219578194187,
+    "rightProfileDistance": -0.03366788968844319,
+    "silhouetteDistance": -0.028963916331798838,
+    "silhouetteShiftDistance": -0.02142998123156825,
+    "silhouetteShiftRatio": 0.05367470154258579,
+    "tightAlpha32Distance": -0.05457365431223156,
+    "tightAlpha32ShiftDistance": -0.051046895379360316,
+    "tightAlpha32ShiftRatio": -0.06254878931942566,
+    "tightAlphaEdge32Distance": 0.1155820798621514,
+    "tightLuma32Distance": -0.24314877691628095,
+    "tightLuma32ShiftDistance": -0.38148893633163616,
+    "tightLuma32ShiftRatio": -0.38538589253160294,
+    "topPeakDelta": -0.017567623475505407,
+    "topProfileDistance": 0.17843721848546482,
+    "wideAlpha32ShiftDistance": 0.004975268675886929,
+    "wideAlpha32ShiftRatio": -0.024038570691697386,
+    "wideLuma32ShiftDistance": -0.2658535275525556,
+    "wideLuma32ShiftRatio": -0.2565099673221274,
+    "wideSilhouetteShiftDistance": -0.02498565898886906,
+    "wideSilhouetteShiftRatio": 0.04941371364801598
+  }
+}
