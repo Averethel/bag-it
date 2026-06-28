@@ -139,8 +139,8 @@ Fresh target:
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm run build",
+  "installCommand": "corepack pnpm install --frozen-lockfile",
+  "buildCommand": "corepack pnpm run build",
   "git": {
     "deploymentEnabled": false
   }
@@ -173,14 +173,18 @@ Executors:
 
 Dependency install:
 
-- enable pnpm through Corepack
+- invoke pnpm through Corepack directly, for example
+  `corepack pnpm install --frozen-lockfile`, instead of running
+  `corepack enable`; CircleCI's Node image can have an unwritable global pnpm
+  shim at `/usr/local/bin/pnpm`
 - restore/save pnpm store by lockfile checksum
-- run `pnpm install --frozen-lockfile`
+- run `corepack pnpm install --frozen-lockfile --store-dir .pnpm-store`
 - persist the project workspace for downstream jobs
 
 Playwright dependency install:
 
-- install Node dependencies with `pnpm install --frozen-lockfile` in browser
+- install Node dependencies with
+  `corepack pnpm install --frozen-lockfile --store-dir .pnpm-store` in browser
   jobs when the persisted workspace is not enough
 - install or use real Google Chrome for bag-analysis browser jobs; bundled
   Playwright Chromium is allowed only for non-detector smoke checks
@@ -203,7 +207,7 @@ E2E:
 - read persisted deployment URL
 - set `PLAYWRIGHT_BASE_URL`
 - require Vercel automation bypass secret
-- run `pnpm run test:e2e:deployed`
+- run `corepack pnpm run test:e2e:deployed`
 - store `playwright-report` and `test-results`
 
 Renovate:

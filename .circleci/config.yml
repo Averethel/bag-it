@@ -23,8 +23,8 @@ commands:
   setup_pnpm:
     steps:
       - run:
-          name: Enable pnpm
-          command: corepack enable
+          name: Check Corepack
+          command: corepack --version
 
   restore_project:
     steps:
@@ -73,7 +73,7 @@ jobs:
             - pnpm-v1-
       - run:
           name: Install dependencies
-          command: pnpm install --frozen-lockfile --store-dir .pnpm-store
+          command: corepack pnpm install --frozen-lockfile --store-dir .pnpm-store
       - save_cache:
           key: pnpm-v1-{{ checksum "pnpm-lock.yaml" }}
           paths:
@@ -87,25 +87,25 @@ jobs:
     executor: node_24
     steps:
       - restore_project
-      - run: pnpm run lint
+      - run: corepack pnpm run lint
 
   typecheck:
     executor: node_24
     steps:
       - restore_project
-      - run: pnpm run typecheck
+      - run: corepack pnpm run typecheck
 
   unit_tests:
     executor: node_24
     steps:
       - restore_project
-      - run: pnpm run test
+      - run: corepack pnpm run test
 
   build:
     executor: node_24
     steps:
       - restore_project
-      - run: pnpm run build
+      - run: corepack pnpm run build
 
   e2e_fixture_gate:
     executor: playwright_browser
@@ -114,11 +114,10 @@ jobs:
       - run:
           name: Install Node dependencies
           command: |
-            corepack enable
-            pnpm install --frozen-lockfile --store-dir .pnpm-store
+            corepack pnpm install --frozen-lockfile --store-dir .pnpm-store
       - run:
           name: Run bag-analysis Playwright fixture gate
-          command: pnpm run test:e2e
+          command: corepack pnpm run test:e2e
       - store_artifacts:
           path: playwright-report
           destination: playwright-report
@@ -190,15 +189,14 @@ jobs:
       - run:
           name: Install Node dependencies
           command: |
-            corepack enable
-            pnpm install --frozen-lockfile --store-dir .pnpm-store
+            corepack pnpm install --frozen-lockfile --store-dir .pnpm-store
       - run:
           name: Run deployed Playwright validation
           command: |
             set -euo pipefail
             export PLAYWRIGHT_BASE_URL="$(tail -n 1 vercel-deployment-url)"
             export VERCEL_AUTOMATION_BYPASS_SECRET="${VERCEL_AUTOMATION_BYPASS_SECRET}"
-            pnpm run test:e2e:deployed
+            corepack pnpm run test:e2e:deployed
       - store_artifacts:
           path: playwright-report
           destination: playwright-report
