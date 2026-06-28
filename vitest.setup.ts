@@ -18,6 +18,24 @@ Object.defineProperty(window, "matchMedia", {
   }),
 })
 
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, "ResizeObserver", {
+  configurable: true,
+  writable: true,
+  value: TestResizeObserver,
+})
+
+Object.defineProperty(window, "ResizeObserver", {
+  configurable: true,
+  writable: true,
+  value: TestResizeObserver,
+})
+
 const originalConsoleError = console.error
 const originalConsoleWarn = console.warn
 let consoleIssues: string[] = []
