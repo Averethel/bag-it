@@ -17,6 +17,10 @@ export const ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
   maxActualExtraRatio: 0.025,
   minExpectedCoverage: 0.95,
 }
+export const UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
+  maxActualExtraRatio: 0.005,
+  minExpectedCoverage: 0.9,
+}
 
 export interface ExpectedCallout {
   ordinal: number
@@ -160,6 +164,7 @@ interface BrowserVisualCalloutPair {
 interface BrowserVisualPartPair {
   actualMask: SerializableAlphaMask | null
   actualRegion: Region | null
+  allowUntrustedReviewRasterDrift: boolean
   expected: ExpectedPartRow
   expectedCalloutOrdinal: number
   pageNumber: number | null
@@ -367,6 +372,10 @@ export async function compareBagAnalysisVisuals(
   const browserPartPairs: BrowserVisualPartPair[] = partPairs.map((pair) => ({
     actualMask: serializeActualAlphaMask(pair.actual),
     actualRegion: readActualPartRegion(pair.actual),
+    allowUntrustedReviewRasterDrift: untrustedColorDriftAllowed(
+      pair.expected.color,
+      normalizeActualPartColor(pair.actual.detectedColor),
+    ),
     expected: pair.expected,
     expectedCalloutOrdinal: pair.expectedCalloutOrdinal,
     pageNumber: pageByCalloutOrdinal.get(pair.expectedCalloutOrdinal) ?? null,
@@ -377,6 +386,7 @@ export async function compareBagAnalysisVisuals(
     alphaMaskPassCriteria: ALPHA_MASK_PASS_CRITERIA,
     calloutPairs: browserCalloutPairs,
     partPairs: browserPartPairs,
+    untrustedReviewAlphaMaskPassCriteria: UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA,
   })
 }
 
@@ -860,11 +870,13 @@ async function compareBagAnalysisVisualsInBrowser({
   alphaMaskPassCriteria,
   calloutPairs,
   partPairs,
+  untrustedReviewAlphaMaskPassCriteria,
 }: {
   alphaMaskComparatorSource: AlphaMaskComparatorSource
   alphaMaskPassCriteria: AlphaMaskPassCriteria
   calloutPairs: BrowserVisualCalloutPair[]
   partPairs: BrowserVisualPartPair[]
+  untrustedReviewAlphaMaskPassCriteria: AlphaMaskPassCriteria
 }): Promise<VisualComparisonFailure[]> {
   type BrowserRegion = Region
   type BrowserImage = {
@@ -955,7 +967,9 @@ async function compareBagAnalysisVisualsInBrowser({
       actualRegion,
       expectedMask,
       expectedRegion: pair.expected.partRegion,
-      passCriteria: alphaMaskPassCriteria,
+      passCriteria: pair.allowUntrustedReviewRasterDrift
+        ? untrustedReviewAlphaMaskPassCriteria
+        : alphaMaskPassCriteria,
       tolerance: partTolerance,
     })
 

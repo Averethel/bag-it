@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   ALPHA_MASK_PASS_CRITERIA,
+  UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA,
   compareAlphaMaskPixels,
   alphaMaskComparisonPasses,
   compareAlphaMasks,
@@ -388,6 +389,25 @@ describe("bag-analysis comparator primitives", () => {
       actualExtraRatio: 0,
       expectedCoverage: 0.9499,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+  })
+
+  it("uses a one-sided shrink allowance for CI untrusted review raster drift", () => {
+    expect(UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA).toEqual({
+      maxActualExtraRatio: 0.005,
+      minExpectedCoverage: 0.9,
+    })
+    expect(alphaMaskComparisonPasses({
+      actualExtraRatio: 0,
+      expectedCoverage: 0.9,
+    }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(true)
+    expect(alphaMaskComparisonPasses({
+      actualExtraRatio: 0.006,
+      expectedCoverage: 1,
+    }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraRatio: 0,
+      expectedCoverage: 0.899,
+    }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(false)
   })
 
   it("runs the shared alpha mask comparator from serialized source", () => {
