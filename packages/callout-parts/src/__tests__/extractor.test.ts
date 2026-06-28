@@ -1421,6 +1421,35 @@ describe("callout part extractor", () => {
       .toBe(0)
   })
 
+  it("clamps same-row shallow lower-label crop drift to the label split boundary", () => {
+    const labels = [
+      createTestQuantityLabel("3x", 52, 160),
+      createTestQuantityLabel("3x", 90, 160),
+    ]
+    const leftExpandedForeground = { height: 30, width: 80, x: 88, y: 132 }
+    const page = createLargeSyntheticPage((data, width) => {
+      paintLargeRegion(data, width, LARGE_CALLOUT_REGION, TEST_BLUE_PANEL)
+      paintLargeBorder(data, width, LARGE_CALLOUT_REGION, TEST_BLACK)
+      paintLargeRegion(data, width, leftExpandedForeground, TEST_GRAY_PART)
+    })
+    const partImage = createPartImageForLabel(
+      page,
+      createLargeCallout(),
+      createFlatBackgroundModel(TEST_BLUE_PANEL),
+      labels,
+      labels,
+      labels[1],
+    )
+
+    expect(partImage).not.toBeNull()
+    expect(partImage!.region.x).toBeGreaterThanOrEqual(80)
+    expect(partImage!.region.y + partImage!.region.height).toBeLessThanOrEqual(164)
+    expect(readMaskAlpha(partImage!.alphaMask, { x: labels[1].region.x - 2, y: 142 }, partImage!.region))
+      .toBe(0)
+    expect(readMaskAlpha(partImage!.alphaMask, { x: labels[1].region.x, y: 142 }, partImage!.region))
+      .toBeGreaterThan(0)
+  })
+
   it("keeps final lower-row crop clipped after selected-envelope recovery", () => {
     const upperRightPart = { height: 26, width: 42, x: 52, y: 60 }
     const lowerRightPart = { height: 28, width: 44, x: 72, y: 108 }

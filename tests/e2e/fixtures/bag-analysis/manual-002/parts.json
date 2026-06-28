@@ -35818,10 +35818,10 @@
             "name": "White",
             "family": "white",
             "status": "review",
-            "swatchHex": "#d7eefb",
-            "manualClassId": "manual-color-045",
+            "swatchHex": "#fafafa",
+            "manualClassId": "manual-color-040",
             "manualClassTrusted": false,
-            "rawManualClassId": "manual-color-045"
+            "rawManualClassId": "manual-color-040"
           },
           "partRegion": {
             "x": 468,

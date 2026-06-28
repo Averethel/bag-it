@@ -12,6 +12,7 @@ import { createPartSearchRegion, selectPartRegion, type SelectedPartRegion } fro
 import { CALLOUT_BORDER_INSET } from "./part-foreground-constants"
 import { findForegroundComponents } from "./part-foreground-components"
 import { boundsForPixels } from "./part-foreground-selection"
+import { cropAlphaMask } from "./alpha-mask-geometry"
 import { createPartImage } from "./part-image"
 import { createExcludedLabelRegions } from "./part-mask-regions"
 import { createPartOwnershipZones } from "./part-ownership"
@@ -96,8 +97,11 @@ export function createPartImageForLabel(
     ? readLowContrastOwnedFaceSupportMode(lowContrastFaceSupportProbe)
     : undefined
 
-  return region
-    ? createPartImage(
+  if (!region) {
+    return null
+  }
+
+  const image = createPartImage(
       page,
       region.region,
       backgroundModel,
@@ -113,7 +117,135 @@ export function createPartImageForLabel(
         enableTopSupport: !denseMode || isDenseTopSupportSafe(region.region, region.foregroundPixels),
       },
     )
-    : null
+
+  return clampSameRowShallowLowerLabelLeftDrift(image, cropOwnershipLabels, label)
+}
+
+function clampSameRowShallowLowerLabelLeftDrift(
+  image: CalloutPartImage,
+  labels: readonly CalloutQuantityLabel[],
+  label: CalloutQuantityLabel,
+): CalloutPartImage {
+  const previous = readPreviousSameRowLabel(labels, label)
+
+  if (!previous || !isShallowLowerLabelImage(image, label)) {
+    return image
+  }
+
+  const labelBoundary = Math.ceil((regionCenter(previous.region).x + regionCenter(label.region).x) / 2)
+  const anchoredLeft = label.region.x - Math.max(10, Math.round(label.region.height * 0.9))
+  const targetLeft = Math.max(image.region.x, labelBoundary, anchoredLeft)
+  const targetBottom = Math.min(
+    image.region.y + image.region.height,
+    label.region.y + Math.max(4, Math.round(label.region.height * 0.35)),
+  )
+  const clearLeft = label.region.x - Math.max(1, Math.round(label.region.height * 0.1))
+  const cropLeft = targetLeft - image.region.x
+  const nextHeight = targetBottom - image.region.y
+
+  if (
+    cropLeft <= 0 &&
+    nextHeight >= image.region.height &&
+    clearLeft <= image.region.x
+  ) {
+    return image
+  }
+
+  if (
+    nextHeight < Math.max(1, Math.round(image.region.height * 0.45)) ||
+    cropLeft > Math.max(14, Math.round(label.region.height * 1.4))
+  ) {
+    return image
+  }
+
+  const cleared = clearAlphaBeforePageX(image.alphaMask, image.region, clearLeft)
+  const cropRegion = {
+    height: nextHeight,
+    width: image.region.width - cropLeft,
+    x: cropLeft,
+    y: 0,
+  }
+
+  if (cropRegion.width <= 0 || cropRegion.height <= 0) {
+    return image
+  }
+
+  const region = {
+    height: cropRegion.height,
+    width: cropRegion.width,
+    x: image.region.x + cropRegion.x,
+    y: image.region.y,
+  }
+
+  return {
+    ...image,
+    alphaMask: cropAlphaMask(cleared, cropRegion),
+    diagnostics: image.diagnostics
+      ? {
+          ...image.diagnostics,
+          finalCropBounds: region,
+        }
+      : image.diagnostics,
+    region,
+  }
+}
+
+function readPreviousSameRowLabel(
+  labels: readonly CalloutQuantityLabel[],
+  label: CalloutQuantityLabel,
+): CalloutQuantityLabel | undefined {
+  const row = labels
+    .filter((candidate) =>
+      candidate !== label &&
+      hasComparableQuantityLabelSize(candidate, label) &&
+      isInLocalLabelRow(candidate, [label]) &&
+      regionCenter(candidate.region).x < regionCenter(label.region).x,
+    )
+    .sort((left, right) => regionCenter(right.region).x - regionCenter(left.region).x)
+
+  return row[0]
+}
+
+function isShallowLowerLabelImage(image: CalloutPartImage, label: CalloutQuantityLabel): boolean {
+  const foreground = image.diagnostics?.rawForegroundBounds
+
+  if (!foreground || label.region.width > label.region.height * 1.6) {
+    return false
+  }
+
+  return image.region.width >= Math.max(72, label.region.width * 5) &&
+    image.region.height <= Math.max(56, label.region.height * 5) &&
+    image.region.y < label.region.y &&
+    image.region.y + image.region.height > label.region.y &&
+    foreground.width >= 56 &&
+    foreground.width >= foreground.height * 2.2 &&
+    foreground.height >= Math.max(22, label.region.height * 1.8) &&
+    foreground.height <= Math.max(36, label.region.height * 3.4)
+}
+
+function clearAlphaBeforePageX(
+  alphaMask: CalloutPartImage["alphaMask"],
+  imageRegion: CalloutPartImage["region"],
+  pageX: number,
+): CalloutPartImage["alphaMask"] {
+  const cutoff = Math.max(0, Math.min(alphaMask.width, pageX - imageRegion.x))
+
+  if (cutoff <= 0) {
+    return alphaMask
+  }
+
+  const data = new Uint8ClampedArray(alphaMask.data)
+
+  for (let y = 0; y < alphaMask.height; y += 1) {
+    for (let x = 0; x < cutoff; x += 1) {
+      data[y * alphaMask.width + x] = 0
+    }
+  }
+
+  return {
+    ...alphaMask,
+    data,
+  }
 }
 
 function createLowContrastOwnedFaceSupportProbe(
