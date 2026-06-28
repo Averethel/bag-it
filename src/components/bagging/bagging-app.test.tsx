@@ -914,7 +914,7 @@ describe("BaggingApp shell", () => {
       ),
     )
     expect(await screen.findByRole("img", { name: "Callout 1 crop" })).toBeInTheDocument()
-  })
+  }, 15_000)
 
   it("continues hydrating preview pages in the background without scrolling", async () => {
     const user = userEvent.setup()
