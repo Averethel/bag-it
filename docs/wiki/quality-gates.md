@@ -97,6 +97,11 @@ Current bag-analysis e2e comparison rules:
   contract: name, family, status, swatch, manual class id/trust flag, and raw
   manual class id; swatch-only drift is tolerated only when every semantic
   color field still matches and each RGB channel differs by at most `1`
+- CircleCI may set `BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT=1` for browser
+  fixture gates because Linux Chrome rasterizes manual colors differently from
+  local macOS Chrome. That exception may ignore only `review` status, untrusted
+  manual-local color class drift; trusted colors, missing colors, quantities,
+  regions, and masks remain strict.
 - part crop drift fails when it exceeds `4px` per edge unless the expected and
   actual serialized alpha masks still pass the shared alpha-mask comparator;
   that comparator requires at least `0.95` expected opaque coverage and at

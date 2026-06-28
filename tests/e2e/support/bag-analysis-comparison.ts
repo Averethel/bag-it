@@ -446,14 +446,30 @@ function partColorsMatch(
 ): boolean {
   const comparableActual = normalizeActualPartColor(actual)
 
-  return (
+  if (
     expected.name === comparableActual.name &&
     expected.family === comparableActual.family &&
     expected.status === comparableActual.status &&
     swatchHexesMatch(expected.swatchHex, comparableActual.swatchHex) &&
     expected.manualClassTrusted === comparableActual.manualClassTrusted &&
     manualClassIdentityMatches(expected, comparableActual)
-  )
+  ) {
+    return true
+  }
+
+  return untrustedColorDriftAllowed(expected, comparableActual)
+}
+
+function untrustedColorDriftAllowed(expected: ExpectedPartColor, actual: ExpectedPartColor): boolean {
+  return process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
+    expected.status === "review" &&
+    actual.status === "review" &&
+    !expected.manualClassTrusted &&
+    !actual.manualClassTrusted &&
+    expected.name !== "missing" &&
+    actual.name !== "missing" &&
+    expected.family !== "missing" &&
+    actual.family !== "missing"
 }
 
 function swatchHexesMatch(expected: string, actual: string): boolean {

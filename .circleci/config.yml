@@ -120,7 +120,9 @@ jobs:
           command: corepack pnpm exec playwright install chrome
       - run:
           name: Run bag-analysis Playwright fixture gate
-          command: corepack pnpm run test:e2e
+          command: |
+            export BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT=1
+            corepack pnpm run test:e2e
       - store_artifacts:
           path: playwright-report
           destination: playwright-report
@@ -200,6 +202,7 @@ jobs:
           name: Run deployed Playwright validation
           command: |
             set -euo pipefail
+            export BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT=1
             export PLAYWRIGHT_BASE_URL="$(tail -n 1 vercel-deployment-url)"
             export VERCEL_AUTOMATION_BYPASS_SECRET="${VERCEL_AUTOMATION_BYPASS_SECRET}"
             corepack pnpm run test:e2e:deployed
