@@ -58,7 +58,9 @@ feature reintroduces Rebrickable.
 The `validate:e2e-fixtures` command runs the manifest-driven Playwright
 bag-analysis fixture gate in real Google Chrome with one worker. It must not use
 Playwright's bundled Chromium because PDF/canvas rasterization can differ from
-current user browsers and hide detector regressions. The legacy
+current user browsers and hide detector regressions. CircleCI Playwright Docker
+jobs install Google Chrome before running fixture and deployed e2e gates because
+the official image ships bundled Chromium, not branded Google Chrome. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.

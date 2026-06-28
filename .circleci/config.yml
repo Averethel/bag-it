@@ -116,6 +116,9 @@ jobs:
           command: |
             corepack pnpm install --frozen-lockfile --store-dir .pnpm-store
       - run:
+          name: Install Google Chrome for Playwright
+          command: corepack pnpm exec playwright install chrome
+      - run:
           name: Run bag-analysis Playwright fixture gate
           command: corepack pnpm run test:e2e
       - store_artifacts:
@@ -190,6 +193,9 @@ jobs:
           name: Install Node dependencies
           command: |
             corepack pnpm install --frozen-lockfile --store-dir .pnpm-store
+      - run:
+          name: Install Google Chrome for Playwright
+          command: corepack pnpm exec playwright install chrome
       - run:
           name: Run deployed Playwright validation
           command: |
