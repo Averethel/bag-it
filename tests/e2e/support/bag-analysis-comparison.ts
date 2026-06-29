@@ -178,7 +178,6 @@ interface AlphaMaskComparatorSource {
 
 export const CALLOUT_REGION_TOLERANCE_PX = 8
 export const PART_REGION_TOLERANCE_PX = 6
-export const PART_SWATCH_CHANNEL_TOLERANCE = 2
 
 export function matchBagAnalysisStructure({
   actualResult,
@@ -285,7 +284,7 @@ export function matchBagAnalysisStructure({
 
       if (!partColorsMatch(partPair.expected.color, partPair.actual.detectedColor)) {
         failures.push(
-          `callout ${partPair.expectedCalloutOrdinal} row ${partPair.expected.ordinal}: color mismatch: expected ${formatPartColor(
+          `callout ${partPair.expectedCalloutOrdinal} row ${partPair.expected.ordinal}: color class mismatch: expected ${formatPartColor(
             partPair.expected.color,
           )}, got ${formatPartColor(normalizeActualPartColor(partPair.actual.detectedColor))}`,
         )
@@ -452,43 +451,9 @@ export function partColorsMatch(
     expected.name === comparableActual.name &&
     expected.family === comparableActual.family &&
     expected.status === comparableActual.status &&
-    swatchHexesMatch(expected.swatchHex, comparableActual.swatchHex) &&
     expected.manualClassTrusted === comparableActual.manualClassTrusted &&
     manualClassIdentityMatches(expected, comparableActual)
   )
-}
-
-function swatchHexesMatch(expected: string, actual: string): boolean {
-  if (expected === actual) {
-    return true
-  }
-
-  const expectedRgb = parseSwatchHex(expected)
-  const actualRgb = parseSwatchHex(actual)
-
-  return Boolean(
-    expectedRgb &&
-      actualRgb &&
-      Math.abs(expectedRgb.r - actualRgb.r) <= PART_SWATCH_CHANNEL_TOLERANCE &&
-      Math.abs(expectedRgb.g - actualRgb.g) <= PART_SWATCH_CHANNEL_TOLERANCE &&
-      Math.abs(expectedRgb.b - actualRgb.b) <= PART_SWATCH_CHANNEL_TOLERANCE,
-  )
-}
-
-function parseSwatchHex(value: string): { b: number; g: number; r: number } | null {
-  const match = /^#([0-9a-f]{6})$/i.exec(value)
-
-  if (!match) {
-    return null
-  }
-
-  const packed = Number.parseInt(match[1], 16)
-
-  return {
-    b: packed & 0xff,
-    g: (packed >> 8) & 0xff,
-    r: (packed >> 16) & 0xff,
-  }
 }
 
 function manualClassIdentityMatches(
@@ -520,7 +485,6 @@ export function formatPartColor(color: ExpectedPartColor): string {
     color.name,
     color.family,
     color.status,
-    color.swatchHex,
     color.manualClassId ?? "no-manual-class",
     color.manualClassTrusted ? "trusted" : "untrusted",
     color.rawManualClassId ?? "no-raw-class",

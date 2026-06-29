@@ -88,9 +88,13 @@ are split into a minimal PDF-only session, callout-region JSON, and part-row
 JSON. The Playwright gate resumes the minimal session through `/`, forces fresh
 analysis from the embedded manual bytes, waits for scan, part extraction, and
 preview hydration, downloads the browser-produced session, and compares callouts
-and parts with strict region/masked-visual tolerances. Replay runners, PPM
-fixtures, Playwright snapshot baselines, package fixture roots, and
-saved-session refresh flows are excluded from the active validation workflow.
+and parts with strict region/masked-visual tolerances. Part-color comparison
+validates semantic color class identity (`name`, `family`, `status`, trust flag,
+and trusted manual class ids) but does not fail on exact `swatchHex` drift,
+because browser rasterization can move manual-local centroids while keeping the
+same user-facing class. Replay runners, PPM fixtures, Playwright snapshot
+baselines, package fixture roots, and saved-session refresh flows are excluded
+from the active validation workflow.
 
 Detector tuning also has a private-aware regression gate:
 `npm run validate:detector-regressions` validates any local part-color report

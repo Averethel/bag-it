@@ -7,7 +7,6 @@ import {
   compareAlphaMasks,
   matchBagAnalysisStructure,
   PART_REGION_TOLERANCE_PX,
-  PART_SWATCH_CHANNEL_TOLERANCE,
   regionsMutuallyWithinTolerance,
   type DecodedAlphaMask,
 } from "./bag-analysis-comparison"
@@ -135,7 +134,7 @@ describe("bag-analysis comparator primitives", () => {
     })
 
     expect(match.failures).toContain(
-      "callout 0 row 0: color mismatch: expected Green/green/review/#165025/manual-color-001/untrusted/manual-color-001, got Dark Bluish Gray/gray/review/#676963/manual-color-002/untrusted/manual-color-002",
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/untrusted/manual-color-001, got Dark Bluish Gray/gray/review/manual-color-002/untrusted/manual-color-002",
     )
   })
 
@@ -189,7 +188,7 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toEqual([])
   })
 
-  it("tolerates tiny swatch drift when semantic color identity is unchanged", () => {
+  it("ignores swatch drift when semantic color class is unchanged", () => {
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -201,7 +200,7 @@ describe("bag-analysis comparator primitives", () => {
                 name: "Green",
                 family: "green",
                 status: "review",
-                swatchHex: "#185227",
+                swatchHex: "#195328",
                 manualClassId: "manual-color-001",
                 manualClassTrusted: false,
                 rawManualClassId: "manual-color-001",
@@ -239,7 +238,7 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toEqual([])
   })
 
-  it("fails tiny swatch drift when semantic color identity changes", () => {
+  it("fails color class drift even when swatch drift is tiny", () => {
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -287,11 +286,14 @@ describe("bag-analysis comparator primitives", () => {
     })
 
     expect(match.failures).toContain(
-      "callout 0 row 0: color mismatch: expected Green/green/review/#165025/manual-color-001/untrusted/manual-color-001, got Lime/green/review/#165026/manual-color-001/untrusted/manual-color-001",
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/untrusted/manual-color-001, got Lime/green/review/manual-color-001/untrusted/manual-color-001",
     )
   })
 
-  it("fails swatch drift beyond the tiny per-channel tolerance", () => {
+  it("requires trusted manual color class identity", () => {
+    const expected = expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 })
+    expected.color.manualClassTrusted = true
+
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -303,10 +305,10 @@ describe("bag-analysis comparator primitives", () => {
                 name: "Green",
                 family: "green",
                 status: "review",
-                swatchHex: "#195328",
-                manualClassId: "manual-color-001",
-                manualClassTrusted: false,
-                rawManualClassId: "manual-color-001",
+                swatchHex: "#165025",
+                manualClassId: "manual-color-002",
+                manualClassTrusted: true,
+                rawManualClassId: "manual-color-002",
               }),
             ],
           },
@@ -330,17 +332,14 @@ describe("bag-analysis comparator primitives", () => {
           {
             ordinal: 0,
             pageNumber: 1,
-            parts: [
-              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
-            ],
+            parts: [expected],
           },
         ],
       },
     })
 
-    expect(PART_SWATCH_CHANNEL_TOLERANCE).toBe(2)
     expect(match.failures).toContain(
-      "callout 0 row 0: color mismatch: expected Green/green/review/#165025/manual-color-001/untrusted/manual-color-001, got Green/green/review/#195328/manual-color-001/untrusted/manual-color-001",
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/trusted/manual-color-001, got Green/green/review/manual-color-002/trusted/manual-color-002",
     )
   })
 

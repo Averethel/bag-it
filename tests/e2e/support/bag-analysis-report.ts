@@ -603,7 +603,7 @@ function buildPendingDifferences({
           manualSource,
           pageNumber: pair.expected.pageNumber,
           quantity: expected.quantity.text,
-          reason: `color mismatch: expected ${formatPartColor(expected.color)}, got ${
+          reason: `color class mismatch: expected ${formatPartColor(expected.color)}, got ${
             formatPartColor(normalizeActualPartColor(partPair.actual.detectedColor))
           }`,
           rowOrdinal: expected.ordinal,
