@@ -25,7 +25,7 @@ Keep explicit detector versioning. The current detector version is:
 Part image and quantity-label extraction has its own version:
 
 ```ts
-2.0.0-alpha.165
+2.0.0-alpha.164
 ```
 
 Part color calibration has its own version:
@@ -94,7 +94,7 @@ rendered.
 The production route currently emits detector version `2.0.0-alpha.18` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
-part extractor version `2.0.0-alpha.165` from package
+part extractor version `2.0.0-alpha.164` from package
 `@bag-it/callout-parts` and part color calibration version `2.0.0-alpha.65`
 from `@bag-it/part-colors`. Callout evidence and part extraction both use
 visible raster `/^\d+x$/i` quantity labels from
@@ -222,10 +222,6 @@ inferred label stays inside the callout interior, and separate part ink exists
 above the inferred slot. This targets Linux Chrome raster drift where a
 leftmost `1x` glyph can drop out while the adjacent peer labels and part art
 remain stable.
-Alpha 165 clamps same-row shallow lower-label part crops to the label-row split
-boundary when Linux Chrome foreground support expands the crop left and down
-past the stable manual-local shape. The crop keeps quantities and row identity
-strict while normalizing the alpha mask and region before fixture comparison.
 Alpha 83 keeps the alpha69 dense-callout behavior and adds row-spanning
 lower-label ownership for Upper Courtyard style panels. When a lower label's
 row band starts far below the label because the visual part spans multiple

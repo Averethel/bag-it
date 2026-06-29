@@ -19,7 +19,7 @@ import type {
 
 export const DEFAULT_STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.18"
 export const DEFAULT_STEP_PART_COLOR_CALIBRATION_VERSION = "2.0.0-alpha.65"
-export const DEFAULT_STEP_PART_EXTRACTOR_VERSION = "2.0.0-alpha.165"
+export const DEFAULT_STEP_PART_EXTRACTOR_VERSION = "2.0.0-alpha.164"
 
 export const readDefaultPdfMetadata: ReadPdfMetadata = async (...args) => {
   const { readPdfMetadataFromFile } = await import("@/features/pdf/browser-pdf-parser")
