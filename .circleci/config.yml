@@ -106,9 +106,14 @@ jobs:
     steps:
       - restore_project
       - run: corepack pnpm run build
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - .next
 
   e2e_fixture_gate:
     executor: playwright_browser
+    parallelism: 5
     steps:
       - restore_project
       - run:
@@ -120,7 +125,15 @@ jobs:
           command: corepack pnpm exec playwright install chrome
       - run:
           name: Run bag-analysis Playwright fixture gate
-          command: corepack pnpm run test:e2e
+          command: |
+            set -euo pipefail
+            mkdir -p test-results
+            node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
+              --split-by=timings \
+              --timings-type=name \
+              --command="node scripts/run-circleci-bag-analysis-fixtures.mjs"
+      - store_test_results:
+          path: test-results
       - store_artifacts:
           path: playwright-report
           destination: playwright-report
@@ -186,6 +199,7 @@ jobs:
 
   deployed_playwright:
     executor: playwright_browser
+    parallelism: 5
     steps:
       - restore_project
       - require_vercel_automation_bypass
@@ -202,7 +216,13 @@ jobs:
             set -euo pipefail
             export PLAYWRIGHT_BASE_URL="$(tail -n 1 vercel-deployment-url)"
             export VERCEL_AUTOMATION_BYPASS_SECRET="${VERCEL_AUTOMATION_BYPASS_SECRET}"
-            corepack pnpm run test:e2e:deployed
+            mkdir -p test-results
+            node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
+              --split-by=timings \
+              --timings-type=name \
+              --command="node scripts/run-circleci-bag-analysis-fixtures.mjs"
+      - store_test_results:
+          path: test-results
       - store_artifacts:
           path: playwright-report
           destination: playwright-report

@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test"
+import { defineConfig, type ReporterDescription } from "@playwright/test"
 
 const port = Number(process.env.PORT ?? process.env.PLAYWRIGHT_PORT ?? 3000)
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`
@@ -7,6 +7,19 @@ const desktopViewport = {
   height: 1100,
   width: 1280,
 }
+const reporter: ReporterDescription[] = process.env.CI
+  ? [
+      ["list"],
+      ["html", { open: "never" }],
+      [
+        "junit",
+        {
+          outputFile: process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE ??
+            "test-results/playwright-junit.xml",
+        },
+      ],
+    ]
+  : [["list"], ["html", { open: "never" }]]
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -17,9 +30,7 @@ export default defineConfig({
   expect: {
     timeout: 30 * 1000,
   },
-  reporter: process.env.CI
-    ? [["list"], ["html", { open: "never" }]]
-    : [["list"], ["html", { open: "never" }]],
+  reporter,
   use: {
     baseURL,
     ...(vercelBypassSecret
