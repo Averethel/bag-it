@@ -111,6 +111,9 @@ Current bag-analysis e2e comparison rules:
   report artifact for the failed manual cases under `test-results/**`; the
   report may fall back to the assigned manual cases only when the failed-case
   list cannot be read, and is review evidence only, not fixture approval
+- CI visual reports may cap rendered evidence to the first 50 issues per failed
+  manual while preserving the total issue count, so broad failures remain
+  bounded but still visible
 - fixture difference reports must include color mismatches as row-level issues
   with the part crop and full-callout context, even when the structural gate
   fails before the visual comparison stage

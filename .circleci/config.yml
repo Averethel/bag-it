@@ -219,6 +219,7 @@ jobs:
             if [ "${status}" -ne 0 ] && [ -n "${report_cases_file}" ]; then
               export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${report_cases_file}")"
               export BAG_ANALYSIS_DIFF_REPORT_DIR="test-results/bag-analysis-diff-report-${node_index}"
+              export BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE=50
               echo "Generating bag-analysis visual difference report for ${BAG_ANALYSIS_CASE_IDS}"
               corepack pnpm exec playwright test tests/e2e/bag-analysis-report.spec.ts \
                 --project=chrome \

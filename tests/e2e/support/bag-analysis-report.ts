@@ -36,6 +36,7 @@ export interface BagAnalysisReportSummary {
   issueCount: number
   manualSource: string
   relativePath: string
+  renderedIssueCount?: number
 }
 
 export interface BrowserRunInfo {
@@ -52,6 +53,7 @@ interface BagAnalysisCaseReport {
   issues: BagAnalysisDifference[]
   manualSource: string
   relativePath: string
+  totalIssueCount: number
 }
 
 interface BagAnalysisDifference {
@@ -107,6 +109,9 @@ interface DataUrlTriplet {
 }
 
 const IMAGE_CHUNK_SIZE = 25
+const REPORT_MAX_RENDERED_ISSUES_PER_CASE = readOptionalPositiveIntegerEnv(
+  "BAG_ANALYSIS_REPORT_MAX_ISSUES_PER_CASE",
+)
 
 export async function createBagAnalysisCaseReport({
   actualResult,
@@ -142,9 +147,10 @@ export async function createBagAnalysisCaseReport({
     structuralMatch,
     fixture,
   })
+  const reportIssues = limitRenderedIssues(pendingIssues)
 
-  for (let start = 0; start < pendingIssues.length; start += IMAGE_CHUNK_SIZE) {
-    const chunk = pendingIssues.slice(start, start + IMAGE_CHUNK_SIZE)
+  for (let start = 0; start < reportIssues.length; start += IMAGE_CHUNK_SIZE) {
+    const chunk = reportIssues.slice(start, start + IMAGE_CHUNK_SIZE)
     const rendered = await page.evaluate(
       renderBagAnalysisDifferenceImagesInBrowser,
       attachAlphaMasksToChunk({
@@ -155,7 +161,7 @@ export async function createBagAnalysisCaseReport({
     )
     writeRenderedImages({
       imagesDirectory,
-      issuesById: new Map(pendingIssues.map((issue) => [issue.id, issue])),
+      issuesById: new Map(reportIssues.map((issue) => [issue.id, issue])),
       rendered,
     })
   }
@@ -164,9 +170,10 @@ export async function createBagAnalysisCaseReport({
     browserInfo,
     caseId,
     downloadedSessionPath,
-    issues: pendingIssues,
+    issues: reportIssues,
     manualSource,
     relativePath: `${caseId}/index.html`,
+    totalIssueCount: pendingIssues.length,
   }
 
   writeCaseHtml(outputRoot, report)
@@ -177,6 +184,7 @@ export async function createBagAnalysisCaseReport({
     issueCount: pendingIssues.length,
     manualSource,
     relativePath: report.relativePath,
+    renderedIssueCount: reportIssues.length,
   }
 }
 
@@ -203,6 +211,7 @@ export function writeBagAnalysisReportIndex(
               <th>Manual source</th>
               <th>Browser</th>
               <th><button type="button" class="sort-button" data-sort-issues>Issues ↑</button></th>
+              <th>Rendered</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -213,6 +222,7 @@ export function writeBagAnalysisReportIndex(
                 <td>${escapeHtml(summary.manualSource)}</td>
                 <td>${escapeHtml(formatBrowserInfo(summary.browserInfo))}</td>
                 <td class="number">${summary.issueCount}</td>
+                <td class="number">${summary.renderedIssueCount ?? summary.issueCount}</td>
                 <td>${summary.error ? `<span class="error">${escapeHtml(summary.error)}</span>` : "reported"}</td>
               </tr>
             `).join("")}
@@ -799,12 +809,35 @@ function writeCaseHtml(outputRoot: string, report: BagAnalysisCaseReport): void 
         <p class="meta">User agent: ${escapeHtml(report.browserInfo.userAgent)}</p>
         <p class="meta">Device pixel ratio: ${report.browserInfo.devicePixelRatio}</p>
         <p class="meta">Downloaded session: ${escapeHtml(path.basename(report.downloadedSessionPath))}</p>
-        <p class="meta">Issues: ${report.issues.length}</p>
+        <p class="meta">Issues: ${report.totalIssueCount}; rendered: ${report.issues.length}</p>
+        ${report.issues.length < report.totalIssueCount
+          ? `<p class="meta">Visual evidence capped by BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE.</p>`
+          : ""}
         ${report.issues.map(renderIssueHtml).join("")}
       `,
       title: `${report.caseId} fixture differences`,
     }),
   )
+}
+
+function limitRenderedIssues(issues: PendingDifference[]): PendingDifference[] {
+  if (REPORT_MAX_RENDERED_ISSUES_PER_CASE === null) {
+    return issues
+  }
+
+  return issues.slice(0, REPORT_MAX_RENDERED_ISSUES_PER_CASE)
+}
+
+function readOptionalPositiveIntegerEnv(name: string): number | null {
+  const rawValue = process.env[name]
+
+  if (!rawValue) {
+    return null
+  }
+
+  const value = Number.parseInt(rawValue, 10)
+
+  return Number.isFinite(value) && value > 0 ? value : null
 }
 
 function renderIssueHtml(issue: BagAnalysisDifference): string {

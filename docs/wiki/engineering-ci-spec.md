@@ -220,6 +220,10 @@ E2E:
   `bag-analysis-report.spec.ts` and write a visual difference report under
   `test-results/bag-analysis-diff-report-<node>/`; fall back to assigned manual
   cases only when the failed-case list cannot be read
+- CI report generation sets `BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE=50`;
+  the report still shows the total issue count, but renders visual evidence only
+  for the first 50 issues per failed manual to keep failed jobs and artifacts
+  bounded when a broad detector drift creates hundreds of differences
 - store JUnit XML with `store_test_results`
 - store `playwright-report` and `test-results` artifacts
 
