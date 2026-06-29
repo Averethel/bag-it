@@ -1,7 +1,5 @@
 version: 2.1
-
-orbs:
-  node: circleci/node@7.2.0
+setup: true
 
 parameters:
   vercel_cli_version:
@@ -190,10 +188,12 @@ jobs:
             selected_cases_file=".circleci-selected-bag-analysis-cases-${node_index}.txt"
             failed_cases_file=".circleci-failed-bag-analysis-cases-${node_index}.txt"
             unapproved_failures_file=".circleci-unapproved-bag-analysis-failures-${node_index}.txt"
+            review_dir=".circleci-fixture-review/${node_index}"
             status_file="test-results/deployed-playwright-status.txt"
             export BAG_ANALYSIS_SELECTED_CASES_FILE="${selected_cases_file}"
             export BAG_ANALYSIS_FAILED_CASES_FILE="${failed_cases_file}"
             export BAG_ANALYSIS_UNAPPROVED_FAILURES_FILE="${unapproved_failures_file}"
+            mkdir -p "${review_dir}"
             mkdir -p test-results
             set +e
             node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
@@ -236,6 +236,7 @@ jobs:
 
             if [ "${status}" -ne 0 ] && [ -s "${failed_cases_file}" ] && [ ! -s "${unapproved_failures_file}" ]; then
               echo "Fixture diffs found; visual review is required in the CircleCI approval job."
+              printf "review required\n" > "${review_dir}/review-required.txt"
               printf "review required\n" > "test-results/fixture-diff-review-${node_index}.txt"
               status=0
             fi
@@ -249,11 +250,23 @@ jobs:
       - store_artifacts:
           path: test-results
           destination: test-results
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - .circleci-fixture-review
       - run:
           name: Fail on deployed Playwright validation failure
           command: |
             status="$(cat test-results/deployed-playwright-status.txt)"
             exit "${status}"
+
+  continue_fixture_review:
+    executor: node_24
+    steps:
+      - restore_project
+      - run:
+          name: Continue fixture review workflow
+          command: node scripts/continue-circleci-fixture-review.mjs
 
 workflows:
   verify_and_deploy:
@@ -286,8 +299,8 @@ workflows:
           filters:
             branches:
               ignore: main
-      - review_fixture_diff_reports:
-          type: approval
+      - continue_fixture_review:
+          name: continue_preview_fixture_review
           requires:
             - deployed_preview_playwright
           filters:
@@ -296,6 +309,13 @@ workflows:
       - deploy_production:
           requires:
             - build
+          filters:
+            branches:
+              only: main
+      - continue_fixture_review:
+          name: continue_production_noop
+          requires:
+            - deploy_production
           filters:
             branches:
               only: main

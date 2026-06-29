@@ -229,8 +229,10 @@ E2E:
   URLs for visual review
 - if deployed preview e2e finds only structural or visual fixture-comparison
   failures, the shard writes `fixture-diff-review-<node>.txt`, exits green, and
-  the workflow moves to the `review_fixture_diff_reports` CircleCI approval job
-  so a reviewer can inspect the report artifacts and approve or reject the run
+  persists a fixture-review marker; a follow-up setup continuation job emits a
+  tiny CircleCI config containing the `review_fixture_diff_reports` approval job
+  only when such markers exist, otherwise it emits a no-op continuation with no
+  manual approval
 - browser, deploy, app, missing-output, or other unclassified failures are not
   eligible for manual fixture review and stay red
 - store JUnit XML with `store_test_results`
