@@ -67,7 +67,11 @@ limited to untrusted `review` color classes. For those same rows, CI also allows
 Linux Chrome alpha-mask raster drift by keeping the normal actual-extra budget
 (`<=0.025` actual-extra ratio) while relaxing expected opaque coverage to at
 least `0.90`. Trusted colors, missing colors, quantities, callout regions, part
-regions, and quantity-label regions stay strict. The legacy
+regions, and quantity-label regions stay strict. Fixture cases with input
+sessions over `50 MiB` compare the in-page `window.__bagItE2EState.result`
+instead of forcing a browser session download, because CI Chrome can crash while
+serializing very large session files. Smaller fixture cases still exercise the
+Download button and attach the downloaded session. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.

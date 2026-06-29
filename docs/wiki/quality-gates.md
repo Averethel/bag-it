@@ -111,6 +111,9 @@ Current bag-analysis e2e comparison rules:
   most `0.025` actual extra opaque ratio in Node report checks, local browser
   fixture gates, and all rows outside the CI-only untrusted-review coverage
   exception
+- approved fixture input sessions over `50 MiB` compare the browser's in-page
+  `window.__bagItE2EState.result` instead of downloading the full session file;
+  smaller cases still exercise and attach browser session downloads
 - failures attach expected, actual, and diff PNGs to Playwright output
 
 Approved manual-derived fixture content is frozen until the user explicitly

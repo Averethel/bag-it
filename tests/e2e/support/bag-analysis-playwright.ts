@@ -3,12 +3,25 @@ import { expect, type Page, type TestInfo } from "@playwright/test"
 import {
   compareBagAnalysisVisuals,
   matchBagAnalysisStructure,
+  type ActualDetectionResult,
   type VisualComparisonFailure,
 } from "./bag-analysis-comparison"
 import {
   loadBagAnalysisFixture,
   type BagAnalysisFixtureCase,
 } from "./bag-analysis-fixtures"
+
+const SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES = 50 * 1024 * 1024
+
+type FixtureActualResult = ActualDetectionResult & {
+  detectorVersion?: string
+  partColorCalibrationVersion?: string | null
+  partExtractorVersion?: string | null
+}
+
+interface DownloadedBagItSession {
+  stepDetectionResult?: FixtureActualResult | null
+}
 
 export async function runBagAnalysisFixtureCase(
   page: Page,
@@ -21,10 +34,11 @@ export async function runBagAnalysisFixtureCase(
   await page.getByLabel("Continue session file").setInputFiles(fixture.inputSessionPath)
   await waitForBagAnalysisReady(page)
 
-  const session = await downloadSession(page, testInfo, fixtureCase.id)
-  const actualResult = session.stepDetectionResult
+  const actualResult = await readActualResult(page, testInfo, {
+    caseId: fixtureCase.id,
+    inputSessionPath: fixture.inputSessionPath,
+  })
 
-  expect(actualResult, `${fixtureCase.id}: downloaded session has no stepDetectionResult`).toBeTruthy()
   expect(actualResult.detectorVersion).toBe(await readCurrentDetectorVersion(page))
   expect(actualResult.partExtractorVersion).toBe(await readCurrentPartExtractorVersion(page))
   expect(actualResult.partColorCalibrationVersion).toBe(await readCurrentPartColorCalibrationVersion(page))
@@ -84,11 +98,53 @@ async function waitForBagAnalysisReady(
   )
 }
 
+async function readActualResult(
+  page: Page,
+  testInfo: TestInfo,
+  {
+    caseId,
+    inputSessionPath,
+  }: {
+    caseId: string
+    inputSessionPath: string
+  },
+): Promise<FixtureActualResult> {
+  if (fs.statSync(inputSessionPath).size <= SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES) {
+    const session = await downloadSession(page, testInfo, caseId)
+
+    if (!session.stepDetectionResult) {
+      throw new Error(`${caseId}: downloaded session has no stepDetectionResult`)
+    }
+
+    return session.stepDetectionResult
+  }
+
+  await testInfo.attach(`${caseId}-download-skipped`, {
+    body: Buffer.from(
+      [
+        `Skipped browser session download for ${caseId}.`,
+        `Input session exceeds ${SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES} bytes.`,
+        "Fixture comparison uses window.__bagItE2EState.result to avoid CI Chrome crashes on huge session downloads.",
+        "",
+      ].join("\n"),
+    ),
+    contentType: "text/plain",
+  })
+
+  const actualResult = await page.evaluate(() => window.__bagItE2EState?.result ?? null)
+
+  if (!actualResult) {
+    throw new Error(`${caseId}: in-page e2e state has no result`)
+  }
+
+  return actualResult as unknown as FixtureActualResult
+}
+
 async function downloadSession(
   page: Page,
   testInfo: TestInfo,
   caseId: string,
-): Promise<any> {
+): Promise<DownloadedBagItSession> {
   const downloadPromise = page.waitForEvent("download")
 
   await page.getByRole("button", { name: "Download" }).click()
@@ -102,7 +158,7 @@ async function downloadSession(
     path: sessionPath,
   })
 
-  return JSON.parse(fs.readFileSync(sessionPath, "utf8"))
+  return JSON.parse(fs.readFileSync(sessionPath, "utf8")) as DownloadedBagItSession
 }
 
 async function readCurrentDetectorVersion(page: Page): Promise<string> {
