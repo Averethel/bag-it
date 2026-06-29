@@ -77,26 +77,6 @@ function validateFixtureCase(
   expectOptionalNumberArray(fixtureCase.pages, `${caseLabel}.pages`, failures)
   expectOptionalNumberArray(fixtureCase.contextPages, `${caseLabel}.contextPages`, failures)
   expectOptionalPageCountMap(fixtureCase.expectedPageCounts, `${caseLabel}.expectedPageCounts`, failures)
-  expectOptionalKnownMissingCallouts(
-    fixtureCase.ciKnownMissingCallouts,
-    `${caseLabel}.ciKnownMissingCallouts`,
-    failures,
-  )
-  expectOptionalCalloutReasonEntries(
-    fixtureCase.ciKnownCalloutRegionDrifts,
-    `${caseLabel}.ciKnownCalloutRegionDrifts`,
-    failures,
-  )
-  expectOptionalKnownMissingPartRows(
-    fixtureCase.ciKnownMissingPartRows,
-    `${caseLabel}.ciKnownMissingPartRows`,
-    failures,
-  )
-  expectOptionalPartReasonEntries(
-    fixtureCase.ciKnownPartRegionDrifts,
-    `${caseLabel}.ciKnownPartRegionDrifts`,
-    failures,
-  )
 
   if (fixtureCase.sourceKind !== "user-approved-manual") {
     failures.push(`${caseLabel}.sourceKind must be user-approved-manual`)
@@ -111,77 +91,6 @@ function validateFixtureCase(
   validateFixturePath(fixtureCase.partsPath, `${caseLabel}.partsPath`, options, failures)
 
   return failures
-}
-
-function expectOptionalKnownMissingCallouts(
-  value: unknown,
-  label: string,
-  failures: string[],
-): void {
-  expectOptionalCalloutReasonEntries(value, label, failures)
-}
-
-function expectOptionalCalloutReasonEntries(
-  value: unknown,
-  label: string,
-  failures: string[],
-): void {
-  if (value === undefined) {
-    return
-  }
-
-  if (!Array.isArray(value)) {
-    failures.push(`${label} must be an array when present`)
-    return
-  }
-
-  for (const [index, entry] of value.entries()) {
-    const entryLabel = `${label}[${index}]`
-
-    if (!isRecord(entry)) {
-      failures.push(`${entryLabel} must be an object`)
-      continue
-    }
-
-    expectNumber(entry.calloutOrdinal, `${entryLabel}.calloutOrdinal`, failures)
-    expectString(entry.reason, `${entryLabel}.reason`, failures)
-  }
-}
-
-function expectOptionalKnownMissingPartRows(
-  value: unknown,
-  label: string,
-  failures: string[],
-): void {
-  expectOptionalPartReasonEntries(value, label, failures)
-}
-
-function expectOptionalPartReasonEntries(
-  value: unknown,
-  label: string,
-  failures: string[],
-): void {
-  if (value === undefined) {
-    return
-  }
-
-  if (!Array.isArray(value)) {
-    failures.push(`${label} must be an array when present`)
-    return
-  }
-
-  for (const [index, entry] of value.entries()) {
-    const entryLabel = `${label}[${index}]`
-
-    if (!isRecord(entry)) {
-      failures.push(`${entryLabel} must be an object`)
-      continue
-    }
-
-    expectNumber(entry.calloutOrdinal, `${entryLabel}.calloutOrdinal`, failures)
-    expectNumber(entry.partOrdinal, `${entryLabel}.partOrdinal`, failures)
-    expectString(entry.reason, `${entryLabel}.reason`, failures)
-  }
 }
 
 function validateFixturePath(

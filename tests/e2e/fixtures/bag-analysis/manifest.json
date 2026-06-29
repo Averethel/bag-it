@@ -156,23 +156,6 @@
       "expectedPageCounts": null,
       "pages": null,
       "contextPages": null,
-      "ciKnownMissingPartRows": [
-        {
-          "calloutOrdinal": 42,
-          "partOrdinal": 1,
-          "reason": "Linux browser PDF rasterization drops the right-side white 1x label in this compact callout."
-        },
-        {
-          "calloutOrdinal": 44,
-          "partOrdinal": 1,
-          "reason": "Linux browser PDF rasterization drops the right-side white 1x label in this compact callout."
-        },
-        {
-          "calloutOrdinal": 54,
-          "partOrdinal": 1,
-          "reason": "Linux browser PDF rasterization drops the right-side white 1x label in this compact callout."
-        }
-      ],
       "inputSessionPath": "manual-005/input.bagit-session.json",
       "calloutsPath": "manual-005/callouts.json",
       "partsPath": "manual-005/parts.json"
@@ -218,24 +201,6 @@
       "expectedPageCounts": null,
       "pages": null,
       "contextPages": null,
-      "ciKnownMissingCallouts": [
-        {
-          "calloutOrdinal": 0,
-          "reason": "Linux browser PDF rasterization drops this small white-outline callout on gradient artwork; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 13,
-          "reason": "Linux browser PDF rasterization drops this small white-outline callout on gradient artwork; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 18,
-          "reason": "Linux browser PDF rasterization drops this small white-outline callout on gradient artwork; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 26,
-          "reason": "Linux browser PDF rasterization drops this small white-outline callout on gradient artwork; local browser validation remains strict."
-        }
-      ],
       "inputSessionPath": "manual-008/input.bagit-session.json",
       "calloutsPath": "manual-008/callouts.json",
       "partsPath": "manual-008/parts.json"
@@ -283,76 +248,6 @@
       "expectedPageCounts": null,
       "pages": null,
       "contextPages": null,
-      "ciKnownCalloutRegionDrifts": [
-        {
-          "calloutOrdinal": 34,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 44,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 69,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 76,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 84,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 87,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 91,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 97,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 98,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 109,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 110,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 155,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 158,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        },
-        {
-          "calloutOrdinal": 161,
-          "reason": "Linux browser PDF rasterization toggles page-edge padding for this small single-row edge callout; local browser validation remains strict."
-        }
-      ],
-      "ciKnownPartRegionDrifts": [
-        {
-          "calloutOrdinal": 39,
-          "partOrdinal": 0,
-          "reason": "Linux browser PDF rasterization includes surrounding low-contrast support/background in this edge callout part crop; quantity and label regions remain strict."
-        },
-        {
-          "calloutOrdinal": 171,
-          "partOrdinal": 1,
-          "reason": "Linux browser PDF rasterization includes surrounding low-contrast support/background in this edge callout part crop; quantity and label regions remain strict."
-        }
-      ],
       "inputSessionPath": "manual-011/input.bagit-session.json",
       "calloutsPath": "manual-011/callouts.json",
       "partsPath": "manual-011/parts.json"

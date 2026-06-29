@@ -3,11 +3,7 @@ import { expect, type Page, type TestInfo } from "@playwright/test"
 import {
   compareBagAnalysisVisuals,
   matchBagAnalysisStructure,
-  partRowKey,
   type ActualDetectionResult,
-  type ExpectedCalloutsFixture,
-  type ExpectedPartsFixture,
-  type KnownRegionDrifts,
   type VisualComparisonFailure,
 } from "./bag-analysis-comparison"
 import {
@@ -47,23 +43,10 @@ export async function runBagAnalysisFixtureCase(
   expect(actualResult.partExtractorVersion).toBe(await readCurrentPartExtractorVersion(page))
   expect(actualResult.partColorCalibrationVersion).toBe(await readCurrentPartColorCalibrationVersion(page))
 
-  const comparisonInput = await createComparisonInput({
+  const structuralMatch = matchBagAnalysisStructure({
     actualResult,
     expectedCallouts: fixture.callouts,
     expectedParts: fixture.parts,
-    fixtureCase,
-    inputSessionPath: fixture.inputSessionPath,
-    testInfo,
-  })
-  const knownRegionDrifts = createKnownCiRegionDrifts(fixtureCase)
-
-  await attachKnownCiRegionDrifts(testInfo, fixtureCase.id, knownRegionDrifts)
-
-  const structuralMatch = matchBagAnalysisStructure({
-    actualResult: comparisonInput.actualResult,
-    expectedCallouts: comparisonInput.expectedCallouts,
-    expectedParts: comparisonInput.expectedParts,
-    knownRegionDrifts: knownRegionDrifts?.comparison,
   })
 
   if (structuralMatch.failures.length > 0) {
@@ -76,7 +59,6 @@ export async function runBagAnalysisFixtureCase(
 
   const visualFailures = await compareBagAnalysisVisuals(page, {
     calloutPairs: structuralMatch.calloutPairs,
-    knownRegionDrifts: knownRegionDrifts?.comparison,
     partPairs: structuralMatch.partPairs,
   })
 
@@ -114,213 +96,6 @@ async function waitForBagAnalysisReady(
     },
     { timeout: 12 * 60 * 1000 },
   )
-}
-
-async function createComparisonInput({
-  actualResult,
-  expectedCallouts,
-  expectedParts,
-  fixtureCase,
-  inputSessionPath,
-  testInfo,
-}: {
-  actualResult: FixtureActualResult
-  expectedCallouts: ExpectedCalloutsFixture
-  expectedParts: ExpectedPartsFixture
-  fixtureCase: BagAnalysisFixtureCase
-  inputSessionPath: string
-  testInfo: TestInfo
-}): Promise<{
-  actualResult: FixtureActualResult
-  expectedCallouts: ExpectedCalloutsFixture
-  expectedParts: ExpectedPartsFixture
-}> {
-  let comparisonInput = {
-    actualResult,
-    expectedCallouts,
-    expectedParts,
-  }
-
-  if (!shouldScopeLargeFixtureToAnnotatedPages(fixtureCase, inputSessionPath)) {
-    return shouldApplyKnownCiFixtureOverrides(fixtureCase)
-      ? applyKnownCiFixtureOverrides({
-          ...comparisonInput,
-          fixtureCase,
-          testInfo,
-        })
-      : comparisonInput
-  }
-
-  const pageNumbers = new Set(fixtureCase.pages ?? [])
-  comparisonInput = {
-    actualResult: {
-      ...actualResult,
-      callouts: (actualResult.callouts ?? []).filter((callout) => pageNumbers.has(callout.pageNumber)),
-    },
-    expectedCallouts: {
-      ...expectedCallouts,
-      callouts: expectedCallouts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
-    },
-    expectedParts: {
-      ...expectedParts,
-      callouts: expectedParts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
-    },
-  }
-
-  await testInfo.attach(`${fixtureCase.id}-comparison-scope`, {
-    body: Buffer.from(
-      [
-        "Scoped large-session CI comparison to manifest pages.",
-        `Pages: ${[...pageNumbers].sort((left, right) => left - right).join(", ")}`,
-        `Expected scoped callouts: ${comparisonInput.expectedCallouts.callouts.length}`,
-        `Actual scoped callouts: ${comparisonInput.actualResult.callouts.length}`,
-        "",
-      ].join("\n"),
-    ),
-    contentType: "text/plain",
-  })
-
-  return shouldApplyKnownCiFixtureOverrides(fixtureCase)
-    ? applyKnownCiFixtureOverrides({
-        ...comparisonInput,
-        fixtureCase,
-        testInfo,
-      })
-    : comparisonInput
-}
-
-async function applyKnownCiFixtureOverrides({
-  actualResult,
-  expectedCallouts,
-  expectedParts,
-  fixtureCase,
-  testInfo,
-}: {
-  actualResult: FixtureActualResult
-  expectedCallouts: ExpectedCalloutsFixture
-  expectedParts: ExpectedPartsFixture
-  fixtureCase: BagAnalysisFixtureCase
-  testInfo: TestInfo
-}): Promise<{
-  actualResult: FixtureActualResult
-  expectedCallouts: ExpectedCalloutsFixture
-  expectedParts: ExpectedPartsFixture
-}> {
-  const missingCallouts = fixtureCase.ciKnownMissingCallouts ?? []
-  const missingRows = fixtureCase.ciKnownMissingPartRows ?? []
-  const missingCalloutOrdinals = new Set(missingCallouts.map((callout) => callout.calloutOrdinal))
-  const missingByCallout = new Map<number, Set<number>>()
-
-  for (const row of missingRows) {
-    const rows = missingByCallout.get(row.calloutOrdinal) ?? new Set<number>()
-
-    rows.add(row.partOrdinal)
-    missingByCallout.set(row.calloutOrdinal, rows)
-  }
-
-  const expectedCalloutsWithoutKnownMissing = {
-    ...expectedCallouts,
-    callouts: expectedCallouts.callouts.filter((callout) => !missingCalloutOrdinals.has(callout.ordinal)),
-  }
-  const expectedPartsWithoutKnownMissing = {
-    ...expectedParts,
-    callouts: expectedParts.callouts
-      .filter((callout) => !missingCalloutOrdinals.has(callout.ordinal))
-      .map((callout) => {
-        const missingOrdinals = missingByCallout.get(callout.ordinal)
-
-        return missingOrdinals
-          ? {
-              ...callout,
-              parts: callout.parts.filter((part) => !missingOrdinals.has(part.ordinal)),
-            }
-          : callout
-      }),
-  }
-
-  await testInfo.attach(`${fixtureCase.id}-ci-known-fixture-overrides`, {
-    body: Buffer.from(
-      [
-        "Applied CI-only known missing fixture overrides.",
-        ...missingCallouts.map((callout) =>
-          `callout ${callout.calloutOrdinal}: ${callout.reason}`,
-        ),
-        ...missingRows.map((row) =>
-          `callout ${row.calloutOrdinal} row ${row.partOrdinal}: ${row.reason}`,
-        ),
-        "",
-      ].join("\n"),
-    ),
-    contentType: "text/plain",
-  })
-
-  return {
-    actualResult,
-    expectedCallouts: expectedCalloutsWithoutKnownMissing,
-    expectedParts: expectedPartsWithoutKnownMissing,
-  }
-}
-
-function shouldApplyKnownCiFixtureOverrides(fixtureCase: BagAnalysisFixtureCase): boolean {
-  return (
-    process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
-    (
-      Boolean(fixtureCase.ciKnownMissingCallouts?.length) ||
-      Boolean(fixtureCase.ciKnownMissingPartRows?.length)
-    )
-  )
-}
-
-interface KnownCiRegionDriftAttachment {
-  comparison: KnownRegionDrifts
-  lines: string[]
-}
-
-function createKnownCiRegionDrifts(
-  fixtureCase: BagAnalysisFixtureCase,
-): KnownCiRegionDriftAttachment | undefined {
-  if (process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT !== "1") {
-    return undefined
-  }
-
-  const calloutRegionDrifts = fixtureCase.ciKnownCalloutRegionDrifts ?? []
-  const partRegionDrifts = fixtureCase.ciKnownPartRegionDrifts ?? []
-
-  if (calloutRegionDrifts.length === 0 && partRegionDrifts.length === 0) {
-    return undefined
-  }
-
-  return {
-    comparison: {
-      calloutOrdinals: new Set(calloutRegionDrifts.map((entry) => entry.calloutOrdinal)),
-      partRows: new Set(partRegionDrifts.map((entry) => partRowKey(entry.calloutOrdinal, entry.partOrdinal))),
-    },
-    lines: [
-      "Applied CI-only known region-drift overrides.",
-      ...calloutRegionDrifts.map((entry) =>
-        `callout ${entry.calloutOrdinal}: ${entry.reason}`,
-      ),
-      ...partRegionDrifts.map((entry) =>
-        `callout ${entry.calloutOrdinal} row ${entry.partOrdinal}: ${entry.reason}`,
-      ),
-      "",
-    ],
-  }
-}
-
-async function attachKnownCiRegionDrifts(
-  testInfo: TestInfo,
-  caseId: string,
-  knownRegionDrifts: KnownCiRegionDriftAttachment | undefined,
-): Promise<void> {
-  if (!knownRegionDrifts) {
-    return
-  }
-
-  await testInfo.attach(`${caseId}-ci-known-region-drifts`, {
-    body: Buffer.from(knownRegionDrifts.lines.join("\n")),
-    contentType: "text/plain",
-  })
 }
 
 async function readActualResult(
@@ -363,18 +138,6 @@ async function readActualResult(
   }
 
   return actualResult as unknown as FixtureActualResult
-}
-
-function shouldScopeLargeFixtureToAnnotatedPages(
-  fixtureCase: BagAnalysisFixtureCase,
-  inputSessionPath: string,
-): boolean {
-  return (
-    process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
-    fs.statSync(inputSessionPath).size > SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES &&
-    Array.isArray(fixtureCase.pages) &&
-    fixtureCase.pages.length > 0
-  )
 }
 
 async function downloadSession(

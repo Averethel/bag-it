@@ -6,7 +6,6 @@ import {
   alphaMaskComparisonPasses,
   compareAlphaMasks,
   matchBagAnalysisStructure,
-  partRowKey,
   regionsMutuallyWithinTolerance,
   type DecodedAlphaMask,
 } from "./bag-analysis-comparison"
@@ -136,54 +135,6 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toContain(
       "callout 0 row 0: color mismatch: expected Green/green/review/#165025/manual-color-001/untrusted/manual-color-001, got Dark Bluish Gray/gray/review/#676963/manual-color-002/untrusted/manual-color-002",
     )
-  })
-
-  it("ignores exact declared callout and part region drifts", () => {
-    const match = matchBagAnalysisStructure({
-      actualResult: {
-        callouts: [
-          {
-            pageNumber: 1,
-            crop: { region: { x: 7, y: 7, width: 35, height: 25 } },
-            partItems: [
-              actualPart("1x", 1, { x: 18, y: 20, width: 12, height: 8 }),
-            ],
-          },
-        ],
-      },
-      expectedCallouts: {
-        schemaVersion: 2,
-        caseId: "test",
-        callouts: [
-          {
-            ordinal: 4,
-            pageNumber: 1,
-            crop: { region: { x: 0, y: 0, width: 50, height: 40 } },
-          },
-        ],
-      },
-      expectedParts: {
-        schemaVersion: 2,
-        caseId: "test",
-        callouts: [
-          {
-            ordinal: 4,
-            pageNumber: 1,
-            parts: [
-              expectedPart(2, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
-            ],
-          },
-        ],
-      },
-      knownRegionDrifts: {
-        calloutOrdinals: new Set([4]),
-        partRows: new Set([partRowKey(4, 2)]),
-      },
-    })
-
-    expect(match.failures).toEqual([])
-    expect(match.calloutPairs).toHaveLength(1)
-    expect(match.partPairs).toHaveLength(1)
   })
 
   it("tolerates untrusted manual color class renumbering", () => {
@@ -440,9 +391,9 @@ describe("bag-analysis comparator primitives", () => {
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
   })
 
-  it("relaxes only expected coverage for CI untrusted review raster drift", () => {
+  it("uses a one-sided shrink allowance for CI untrusted review raster drift", () => {
     expect(UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA).toEqual({
-      maxActualExtraRatio: 0.025,
+      maxActualExtraRatio: 0.005,
       minExpectedCoverage: 0.9,
     })
     expect(alphaMaskComparisonPasses({
@@ -450,7 +401,7 @@ describe("bag-analysis comparator primitives", () => {
       expectedCoverage: 0.9,
     }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(true)
     expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0.026,
+      actualExtraRatio: 0.006,
       expectedCoverage: 1,
     }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(false)
     expect(alphaMaskComparisonPasses({

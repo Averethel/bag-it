@@ -90,55 +90,6 @@ describe("bag-analysis fixture manifest validator", () => {
     })).toThrow(/manifest\.json is invalid:/)
   })
 
-  it("rejects malformed CI-known missing callouts", () => {
-    const fixtureDir = createFixtureDir()
-    const manifest = createManifest({
-      ciKnownMissingCallouts: [
-        {
-          calloutOrdinal: "0",
-          reason: "",
-        },
-      ],
-    })
-
-    expect(validateBagAnalysisFixtureManifest(manifest, {
-      fixtureDir,
-      isPathIgnored: () => false,
-    })).toEqual(expect.arrayContaining([
-      "manual-001.ciKnownMissingCallouts[0].calloutOrdinal must be a finite number",
-      "manual-001.ciKnownMissingCallouts[0].reason must be a non-empty string",
-    ]))
-  })
-
-  it("rejects malformed CI-known region drifts", () => {
-    const fixtureDir = createFixtureDir()
-    const manifest = createManifest({
-      ciKnownCalloutRegionDrifts: [
-        {
-          calloutOrdinal: null,
-          reason: "",
-        },
-      ],
-      ciKnownPartRegionDrifts: [
-        {
-          calloutOrdinal: 1,
-          partOrdinal: "0",
-          reason: "",
-        },
-      ],
-    })
-
-    expect(validateBagAnalysisFixtureManifest(manifest, {
-      fixtureDir,
-      isPathIgnored: () => false,
-    })).toEqual(expect.arrayContaining([
-      "manual-001.ciKnownCalloutRegionDrifts[0].calloutOrdinal must be a finite number",
-      "manual-001.ciKnownCalloutRegionDrifts[0].reason must be a non-empty string",
-      "manual-001.ciKnownPartRegionDrifts[0].partOrdinal must be a finite number",
-      "manual-001.ciKnownPartRegionDrifts[0].reason must be a non-empty string",
-    ]))
-  })
-
   function createFixtureDir(): string {
     const fixtureDir = mkdtempSync(path.join(os.tmpdir(), "bag-analysis-fixtures-"))
     const caseDir = path.join(fixtureDir, "manual-001")

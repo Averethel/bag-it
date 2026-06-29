@@ -64,27 +64,10 @@ the official image ships bundled Chromium, not branded Google Chrome. CircleCI
 may set `BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT=1` for those browser fixture
 gates to account for Linux Chrome manual-color raster drift; the exception is
 limited to untrusted `review` color classes. For those same rows, CI also allows
-Linux Chrome alpha-mask raster drift by keeping the normal actual-extra budget
-(`<=0.025` actual-extra ratio) while relaxing expected opaque coverage to at
-least `0.90`. Trusted colors, missing colors, quantities, callout regions, part
-regions, and quantity-label regions stay strict. Fixture cases with input
-sessions over `50 MiB` compare the in-page `window.__bagItE2EState.result`
-instead of forcing a browser session download, because CI Chrome can crash while
-serializing very large session files. Smaller fixture cases still exercise the
-Download button and attach the downloaded session. When CircleCI's Linux Chrome
-path uses this large-session mode and a fixture manifest has an explicit
-`pages` list, structural and visual comparison is scoped to those annotated
-pages so off-scope full-manual raster drift cannot fail the CI gate. Fixture
-manifests may also declare `ciKnownMissingPartRows` for specific user-approved
-rows that Linux browser PDF rasterization drops while local browser validation
-remains strict, and `ciKnownMissingCallouts` for exact user-approved callouts
-lost only by that same Linux Chrome raster path. These overrides are active only
-when the CI raster-drift environment flag is set and must include a callout- or
-row-level reason. Manifests may also declare exact `ciKnownCalloutRegionDrifts`
-and `ciKnownPartRegionDrifts` for Linux Chrome page-edge crop padding drift;
-these suppress only the named region/visual crop comparison while leaving
-counts, quantities, colors, quantity-label regions, and all non-declared
-regions strict. The legacy
+one-sided alpha-mask shrink when the actual crop adds no meaningful opaque
+pixels (`<=0.005` actual-extra ratio) and still covers at least `0.90` of the
+expected opaque pixels. Trusted colors, missing colors, quantities, callout
+regions, part regions, and quantity-label regions stay strict. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.
