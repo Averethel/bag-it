@@ -60,14 +60,7 @@ bag-analysis fixture gate in real Google Chrome with one worker. It must not use
 Playwright's bundled Chromium because PDF/canvas rasterization can differ from
 current user browsers and hide detector regressions. CircleCI Playwright Docker
 jobs install Google Chrome before running fixture and deployed e2e gates because
-the official image ships bundled Chromium, not branded Google Chrome. CircleCI
-may set `BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT=1` for those browser fixture
-gates to account for Linux Chrome manual-color raster drift; the exception is
-limited to untrusted `review` color classes. For those same rows, CI also allows
-one-sided alpha-mask shrink when the actual crop adds no meaningful opaque
-pixels (`<=0.005` actual-extra ratio) and still covers at least `0.90` of the
-expected opaque pixels. Trusted colors, missing colors, quantities, callout
-regions, part regions, and quantity-label regions stay strict. The legacy
+the official image ships bundled Chromium, not branded Google Chrome. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.

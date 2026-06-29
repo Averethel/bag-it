@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   ALPHA_MASK_PASS_CRITERIA,
-  UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA,
   compareAlphaMaskPixels,
   alphaMaskComparisonPasses,
   compareAlphaMasks,
@@ -187,63 +186,6 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toEqual([])
   })
 
-  it("tolerates untrusted review color drift when the CI drift gate is enabled", () => {
-    const previous = process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT
-    process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT = "1"
-
-    try {
-      const match = matchBagAnalysisStructure({
-        actualResult: {
-          callouts: [
-            {
-              pageNumber: 1,
-              crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
-              partItems: [
-                actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
-                  name: "Trans-Orange",
-                  family: "orange",
-                  status: "review",
-                  swatchHex: "#4c3318",
-                  manualClassId: "manual-color-014",
-                  manualClassTrusted: false,
-                  rawManualClassId: "manual-color-014",
-                }),
-              ],
-            },
-          ],
-        },
-        expectedCallouts: {
-          schemaVersion: 2,
-          caseId: "test",
-          callouts: [
-            {
-              ordinal: 0,
-              pageNumber: 1,
-              crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
-            },
-          ],
-        },
-        expectedParts: {
-          schemaVersion: 2,
-          caseId: "test",
-          callouts: [
-            {
-              ordinal: 0,
-              pageNumber: 1,
-              parts: [
-                expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
-              ],
-            },
-          ],
-        },
-      })
-
-      expect(match.failures).toEqual([])
-    } finally {
-      restoreColorDriftGate(previous)
-    }
-  })
-
   it("tolerates one-channel swatch drift when semantic color identity is unchanged", () => {
     const match = matchBagAnalysisStructure({
       actualResult: {
@@ -391,25 +333,6 @@ describe("bag-analysis comparator primitives", () => {
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
   })
 
-  it("uses a one-sided shrink allowance for CI untrusted review raster drift", () => {
-    expect(UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA).toEqual({
-      maxActualExtraRatio: 0.005,
-      minExpectedCoverage: 0.9,
-    })
-    expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0,
-      expectedCoverage: 0.9,
-    }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(true)
-    expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0.006,
-      expectedCoverage: 1,
-    }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(false)
-    expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0,
-      expectedCoverage: 0.899,
-    }, UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA)).toBe(false)
-  })
-
   it("runs the shared alpha mask comparator from serialized source", () => {
     const comparisonInput = {
       actualMask: squareMask(8, 8, 1, 1, 5, 5),
@@ -440,15 +363,6 @@ function restoreComparatorForTest(
     "alphaMaskComparisonPasses",
     `"use strict"; return (${compareSource});`,
   )(passes) as typeof compareAlphaMaskPixels
-}
-
-function restoreColorDriftGate(previous: string | undefined): void {
-  if (typeof previous === "string") {
-    process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT = previous
-    return
-  }
-
-  delete process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT
 }
 
 function encodeMask(mask: DecodedAlphaMask) {

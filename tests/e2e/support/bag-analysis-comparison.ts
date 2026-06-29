@@ -17,10 +17,6 @@ export const ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
   maxActualExtraRatio: 0.025,
   minExpectedCoverage: 0.95,
 }
-export const UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
-  maxActualExtraRatio: 0.005,
-  minExpectedCoverage: 0.9,
-}
 
 export interface ExpectedCallout {
   ordinal: number
@@ -164,7 +160,6 @@ interface BrowserVisualCalloutPair {
 interface BrowserVisualPartPair {
   actualMask: SerializableAlphaMask | null
   actualRegion: Region | null
-  allowUntrustedReviewRasterDrift: boolean
   expected: ExpectedPartRow
   expectedCalloutOrdinal: number
   pageNumber: number | null
@@ -372,10 +367,6 @@ export async function compareBagAnalysisVisuals(
   const browserPartPairs: BrowserVisualPartPair[] = partPairs.map((pair) => ({
     actualMask: serializeActualAlphaMask(pair.actual),
     actualRegion: readActualPartRegion(pair.actual),
-    allowUntrustedReviewRasterDrift: untrustedColorDriftAllowed(
-      pair.expected.color,
-      normalizeActualPartColor(pair.actual.detectedColor),
-    ),
     expected: pair.expected,
     expectedCalloutOrdinal: pair.expectedCalloutOrdinal,
     pageNumber: pageByCalloutOrdinal.get(pair.expectedCalloutOrdinal) ?? null,
@@ -386,7 +377,6 @@ export async function compareBagAnalysisVisuals(
     alphaMaskPassCriteria: ALPHA_MASK_PASS_CRITERIA,
     calloutPairs: browserCalloutPairs,
     partPairs: browserPartPairs,
-    untrustedReviewAlphaMaskPassCriteria: UNTRUSTED_REVIEW_ALPHA_MASK_PASS_CRITERIA,
   })
 }
 
@@ -456,30 +446,14 @@ function partColorsMatch(
 ): boolean {
   const comparableActual = normalizeActualPartColor(actual)
 
-  if (
+  return (
     expected.name === comparableActual.name &&
     expected.family === comparableActual.family &&
     expected.status === comparableActual.status &&
     swatchHexesMatch(expected.swatchHex, comparableActual.swatchHex) &&
     expected.manualClassTrusted === comparableActual.manualClassTrusted &&
     manualClassIdentityMatches(expected, comparableActual)
-  ) {
-    return true
-  }
-
-  return untrustedColorDriftAllowed(expected, comparableActual)
-}
-
-function untrustedColorDriftAllowed(expected: ExpectedPartColor, actual: ExpectedPartColor): boolean {
-  return process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
-    expected.status === "review" &&
-    actual.status === "review" &&
-    !expected.manualClassTrusted &&
-    !actual.manualClassTrusted &&
-    expected.name !== "missing" &&
-    actual.name !== "missing" &&
-    expected.family !== "missing" &&
-    actual.family !== "missing"
+  )
 }
 
 function swatchHexesMatch(expected: string, actual: string): boolean {
@@ -870,13 +844,11 @@ async function compareBagAnalysisVisualsInBrowser({
   alphaMaskPassCriteria,
   calloutPairs,
   partPairs,
-  untrustedReviewAlphaMaskPassCriteria,
 }: {
   alphaMaskComparatorSource: AlphaMaskComparatorSource
   alphaMaskPassCriteria: AlphaMaskPassCriteria
   calloutPairs: BrowserVisualCalloutPair[]
   partPairs: BrowserVisualPartPair[]
-  untrustedReviewAlphaMaskPassCriteria: AlphaMaskPassCriteria
 }): Promise<VisualComparisonFailure[]> {
   type BrowserRegion = Region
   type BrowserImage = {
@@ -967,9 +939,7 @@ async function compareBagAnalysisVisualsInBrowser({
       actualRegion,
       expectedMask,
       expectedRegion: pair.expected.partRegion,
-      passCriteria: pair.allowUntrustedReviewRasterDrift
-        ? untrustedReviewAlphaMaskPassCriteria
-        : alphaMaskPassCriteria,
+      passCriteria: alphaMaskPassCriteria,
       tolerance: partTolerance,
     })
 
