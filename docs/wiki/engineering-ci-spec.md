@@ -228,11 +228,16 @@ E2E:
   HTML artifacts are self-contained and do not depend on sibling PNG artifact
   URLs for visual review
 - if deployed preview e2e finds only structural or visual fixture-comparison
-  failures, the shard writes `fixture-diff-review-<node>.txt`, exits green, and
-  persists a fixture-review marker; a follow-up setup continuation job emits a
-  tiny CircleCI config containing the `review_fixture_diff_reports` approval job
-  only when such markers exist, otherwise it emits a no-op continuation with no
-  manual approval
+  failures, the shard writes `fixture-diff-review-<node>.txt`, persists a
+  fixture-review marker, and still exits red; a failed-status setup continuation
+  job then emits a tiny CircleCI config containing the
+  `review_fixture_diff_reports` approval job before the stable
+  `fixture_diff_review_gate` status check
+- if deployed preview e2e succeeds, a success-status setup continuation job
+  emits the same stable `fixture_diff_review_gate` as a no-op success check
+- if deployed preview e2e fails for browser, deploy, app, missing-output, or
+  other unclassified reasons, the continuation emits `fixture_diff_review_gate`
+  as a red check with no manual override
 - browser, deploy, app, missing-output, or other unclassified failures are not
   eligible for manual fixture review and stay red
 - store JUnit XML with `store_test_results`

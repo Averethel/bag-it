@@ -213,6 +213,7 @@ jobs:
 
             if [ -s "${unapproved_failures_file}" ]; then
               cp "${unapproved_failures_file}" "test-results/unapproved-bag-analysis-failures-${node_index}.txt"
+              cp "${unapproved_failures_file}" "${review_dir}/unapproved-failures.txt"
             fi
 
             report_cases_file=""
@@ -238,7 +239,9 @@ jobs:
               echo "Fixture diffs found; visual review is required in the CircleCI approval job."
               printf "review required\n" > "${review_dir}/review-required.txt"
               printf "review required\n" > "test-results/fixture-diff-review-${node_index}.txt"
-              status=0
+            elif [ "${status}" -ne 0 ] && [ ! -s "${unapproved_failures_file}" ]; then
+              echo "Deployed Playwright failed without a fixture-diff review marker."
+              printf "unknown deployed e2e failure\n" > "${review_dir}/unapproved-failures.txt"
             fi
 
             printf "%s\n" "${status}" > "${status_file}"
@@ -300,9 +303,18 @@ workflows:
             branches:
               ignore: main
       - continue_fixture_review:
-          name: continue_preview_fixture_review
+          name: continue_preview_success_gate
           requires:
-            - deployed_preview_playwright
+            - deployed_preview_playwright:
+                - success
+          filters:
+            branches:
+              ignore: main
+      - continue_fixture_review:
+          name: continue_preview_failure_gate
+          requires:
+            - deployed_preview_playwright:
+                - failed
           filters:
             branches:
               ignore: main

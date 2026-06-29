@@ -119,8 +119,11 @@ Current bag-analysis e2e comparison rules:
 - A reviewer may approve fixture-comparison drift from the CircleCI
   `review_fixture_diff_reports` approval job after inspecting the published
   report artifacts; that approval job appears only when deployed preview e2e
-  published fixture diff reports. This approval does not update fixtures and
-  must not hide non-fixture failures
+  published fixture diff reports and then gates the stable
+  `fixture_diff_review_gate` status check. A clean deployed preview e2e run
+  creates the same gate as a no-op success; non-fixture deployed e2e failures
+  create it as a red check with no manual override. This approval does not
+  update fixtures and must not hide non-fixture failures
 - fixture difference reports must include color mismatches as row-level issues
   with the part crop and full-callout context, even when the structural gate
   fails before the visual comparison stage
