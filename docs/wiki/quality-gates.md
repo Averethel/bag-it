@@ -108,8 +108,9 @@ Current bag-analysis e2e comparison rules:
   the same strict browser comparison as local `validate:e2e-fixtures`; sharding
   changes runtime only, not tolerance or fixture approval policy
 - failed CircleCI deployed-preview shards must publish a visual difference
-  report artifact for the assigned manual cases under `test-results/**`; the
-  report is review evidence only and does not approve fixture updates
+  report artifact for the failed manual cases under `test-results/**`; the
+  report may fall back to the assigned manual cases only when the failed-case
+  list cannot be read, and is review evidence only, not fixture approval
 - fixture difference reports must include color mismatches as row-level issues
   with the part crop and full-callout context, even when the structural gate
   fails before the visual comparison stage

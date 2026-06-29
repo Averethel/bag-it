@@ -188,8 +188,10 @@ jobs:
             export VERCEL_AUTOMATION_BYPASS_SECRET="${VERCEL_AUTOMATION_BYPASS_SECRET}"
             node_index="${CIRCLE_NODE_INDEX:-0}"
             selected_cases_file=".circleci-selected-bag-analysis-cases-${node_index}.txt"
+            failed_cases_file=".circleci-failed-bag-analysis-cases-${node_index}.txt"
             status_file="test-results/deployed-playwright-status.txt"
             export BAG_ANALYSIS_SELECTED_CASES_FILE="${selected_cases_file}"
+            export BAG_ANALYSIS_FAILED_CASES_FILE="${failed_cases_file}"
             mkdir -p test-results
             set +e
             node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
@@ -203,8 +205,19 @@ jobs:
               cp "${selected_cases_file}" "test-results/selected-bag-analysis-cases-${node_index}.txt"
             fi
 
-            if [ "${status}" -ne 0 ] && [ -s "${selected_cases_file}" ]; then
-              export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${selected_cases_file}")"
+            if [ -s "${failed_cases_file}" ]; then
+              cp "${failed_cases_file}" "test-results/failed-bag-analysis-cases-${node_index}.txt"
+            fi
+
+            report_cases_file=""
+            if [ -s "${failed_cases_file}" ]; then
+              report_cases_file="${failed_cases_file}"
+            elif [ -s "${selected_cases_file}" ]; then
+              report_cases_file="${selected_cases_file}"
+            fi
+
+            if [ "${status}" -ne 0 ] && [ -n "${report_cases_file}" ]; then
+              export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${report_cases_file}")"
               export BAG_ANALYSIS_DIFF_REPORT_DIR="test-results/bag-analysis-diff-report-${node_index}"
               echo "Generating bag-analysis visual difference report for ${BAG_ANALYSIS_CASE_IDS}"
               corepack pnpm exec playwright test tests/e2e/bag-analysis-report.spec.ts \

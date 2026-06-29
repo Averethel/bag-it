@@ -45,10 +45,24 @@ function writeSelectedManualIds(selectedManualIds) {
     return
   }
 
-  fs.mkdirSync(path.dirname(selectedCasesFile), { recursive: true })
+  writeManualIdsFile(selectedCasesFile, selectedManualIds)
+}
+
+function writeFailedManualIds(failedManualIds) {
+  const failedCasesFile = process.env.BAG_ANALYSIS_FAILED_CASES_FILE
+
+  if (!failedCasesFile) {
+    return
+  }
+
+  writeManualIdsFile(failedCasesFile, failedManualIds)
+}
+
+function writeManualIdsFile(filePath, manualIds) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(
-    selectedCasesFile,
-    selectedManualIds.length > 0 ? `${selectedManualIds.join("\n")}\n` : "",
+    filePath,
+    manualIds.length > 0 ? `${manualIds.join("\n")}\n` : "",
   )
 }
 
@@ -91,7 +105,38 @@ function runPlaywright(selectedManualIds) {
     throw result.error
   }
 
-  return result.status ?? 1
+  const status = result.status ?? 1
+
+  if (status !== 0) {
+    writeFailedManualIds(readFailedManualIds(process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE, manualIds))
+  }
+
+  return status
+}
+
+function readFailedManualIds(junitPath, manualIds) {
+  if (!junitPath || !fs.existsSync(junitPath)) {
+    return []
+  }
+
+  const manualIdSet = new Set(manualIds)
+  const failedManualIds = []
+  const xml = fs.readFileSync(junitPath, "utf8")
+  const testcasePattern = /<testcase\b[^>]*\bname="([^"]+)"[^>]*>([\s\S]*?)<\/testcase>/g
+
+  for (const match of xml.matchAll(testcasePattern)) {
+    if (!/<(?:error|failure)\b/.test(match[2])) {
+      continue
+    }
+
+    const manualId = match[1].match(/manual-\d+/)?.[0]
+
+    if (manualId && manualIdSet.has(manualId) && !failedManualIds.includes(manualId)) {
+      failedManualIds.push(manualId)
+    }
+  }
+
+  return failedManualIds
 }
 
 const argv = process.argv.slice(2)
