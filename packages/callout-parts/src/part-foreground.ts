@@ -51,12 +51,8 @@ export function createPartImageForLabel(
 ): CalloutPartImage | null {
   const interior = insetRegion(callout.region, CALLOUT_BORDER_INSET)
   const denseMode = isDenseLabelSet(ownershipLabels)
-  const cropOwnershipLabels = denseMode
-    ? removeCloseUpperDuplicateLabels(ownershipLabels, label)
-    : ownershipLabels
-  const cropSuppressionLabels = denseMode
-    ? removeCloseUpperDuplicateLabels(suppressionLabels, label)
-    : suppressionLabels
+  const cropOwnershipLabels = createCropLabelSet(ownershipLabels, label, denseMode)
+  const cropSuppressionLabels = createCropLabelSet(suppressionLabels, label, denseMode)
   const zone = createPartOwnershipZones(ownershipLabels, interior, { denseMode: isLargeDenseGrid(ownershipLabels) })
     .find((candidate) => candidate.label === label)
 
@@ -118,7 +114,11 @@ export function createPartImageForLabel(
       },
     )
 
-  return clampSameRowShallowLowerLabelLeftDrift(image, cropOwnershipLabels, label)
+  return clampSameRowTallLowerLabelBottomDrift(
+    clampSameRowShallowLowerLabelLeftDrift(image, cropOwnershipLabels, label),
+    cropOwnershipLabels,
+    label,
+  )
 }
 
 function clampSameRowShallowLowerLabelLeftDrift(
@@ -180,6 +180,55 @@ function clampSameRowShallowLowerLabelLeftDrift(
   return {
     ...image,
     alphaMask: cropAlphaMask(cleared, cropRegion),
+    diagnostics: image.diagnostics
+      ? {
+          ...image.diagnostics,
+          finalCropBounds: region,
+        }
+      : image.diagnostics,
+    region,
+  }
+}
+
+function clampSameRowTallLowerLabelBottomDrift(
+  image: CalloutPartImage,
+  labels: readonly CalloutQuantityLabel[],
+  label: CalloutQuantityLabel,
+): CalloutPartImage {
+  const previous = readPreviousSameRowLabel(labels, label)
+  const targetBottom = label.region.y - Math.max(5, Math.round(label.region.height * 0.55))
+  const currentBottom = image.region.y + image.region.height
+
+  if (
+    !previous ||
+    currentBottom <= targetBottom ||
+    image.region.height < Math.max(60, label.region.height * 5.4) ||
+    image.region.width < Math.max(45, label.region.width * 3.2) ||
+    label.region.y - image.region.y < Math.max(44, label.region.height * 4)
+  ) {
+    return image
+  }
+
+  const cropHeight = targetBottom - image.region.y
+
+  if (cropHeight < Math.max(1, Math.round(image.region.height * 0.72))) {
+    return image
+  }
+
+  const cropRegion = {
+    height: cropHeight,
+    width: image.region.width,
+    x: 0,
+    y: 0,
+  }
+  const region = {
+    ...image.region,
+    height: cropHeight,
+  }
+
+  return {
+    ...image,
+    alphaMask: cropAlphaMask(image.alphaMask, cropRegion),
     diagnostics: image.diagnostics
       ? {
           ...image.diagnostics,
@@ -449,6 +498,64 @@ function removeCloseUpperDuplicateLabels(
   currentLabel: CalloutQuantityLabel,
 ): CalloutQuantityLabel[] {
   return labels.filter((label) => label === currentLabel || !isCloseUpperDuplicateLabel(label.region, currentLabel.region))
+}
+
+function createCropLabelSet(
+  labels: readonly CalloutQuantityLabel[],
+  currentLabel: CalloutQuantityLabel,
+  denseMode: boolean,
+): CalloutQuantityLabel[] {
+  const compactedLabels = denseMode
+    ? removeCloseUpperDuplicateLabels(labels, currentLabel)
+    : [...labels]
+
+  return removeRaisedSingletonPartArtLabels(compactedLabels, currentLabel)
+}
+
+function removeRaisedSingletonPartArtLabels(
+  labels: readonly CalloutQuantityLabel[],
+  currentLabel: CalloutQuantityLabel,
+): CalloutQuantityLabel[] {
+  if (!hasSameRowPeer(labels, currentLabel)) {
+    return [...labels]
+  }
+
+  return labels.filter((label) =>
+    label === currentLabel || !isRaisedSingletonPartArtLabel(labels, label, currentLabel),
+  )
+}
+
+function hasSameRowPeer(
+  labels: readonly CalloutQuantityLabel[],
+  currentLabel: CalloutQuantityLabel,
+): boolean {
+  return labels.some((label) =>
+    label !== currentLabel &&
+    hasComparableQuantityLabelSize(label, currentLabel) &&
+    isInLocalLabelRow(label, [currentLabel]),
+  )
+}
+
+function isRaisedSingletonPartArtLabel(
+  labels: readonly CalloutQuantityLabel[],
+  candidate: CalloutQuantityLabel,
+  currentLabel: CalloutQuantityLabel,
+): boolean {
+  if (
+    candidate.recoveryKind ||
+    !hasComparableQuantityLabelSize(candidate, currentLabel) ||
+    isInLocalLabelRow(candidate, [currentLabel]) ||
+    hasSameRowPeer(labels, candidate)
+  ) {
+    return false
+  }
+
+  const verticalSeparation = regionCenter(currentLabel.region).y - regionCenter(candidate.region).y
+  const horizontalSeparation = Math.abs(regionCenter(currentLabel.region).x - regionCenter(candidate.region).x)
+
+  return verticalSeparation >= Math.max(18, currentLabel.region.height * 1.6) &&
+    verticalSeparation <= Math.max(58, currentLabel.region.height * 5.2) &&
+    horizontalSeparation <= Math.max(28, currentLabel.region.width * 2.2)
 }
 
 function isCloseUpperDuplicateLabel(upper: CalloutQuantityLabel["region"], lower: CalloutQuantityLabel["region"]): boolean {

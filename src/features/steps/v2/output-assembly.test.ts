@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest"
 import type { CalloutPartItem } from "@bag-it/callout-parts"
+import { createStepCalloutPageInput } from "@bag-it/step-callouts"
 import { assembleV2BuildStepsResult } from "./output-assembly"
 import type {
   StepDetectorV2CandidateEvidence,
+  StepDetectorV2PageInput,
   StepDetectorV2ResolvedCallout,
 } from "./contracts"
 import {
   createSyntheticV2Page,
   paintRegion,
+  TEST_BLACK,
   TEST_BLUE_PANEL,
   TEST_PAGE_HEIGHT,
   TEST_PAGE_WIDTH,
+  type TestV2Color,
 } from "./synthetic-page-test-helper"
 
 const ACCEPTED_REGION = { height: 30, width: 42, x: 12, y: 10 }
@@ -279,6 +283,49 @@ describe("v2 output assembly", () => {
     })
   })
 
+  it("normalizes top fill panels when lower-row quantities are clipped on the right edge", () => {
+    const fillPanelRegion = { height: 60, width: 220, x: 0, y: 5 }
+    const result = assembleV2BuildStepsResult(
+      [
+        createSizedSyntheticV2Page(240, 82, (data, width) => {
+          paintSizedRegion(data, width, fillPanelRegion, TEST_BLUE_PANEL)
+          for (const x of [150, 170, 190, 208]) {
+            paintSizedRasterQuantityLabel(data, width, "1x", x, 42)
+          }
+        }),
+      ],
+      [createResolvedCallout("right-clipped-fill-panel", fillPanelRegion, "accepted")],
+      [
+        createScoredEvidence("right-clipped-fill-panel", fillPanelRegion, "fill-panel", {
+          background: {
+            reasons: ["manual-style-background:12"],
+            value: 1,
+          },
+          border: {
+            reasons: ["dark-edge-coverage"],
+            value: 0.9,
+          },
+          quantity: {
+            reasons: ["raster-lower-row-quantity-label"],
+            value: 1,
+          },
+        }),
+      ],
+      {
+        detectorVersion: "v2-test",
+        pageCount: 1,
+        pageLimit: null,
+      },
+    )
+
+    expect(result.callouts[0]).toMatchObject({
+      crop: {
+        region: { height: 81, width: 115, x: 125, y: 0 },
+      },
+      sourceRegion: { height: 73, width: 107, x: 133, y: 0 },
+    })
+  })
+
   it("uses overlapping manual-style fill panels as the source for line-rectangle duplicates", () => {
     const lineRegion = { height: 71, width: 108, x: 47, y: 18 }
     const fillRegion = { height: 68, width: 104, x: 49, y: 20 }
@@ -436,6 +483,108 @@ describe("v2 output assembly", () => {
     expect(result.sectionBoundaryHints).toEqual([])
   })
 })
+
+function createSizedSyntheticV2Page(
+  width: number,
+  height: number,
+  draw: (data: Uint8ClampedArray, width: number) => void,
+): StepDetectorV2PageInput {
+  const data = new Uint8ClampedArray(width * height * 4)
+
+  paintSizedRegion(data, width, { height, width, x: 0, y: 0 }, { a: 255, b: 255, g: 255, r: 255 })
+  draw(data, width)
+
+  return createStepCalloutPageInput({
+    data,
+    height,
+    pageNumber: 1,
+    width,
+  })
+}
+
+function paintSizedRegion(
+  data: Uint8ClampedArray,
+  pageWidth: number,
+  region: StepDetectorV2ResolvedCallout["region"],
+  color: TestV2Color,
+): void {
+  for (let y = region.y; y < region.y + region.height; y += 1) {
+    for (let x = region.x; x < region.x + region.width; x += 1) {
+      writeSizedPixel(data, pageWidth, x, y, color)
+    }
+  }
+}
+
+function paintSizedRasterQuantityLabel(
+  data: Uint8ClampedArray,
+  pageWidth: number,
+  text: string,
+  x: number,
+  y: number,
+): void {
+  let cursorX = x
+
+  for (const character of text.toLowerCase()) {
+    const glyph = TEST_RASTER_GLYPHS[character]
+
+    if (!glyph) {
+      continue
+    }
+
+    paintSizedRasterGlyph(data, pageWidth, glyph, cursorX, y)
+    cursorX += glyph[0].length + 1
+  }
+}
+
+function paintSizedRasterGlyph(
+  data: Uint8ClampedArray,
+  pageWidth: number,
+  glyph: readonly string[],
+  x: number,
+  y: number,
+): void {
+  for (let row = 0; row < glyph.length; row += 1) {
+    for (let column = 0; column < glyph[row].length; column += 1) {
+      if (glyph[row][column] === "1") {
+        writeSizedPixel(data, pageWidth, x + column, y + row, TEST_BLACK)
+      }
+    }
+  }
+}
+
+function writeSizedPixel(
+  data: Uint8ClampedArray,
+  pageWidth: number,
+  x: number,
+  y: number,
+  color: TestV2Color,
+): void {
+  const offset = (y * pageWidth + x) * 4
+
+  data[offset] = color.r
+  data[offset + 1] = color.g
+  data[offset + 2] = color.b
+  data[offset + 3] = color.a
+}
+
+const TEST_RASTER_GLYPHS: Record<string, readonly string[]> = {
+  "1": [
+    "00100",
+    "01100",
+    "00100",
+    "00100",
+    "00100",
+    "00100",
+    "01110",
+  ],
+  "x": [
+    "10001",
+    "01010",
+    "00100",
+    "01010",
+    "10001",
+  ],
+}
 
 function createResolvedCallout(
   candidateId: string,

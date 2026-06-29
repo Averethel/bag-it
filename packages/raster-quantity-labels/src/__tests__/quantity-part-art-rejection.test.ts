@@ -109,6 +109,27 @@ describe("quantity part-art rejection", () => {
     expect(result).not.toContain(oversizedUpperRow[0])
   })
 
+  it("rejects orphan upper one labels even when unrelated candidates are present", () => {
+    const upperPartArt = createQuantityCandidateWithGlyphs("1x", 82, 54, 14)
+    const lowerRow = [
+      createQuantityCandidateWithGlyphs("1x", 52, 88, 14),
+      createQuantityCandidateWithGlyphs("1x", 82, 88, 14),
+    ]
+    const unrelated = createQuantityCandidateWithGlyphs("4x", 132, 88, 16)
+    const page = createLargeSyntheticPage((data, width) => {
+      paintLargeRegion(data, width, LARGE_CALLOUT_REGION, TEST_BLUE_PANEL)
+      paintLargeBorder(data, width, LARGE_CALLOUT_REGION, TEST_BLACK)
+      paintLargeRegion(data, width, { height: 16, width: 24, x: 82, y: 54 }, TEST_GRAY_PART)
+      for (const candidate of lowerRow) {
+        paintLargeRegion(data, width, candidate.region, TEST_BLACK)
+      }
+    })
+    const result = rejectPartArtCandidates(page, TEST_BLUE_PANEL, [upperPartArt, ...lowerRow, unrelated])
+
+    expect(result).not.toContain(upperPartArt)
+    expect(result).toEqual(expect.arrayContaining([...lowerRow, unrelated]))
+  })
+
   it("keeps high-value printed labels without a close lower competing row", () => {
     const realLabel = createQuantityCandidate("6x", 42, 76, 15)
     const sameRow = [
@@ -247,6 +268,39 @@ describe("quantity part-art rejection", () => {
 
     expect(rejectPartArtCandidates(page, TEST_BLUE_PANEL, candidates))
       .toContain(staggeredLabel)
+  })
+
+  it("rejects orphan upper one-shaped part art above a complete lower peer row", () => {
+    const orphanUpper = createQuantityCandidateWithGlyphs("1x", 70, 52, 14)
+    const lowerRow = [
+      createQuantityCandidateWithGlyphs("1x", 42, 90, 14),
+      createQuantityCandidateWithGlyphs("1x", 70, 90, 14),
+    ]
+    const page = createLargeSyntheticPage((data, width) => {
+      paintLargeRegion(data, width, LARGE_CALLOUT_REGION, TEST_BLUE_PANEL)
+      paintLargeBorder(data, width, LARGE_CALLOUT_REGION, TEST_BLACK)
+      paintLargeRegion(data, width, { height: 21, width: 26, x: 64, y: 34 }, TEST_GRAY_PART)
+    })
+
+    expect(rejectPartArtCandidates(page, TEST_BLUE_PANEL, [orphanUpper, ...lowerRow]))
+      .not.toContain(orphanUpper)
+  })
+
+  it("keeps a detected upper peer when the missing upper peer has printed ink", () => {
+    const detectedUpper = createQuantityCandidateWithGlyphs("1x", 70, 52, 14)
+    const lowerRow = [
+      createQuantityCandidateWithGlyphs("1x", 42, 90, 14),
+      createQuantityCandidateWithGlyphs("1x", 70, 90, 14),
+    ]
+    const page = createLargeSyntheticPage((data, width) => {
+      paintLargeRegion(data, width, LARGE_CALLOUT_REGION, TEST_BLUE_PANEL)
+      paintLargeBorder(data, width, LARGE_CALLOUT_REGION, TEST_BLACK)
+      paintLargeRegion(data, width, { height: 20, width: 28, x: 38, y: 30 }, TEST_GRAY_PART)
+      paintSparseLargeLabelInk(data, width, { height: 11, width: 14, x: 42, y: 52 })
+    })
+
+    expect(rejectPartArtCandidates(page, TEST_BLUE_PANEL, [detectedUpper, ...lowerRow]))
+      .toContain(detectedUpper)
   })
 
   it("rejects sparse high-value part art even when foreground sits above it", () => {
@@ -422,5 +476,31 @@ function paintLargeRegion(
       data[index + 2] = color.b
       data[index + 3] = 255
     }
+  }
+}
+
+function paintSparseLargeLabelInk(
+  data: Uint8ClampedArray,
+  width: number,
+  region: Region,
+): void {
+  const points = [
+    [3, 1],
+    [6, 1],
+    [8, 1],
+    [11, 1],
+    [4, 3],
+    [7, 3],
+    [10, 3],
+    [12, 3],
+    [5, 5],
+    [8, 5],
+    [11, 5],
+    [4, 7],
+    [9, 7],
+  ]
+
+  for (const [x, y] of points) {
+    paintLargeRegion(data, width, { height: 1, width: 1, x: region.x + x, y: region.y + y }, TEST_BLACK)
   }
 }

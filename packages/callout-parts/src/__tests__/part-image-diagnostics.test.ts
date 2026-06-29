@@ -20,8 +20,8 @@ const STABLE_DIAGNOSTIC_KEYS = [
 ]
 
 describe("part image diagnostics", () => {
-  it("uses the alpha162 extractor version", () => {
-    expect(CALLOUT_PART_EXTRACTOR_VERSION).toBe("2.0.0-alpha.165")
+  it("uses the alpha169 extractor version", () => {
+    expect(CALLOUT_PART_EXTRACTOR_VERSION).toBe("2.0.0-alpha.169")
   })
 
   it("exposes stable geometry diagnostics without tuning internals", () => {

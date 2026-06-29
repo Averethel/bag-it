@@ -61,6 +61,11 @@ export function suppressDuplicateOwnedPartRows(
       continue
     }
 
+    if (isOrphanUpperOnePartArtRow(item, items)) {
+      rejected.add(item)
+      continue
+    }
+
     const duplicate = items.find((candidate) => isDuplicateOwner(item, candidate, items, options))
 
     if (duplicate) {
@@ -117,6 +122,14 @@ function shouldKeepDroppedLabelForSuppression(
     return false
   }
 
+  if (isOrphanUpperOnePartArtRow(droppedItem, allItems)) {
+    return false
+  }
+
+  if (isCloseUpperColumnPartArtRow(droppedItem, keptItems)) {
+    return false
+  }
+
   if (keptItems.some((keptItem) =>
     isEmbeddedSameRowPartArtOwner(droppedItem, keptItem, options) ||
     isLowerInterRowPartArtDuplicate(droppedItem, keptItem, allItems),
@@ -162,6 +175,105 @@ function isLowValueNearEmptyPartArtRow(
   }
 
   return isNearEmptyPartCrop(item)
+}
+
+function isOrphanUpperOnePartArtRow(
+  item: CalloutPartItem,
+  items: readonly CalloutPartItem[],
+): boolean {
+  if (item.quantityLabel.value !== 1) {
+    return false
+  }
+
+  const oneItems = items.filter((candidate) => candidate.quantityLabel.value === 1)
+  const rows = clusterItemRows(oneItems)
+  const upperRow = rows[0] ?? []
+  const lowerRow = rows[1] ?? []
+
+  if (rows.length !== 2 || upperRow.length !== 1 || upperRow[0] !== item || lowerRow.length !== 2) {
+    return false
+  }
+
+  const sortedLower = [...lowerRow].sort((left, right) => left.quantityLabel.region.x - right.quantityLabel.region.x)
+  const matchingLower = sortedLower.find((lower) =>
+    labelsAreLooselyColumnAligned(item.quantityLabel.region, lower.quantityLabel.region),
+  )
+  const rowGap = readItemRowCenterY(sortedLower) - regionCenter(item.quantityLabel.region).y
+
+  if (
+    !matchingLower ||
+    rowGap < Math.max(20, item.quantityLabel.region.height * 1.8) ||
+    rowGap > Math.max(48, item.quantityLabel.region.height * 4.5)
+  ) {
+    return false
+  }
+
+  const upperPart = item.partImage.region
+  const lowerPart = matchingLower.partImage.region
+  const upperPartBottom = upperPart.y + upperPart.height
+
+  return item.quantityLabel.confidence <= 0.78 ||
+    upperPart.height <= lowerPart.height * 0.75 ||
+    upperPartBottom <= lowerPart.y + Math.max(4, item.quantityLabel.region.height * 0.4)
+}
+
+function isCloseUpperColumnPartArtRow(
+  item: CalloutPartItem,
+  keptItems: readonly CalloutPartItem[],
+): boolean {
+  if (item.quantityLabel.value > 4) {
+    return false
+  }
+
+  const lower = keptItems.find((keptItem) =>
+    regionCenter(keptItem.quantityLabel.region).y > regionCenter(item.quantityLabel.region).y &&
+    labelsAreLooselyColumnAligned(item.quantityLabel.region, keptItem.quantityLabel.region),
+  )
+
+  if (!lower) {
+    return false
+  }
+
+  const rowGap = regionCenter(lower.quantityLabel.region).y - regionCenter(item.quantityLabel.region).y
+
+  if (
+    rowGap < Math.max(18, item.quantityLabel.region.height * 1.6) ||
+    rowGap > Math.max(48, item.quantityLabel.region.height * 4.5)
+  ) {
+    return false
+  }
+
+  const upperPart = item.partImage.region
+  const lowerPart = lower.partImage.region
+  const upperPartBottom = upperPart.y + upperPart.height
+
+  return item.quantityLabel.confidence <= 0.78 ||
+    upperPart.height <= lowerPart.height * 0.8 ||
+    upperPartBottom <= lowerPart.y + Math.max(6, item.quantityLabel.region.height * 0.5)
+}
+
+function clusterItemRows(items: readonly CalloutPartItem[]): CalloutPartItem[][] {
+  const rows: CalloutPartItem[][] = []
+
+  for (const item of [...items].sort((left, right) => left.quantityLabel.region.y - right.quantityLabel.region.y)) {
+    const row = rows.find((candidateRow) => labelsShareRow(item.quantityLabel.region, candidateRow[0]!.quantityLabel.region))
+
+    if (row) {
+      row.push(item)
+    } else {
+      rows.push([item])
+    }
+  }
+
+  return rows
+}
+
+function readItemRowCenterY(items: readonly CalloutPartItem[]): number {
+  return items.reduce((sum, item) => sum + regionCenter(item.quantityLabel.region).y, 0) / Math.max(1, items.length)
+}
+
+function labelsShareRow(left: Region, right: Region): boolean {
+  return Math.abs(regionCenter(left).y - regionCenter(right).y) <= Math.max(8, Math.max(left.height, right.height) * 1.1)
 }
 
 function hasNearbyPrintedRowSupport(item: CalloutPartItem, items: readonly CalloutPartItem[]): boolean {

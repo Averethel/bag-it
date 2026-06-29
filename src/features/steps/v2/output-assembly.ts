@@ -5,6 +5,10 @@ import type {
 } from "@bag-it/callout-parts"
 import type { DetectedPartColor } from "@bag-it/part-colors"
 import {
+  findRasterQuantityLabels,
+  type RasterQuantityLabel,
+} from "@bag-it/raster-quantity-labels"
+import {
   compareStepCalloutRegions,
   hasStepCalloutOffManualStyleBackgroundEvidence,
   stepCalloutRegionSmallerOverlapRatio,
@@ -39,6 +43,10 @@ const OVERLAPPING_FILL_BACKGROUND_SOURCE_MAX = 0.7
 const OVERLAPPING_FILL_BACKGROUND_OVERLAP_MIN = 0.95
 const OVERLAPPING_FILL_PANEL_SOURCE_BORDER_MIN = 0.6
 const OVERLAPPING_FILL_PANEL_SOURCE_OVERLAP_MIN = 0.95
+const CLIPPED_RIGHT_FILL_PANEL_LABEL_COUNT_MIN = 3
+const CLIPPED_RIGHT_FILL_PANEL_LEFT_GAP_MIN = 64
+const CLIPPED_RIGHT_FILL_PANEL_LEFT_GAP_RATIO_MIN = 0.24
+const CLIPPED_RIGHT_FILL_PANEL_RIGHT_GAP_MAX = 10
 const RASTER_LOWER_ROW_QUANTITY_LABEL_REASON = "raster-lower-row-quantity-label"
 const MANUAL_STYLE_BACKGROUND_REASON_PREFIX = "manual-style-background:"
 const PAGE_LOCAL_BACKGROUND_REASON_PREFIX = "page-local-background"
@@ -285,25 +293,141 @@ function createBuildStepCallout(
       }
     : callout
   const page = pageByNumber.get(callout.pageNumber)
-  const cropSelection = selectCalloutCropSelection(outputCallout, outputEvidence, allEvidence, page)
+  const normalizedCalloutRegion = selectQuantityBoundedFillPanelRegion(outputCallout, outputEvidence, page)
+  const normalizedCallout = normalizedCalloutRegion
+    ? { ...outputCallout, region: normalizedCalloutRegion }
+    : outputCallout
+  const cropSelection = selectCalloutCropSelection(normalizedCallout, outputEvidence, allEvidence, page)
 
   return {
     confidence: normalizeCalloutConfidence(evidence?.totalScore ?? 0),
     crop: {
       region: createCalloutCropRegion(cropSelection.region, page, cropSelection.padding),
     },
-    detectorCandidateId: outputCallout.candidateId,
-    id: `v2-${outputCallout.candidateId}`,
+    detectorCandidateId: normalizedCallout.candidateId,
+    id: `v2-${normalizedCallout.candidateId}`,
     indexOnPage,
-    inferredBackground: createInferredBackground(outputCallout, outputEvidence, allEvidence, pageByNumber),
-    pageNumber: outputCallout.pageNumber,
-    partItems: createBuildStepPartItems(outputCallout, partItems),
+    inferredBackground: createInferredBackground(normalizedCallout, outputEvidence, allEvidence, pageByNumber),
+    pageNumber: normalizedCallout.pageNumber,
+    partItems: createBuildStepPartItems(normalizedCallout, partItems),
     ...(cropSelection.partExtractionRegion
       ? { partExtractionRegion: cropSelection.partExtractionRegion }
       : {}),
-    sourceRegion: outputCallout.region,
+    sourceRegion: normalizedCallout.region,
     stepIndex: stepIndex + 1,
   }
+}
+
+function selectQuantityBoundedFillPanelRegion(
+  callout: StepDetectorV2ResolvedCallout,
+  evidence: StepDetectorV2CandidateEvidence | undefined,
+  page: StepDetectorV2PageInput | undefined,
+): StepDetectorV2Region | null {
+  if (
+    !evidence ||
+    !page ||
+    evidence.candidate.source !== "fill-panel" ||
+    !hasEvidenceReasonPrefix(evidence, "background", MANUAL_STYLE_BACKGROUND_REASON_PREFIX) ||
+    !hasEvidenceReason(evidence, "quantity", RASTER_LOWER_ROW_QUANTITY_LABEL_REASON)
+  ) {
+    return null
+  }
+
+  const labels = findRasterQuantityLabels(page, callout.region, evidence.background)
+  const lowerRow = selectClippedRightFillPanelQuantityRow(callout.region, labels)
+
+  if (!lowerRow) {
+    return null
+  }
+
+  const first = lowerRow[0]
+  const last = lowerRow[lowerRow.length - 1]
+  const labelHeight = readMedian(lowerRow.map((label) => label.region.height))
+  const leftGap = first.region.x - callout.region.x
+  const rightGap = callout.region.x + callout.region.width - (last.region.x + last.region.width)
+
+  if (
+    leftGap < Math.max(
+      CLIPPED_RIGHT_FILL_PANEL_LEFT_GAP_MIN,
+      callout.region.width * CLIPPED_RIGHT_FILL_PANEL_LEFT_GAP_RATIO_MIN,
+    ) ||
+    rightGap > Math.max(CLIPPED_RIGHT_FILL_PANEL_RIGHT_GAP_MAX, labelHeight * 0.9)
+  ) {
+    return null
+  }
+
+  const rowTop = Math.min(...lowerRow.map((label) => label.region.y))
+  const rowBottom = Math.max(...lowerRow.map((label) => label.region.y + label.region.height))
+  const left = Math.max(0, first.region.x - Math.max(18, Math.round(labelHeight * 1.7)))
+  const top = Math.max(0, rowTop - Math.max(50, Math.round(labelHeight * 5.2)))
+  const right = Math.min(page.width, last.region.x + last.region.width + Math.max(48, Math.round(labelHeight * 4.7)))
+  const bottom = Math.min(page.height, rowBottom + Math.max(24, Math.round(labelHeight * 2.2)))
+
+  return {
+    height: Math.max(1, bottom - top),
+    width: Math.max(1, right - left),
+    x: left,
+    y: top,
+  }
+}
+
+function selectClippedRightFillPanelQuantityRow(
+  region: StepDetectorV2Region,
+  labels: readonly RasterQuantityLabel[],
+): RasterQuantityLabel[] | null {
+  const rows = clusterQuantityLabelRows(labels.filter((label) =>
+    label.region.y >= region.y + region.height * 0.45 &&
+    label.region.height <= 30 &&
+    label.region.height / region.height <= 0.3,
+  ))
+  const row = rows
+    .filter((candidate) => candidate.length >= CLIPPED_RIGHT_FILL_PANEL_LABEL_COUNT_MIN)
+    .sort((left, right) => right.length - left.length || readRowXSpread(right) - readRowXSpread(left))[0]
+
+  return row ? [...row].sort((left, right) => left.region.x - right.region.x) : null
+}
+
+function clusterQuantityLabelRows(labels: readonly RasterQuantityLabel[]): RasterQuantityLabel[][] {
+  const rows: RasterQuantityLabel[][] = []
+
+  for (const label of [...labels].sort((left, right) => left.region.y - right.region.y)) {
+    const row = rows.find((candidateRow) => labelsShareRow(label, candidateRow))
+
+    if (row) {
+      row.push(label)
+    } else {
+      rows.push([label])
+    }
+  }
+
+  return rows
+}
+
+function labelsShareRow(label: RasterQuantityLabel, row: readonly RasterQuantityLabel[]): boolean {
+  const centerY = row.reduce((total, candidate) => total + regionCenterY(candidate.region), 0) / row.length
+
+  return Math.abs(regionCenterY(label.region) - centerY) <=
+    Math.max(8, Math.max(label.region.height, readMedian(row.map((candidate) => candidate.region.height))) * 1.1)
+}
+
+function readRowXSpread(row: readonly RasterQuantityLabel[]): number {
+  const left = Math.min(...row.map((label) => label.region.x))
+  const right = Math.max(...row.map((label) => label.region.x + label.region.width))
+
+  return right - left
+}
+
+function readMedian(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+
+  return sorted.length % 2 === 0
+    ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+    : sorted[middle] ?? 0
+}
+
+function regionCenterY(region: StepDetectorV2Region): number {
+  return region.y + region.height / 2
 }
 
 function selectOverlappingManualStyleFillPanelSourceEvidence(

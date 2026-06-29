@@ -25,8 +25,12 @@ export {
 } from "./quantity-recovery"
 export {
   COMPACT_MISSING_LOWER_PEER_RECOVERY_KIND,
+  COMPACT_MISSING_SAME_ROW_TRAILING_PEER_RECOVERY_KIND,
+  COMPACT_MISSING_UPPER_PEER_ROW_RECOVERY_KIND,
   createQuantityRetryRecoveryPlans,
   recoverCompactMissingLowerPeerCandidates,
+  recoverCompactMissingSameRowTrailingPeerCandidates,
+  recoverCompactMissingUpperPeerRowCandidates,
 } from "./quantity-retry-recovery"
 export {
   rejectPartArtCandidates,

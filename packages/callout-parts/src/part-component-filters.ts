@@ -58,10 +58,12 @@ function isLikelyBorderComponent(
   const touchesRight = component.region.x + component.region.width >= searchRegion.x + searchRegion.width - 1
   const touchesBottom = component.region.y + component.region.height >= searchRegion.y + searchRegion.height - 1
   const touchedSides = [touchesLeft, touchesTop, touchesRight, touchesBottom].filter(Boolean).length
+  const touchesCorner = (touchesLeft || touchesRight) && (touchesTop || touchesBottom)
   const thinLimit = Math.max(4, Math.round(labelRegion.height * 0.45))
   const longHorizontal = component.region.width >= searchRegion.width * 0.35 && component.region.height <= thinLimit
   const longVertical = component.region.height >= searchRegion.height * 0.35 && component.region.width <= thinLimit
   const frameFragment = touchedSides >= 2 &&
+    touchesCorner &&
     (component.region.width >= labelRegion.width * 2 || component.region.height >= labelRegion.height * 2)
 
   return frameFragment || longHorizontal || longVertical

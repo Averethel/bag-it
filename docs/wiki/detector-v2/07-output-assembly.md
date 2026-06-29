@@ -22,8 +22,8 @@ Build steps and Bags can stay shared.
 
 - `/` reads detector and part-extractor versions from the v2 adapter
 - legacy sessions restored on `/` become stale because production now emits
-  detector version `2.0.0-alpha.18` and part extractor version
-  `2.0.0-alpha.162`
+  detector version `2.0.0-alpha.20` and part extractor version
+  `2.0.0-alpha.169`
 - completion transfer uses page and crop anchors only after rerun
 
 ## Implementation
@@ -53,6 +53,10 @@ Build steps and Bags can stay shared.
   overlapping raster-quantity-backed fill-panel source region when that source
   has the measured manual-style background needed by part extraction. This
   keeps app output stable while extracting from the visual panel users see.
+- Output assembly may tighten a top-row manual-style fill-panel source region
+  from the lower quantity-label row when Linux Chrome finds a clipped
+  right-edge panel fragment. The app crop still uses normal display padding,
+  while part extraction uses the normalized source region.
 
 ## Validation
 
