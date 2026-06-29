@@ -71,7 +71,10 @@ regions, and quantity-label regions stay strict. Fixture cases with input
 sessions over `50 MiB` compare the in-page `window.__bagItE2EState.result`
 instead of forcing a browser session download, because CI Chrome can crash while
 serializing very large session files. Smaller fixture cases still exercise the
-Download button and attach the downloaded session. The legacy
+Download button and attach the downloaded session. When CircleCI's Linux Chrome
+path uses this large-session mode and a fixture manifest has an explicit
+`pages` list, structural and visual comparison is scoped to those annotated
+pages so off-scope full-manual raster drift cannot fail the CI gate. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.

@@ -114,6 +114,9 @@ Current bag-analysis e2e comparison rules:
 - approved fixture input sessions over `50 MiB` compare the browser's in-page
   `window.__bagItE2EState.result` instead of downloading the full session file;
   smaller cases still exercise and attach browser session downloads
+- in CircleCI's Linux Chrome fixture gate, large-session fixtures with explicit
+  manifest `pages` compare only those annotated pages; local verification keeps
+  full-fixture comparison unless the same CI raster-drift env is set
 - failures attach expected, actual, and diff PNGs to Playwright output
 
 Approved manual-derived fixture content is frozen until the user explicitly

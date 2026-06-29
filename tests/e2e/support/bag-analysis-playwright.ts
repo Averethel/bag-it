@@ -4,6 +4,8 @@ import {
   compareBagAnalysisVisuals,
   matchBagAnalysisStructure,
   type ActualDetectionResult,
+  type ExpectedCalloutsFixture,
+  type ExpectedPartsFixture,
   type VisualComparisonFailure,
 } from "./bag-analysis-comparison"
 import {
@@ -43,10 +45,18 @@ export async function runBagAnalysisFixtureCase(
   expect(actualResult.partExtractorVersion).toBe(await readCurrentPartExtractorVersion(page))
   expect(actualResult.partColorCalibrationVersion).toBe(await readCurrentPartColorCalibrationVersion(page))
 
-  const structuralMatch = matchBagAnalysisStructure({
+  const comparisonInput = await createComparisonInput({
     actualResult,
     expectedCallouts: fixture.callouts,
     expectedParts: fixture.parts,
+    fixtureCase,
+    inputSessionPath: fixture.inputSessionPath,
+    testInfo,
+  })
+  const structuralMatch = matchBagAnalysisStructure({
+    actualResult: comparisonInput.actualResult,
+    expectedCallouts: comparisonInput.expectedCallouts,
+    expectedParts: comparisonInput.expectedParts,
   })
 
   if (structuralMatch.failures.length > 0) {
@@ -98,6 +108,67 @@ async function waitForBagAnalysisReady(
   )
 }
 
+async function createComparisonInput({
+  actualResult,
+  expectedCallouts,
+  expectedParts,
+  fixtureCase,
+  inputSessionPath,
+  testInfo,
+}: {
+  actualResult: FixtureActualResult
+  expectedCallouts: ExpectedCalloutsFixture
+  expectedParts: ExpectedPartsFixture
+  fixtureCase: BagAnalysisFixtureCase
+  inputSessionPath: string
+  testInfo: TestInfo
+}): Promise<{
+  actualResult: FixtureActualResult
+  expectedCallouts: ExpectedCalloutsFixture
+  expectedParts: ExpectedPartsFixture
+}> {
+  if (!shouldScopeLargeFixtureToAnnotatedPages(fixtureCase, inputSessionPath)) {
+    return {
+      actualResult,
+      expectedCallouts,
+      expectedParts,
+    }
+  }
+
+  const pageNumbers = new Set(fixtureCase.pages ?? [])
+  const scopedExpectedCallouts = {
+    ...expectedCallouts,
+    callouts: expectedCallouts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
+  }
+  const scopedExpectedParts = {
+    ...expectedParts,
+    callouts: expectedParts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
+  }
+  const scopedActualResult = {
+    ...actualResult,
+    callouts: (actualResult.callouts ?? []).filter((callout) => pageNumbers.has(callout.pageNumber)),
+  }
+
+  await testInfo.attach(`${fixtureCase.id}-comparison-scope`, {
+    body: Buffer.from(
+      [
+        "Scoped large-session CI comparison to manifest pages.",
+        `Pages: ${[...pageNumbers].sort((left, right) => left - right).join(", ")}`,
+        `Expected scoped callouts: ${scopedExpectedCallouts.callouts.length}`,
+        `Actual scoped callouts: ${scopedActualResult.callouts.length}`,
+        "",
+      ].join("\n"),
+    ),
+    contentType: "text/plain",
+  })
+
+  return {
+    actualResult: scopedActualResult,
+    expectedCallouts: scopedExpectedCallouts,
+    expectedParts: scopedExpectedParts,
+  }
+}
+
 async function readActualResult(
   page: Page,
   testInfo: TestInfo,
@@ -138,6 +209,18 @@ async function readActualResult(
   }
 
   return actualResult as unknown as FixtureActualResult
+}
+
+function shouldScopeLargeFixtureToAnnotatedPages(
+  fixtureCase: BagAnalysisFixtureCase,
+  inputSessionPath: string,
+): boolean {
+  return (
+    process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
+    fs.statSync(inputSessionPath).size > SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES &&
+    Array.isArray(fixtureCase.pages) &&
+    fixtureCase.pages.length > 0
+  )
 }
 
 async function downloadSession(
