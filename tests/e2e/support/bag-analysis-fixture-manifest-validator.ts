@@ -77,6 +77,11 @@ function validateFixtureCase(
   expectOptionalNumberArray(fixtureCase.pages, `${caseLabel}.pages`, failures)
   expectOptionalNumberArray(fixtureCase.contextPages, `${caseLabel}.contextPages`, failures)
   expectOptionalPageCountMap(fixtureCase.expectedPageCounts, `${caseLabel}.expectedPageCounts`, failures)
+  expectOptionalKnownMissingCallouts(
+    fixtureCase.ciKnownMissingCallouts,
+    `${caseLabel}.ciKnownMissingCallouts`,
+    failures,
+  )
   expectOptionalKnownMissingPartRows(
     fixtureCase.ciKnownMissingPartRows,
     `${caseLabel}.ciKnownMissingPartRows`,
@@ -96,6 +101,33 @@ function validateFixtureCase(
   validateFixturePath(fixtureCase.partsPath, `${caseLabel}.partsPath`, options, failures)
 
   return failures
+}
+
+function expectOptionalKnownMissingCallouts(
+  value: unknown,
+  label: string,
+  failures: string[],
+): void {
+  if (value === undefined) {
+    return
+  }
+
+  if (!Array.isArray(value)) {
+    failures.push(`${label} must be an array when present`)
+    return
+  }
+
+  for (const [index, entry] of value.entries()) {
+    const entryLabel = `${label}[${index}]`
+
+    if (!isRecord(entry)) {
+      failures.push(`${entryLabel} must be an object`)
+      continue
+    }
+
+    expectNumber(entry.calloutOrdinal, `${entryLabel}.calloutOrdinal`, failures)
+    expectString(entry.reason, `${entryLabel}.reason`, failures)
+  }
 }
 
 function expectOptionalKnownMissingPartRows(

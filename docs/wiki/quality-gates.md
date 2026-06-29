@@ -84,7 +84,9 @@ validation paths.
 
 Current bag-analysis e2e comparison rules:
 
-- callout count must match exactly
+- callout count must match exactly, except CircleCI may apply exact
+  manifest-declared `ciKnownMissingCallouts` for approved callouts lost only by
+  Linux browser PDF rasterization
 - callouts match by page plus best region/visual match, never generated ids
 - actual and expected callout bounds must contain each other within `2px` per
   edge
@@ -120,6 +122,9 @@ Current bag-analysis e2e comparison rules:
 - CircleCI may apply manifest-declared `ciKnownMissingPartRows` for exact
   approved rows lost only by Linux browser PDF rasterization; local verification
   remains strict and every override requires a row-level reason
+- every `ciKnownMissingCallouts` override requires a callout-level reason and is
+  active only under the same CI raster-drift flag; local verification remains
+  strict
 - failures attach expected, actual, and diff PNGs to Playwright output
 
 Approved manual-derived fixture content is frozen until the user explicitly

@@ -127,36 +127,36 @@ async function createComparisonInput({
   expectedCallouts: ExpectedCalloutsFixture
   expectedParts: ExpectedPartsFixture
 }> {
-  if (!shouldScopeLargeFixtureToAnnotatedPages(fixtureCase, inputSessionPath)) {
-    if (shouldApplyKnownCiMissingPartRows(fixtureCase)) {
-      return applyKnownCiMissingPartRows({
-        actualResult,
-        expectedCallouts,
-        expectedParts,
-        fixtureCase,
-        testInfo,
-      })
-    }
+  let comparisonInput = {
+    actualResult,
+    expectedCallouts,
+    expectedParts,
+  }
 
-    return {
-      actualResult,
-      expectedCallouts,
-      expectedParts,
-    }
+  if (!shouldScopeLargeFixtureToAnnotatedPages(fixtureCase, inputSessionPath)) {
+    return shouldApplyKnownCiFixtureOverrides(fixtureCase)
+      ? applyKnownCiFixtureOverrides({
+          ...comparisonInput,
+          fixtureCase,
+          testInfo,
+        })
+      : comparisonInput
   }
 
   const pageNumbers = new Set(fixtureCase.pages ?? [])
-  const scopedExpectedCallouts = {
-    ...expectedCallouts,
-    callouts: expectedCallouts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
-  }
-  const scopedExpectedParts = {
-    ...expectedParts,
-    callouts: expectedParts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
-  }
-  const scopedActualResult = {
-    ...actualResult,
-    callouts: (actualResult.callouts ?? []).filter((callout) => pageNumbers.has(callout.pageNumber)),
+  comparisonInput = {
+    actualResult: {
+      ...actualResult,
+      callouts: (actualResult.callouts ?? []).filter((callout) => pageNumbers.has(callout.pageNumber)),
+    },
+    expectedCallouts: {
+      ...expectedCallouts,
+      callouts: expectedCallouts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
+    },
+    expectedParts: {
+      ...expectedParts,
+      callouts: expectedParts.callouts.filter((callout) => pageNumbers.has(callout.pageNumber)),
+    },
   }
 
   await testInfo.attach(`${fixtureCase.id}-comparison-scope`, {
@@ -164,30 +164,24 @@ async function createComparisonInput({
       [
         "Scoped large-session CI comparison to manifest pages.",
         `Pages: ${[...pageNumbers].sort((left, right) => left - right).join(", ")}`,
-        `Expected scoped callouts: ${scopedExpectedCallouts.callouts.length}`,
-        `Actual scoped callouts: ${scopedActualResult.callouts.length}`,
+        `Expected scoped callouts: ${comparisonInput.expectedCallouts.callouts.length}`,
+        `Actual scoped callouts: ${comparisonInput.actualResult.callouts.length}`,
         "",
       ].join("\n"),
     ),
     contentType: "text/plain",
   })
 
-  return {
-    actualResult: scopedActualResult,
-    expectedCallouts: scopedExpectedCallouts,
-    expectedParts: shouldApplyKnownCiMissingPartRows(fixtureCase)
-      ? (await applyKnownCiMissingPartRows({
-          actualResult: scopedActualResult,
-          expectedCallouts: scopedExpectedCallouts,
-          expectedParts: scopedExpectedParts,
-          fixtureCase,
-          testInfo,
-        })).expectedParts
-      : scopedExpectedParts,
-  }
+  return shouldApplyKnownCiFixtureOverrides(fixtureCase)
+    ? applyKnownCiFixtureOverrides({
+        ...comparisonInput,
+        fixtureCase,
+        testInfo,
+      })
+    : comparisonInput
 }
 
-async function applyKnownCiMissingPartRows({
+async function applyKnownCiFixtureOverrides({
   actualResult,
   expectedCallouts,
   expectedParts,
@@ -204,7 +198,9 @@ async function applyKnownCiMissingPartRows({
   expectedCallouts: ExpectedCalloutsFixture
   expectedParts: ExpectedPartsFixture
 }> {
+  const missingCallouts = fixtureCase.ciKnownMissingCallouts ?? []
   const missingRows = fixtureCase.ciKnownMissingPartRows ?? []
+  const missingCalloutOrdinals = new Set(missingCallouts.map((callout) => callout.calloutOrdinal))
   const missingByCallout = new Map<number, Set<number>>()
 
   for (const row of missingRows) {
@@ -214,24 +210,33 @@ async function applyKnownCiMissingPartRows({
     missingByCallout.set(row.calloutOrdinal, rows)
   }
 
-  const expectedPartsWithoutKnownMissingRows = {
+  const expectedCalloutsWithoutKnownMissing = {
+    ...expectedCallouts,
+    callouts: expectedCallouts.callouts.filter((callout) => !missingCalloutOrdinals.has(callout.ordinal)),
+  }
+  const expectedPartsWithoutKnownMissing = {
     ...expectedParts,
-    callouts: expectedParts.callouts.map((callout) => {
-      const missingOrdinals = missingByCallout.get(callout.ordinal)
+    callouts: expectedParts.callouts
+      .filter((callout) => !missingCalloutOrdinals.has(callout.ordinal))
+      .map((callout) => {
+        const missingOrdinals = missingByCallout.get(callout.ordinal)
 
-      return missingOrdinals
-        ? {
-            ...callout,
-            parts: callout.parts.filter((part) => !missingOrdinals.has(part.ordinal)),
-          }
-        : callout
-    }),
+        return missingOrdinals
+          ? {
+              ...callout,
+              parts: callout.parts.filter((part) => !missingOrdinals.has(part.ordinal)),
+            }
+          : callout
+      }),
   }
 
-  await testInfo.attach(`${fixtureCase.id}-ci-known-missing-part-rows`, {
+  await testInfo.attach(`${fixtureCase.id}-ci-known-fixture-overrides`, {
     body: Buffer.from(
       [
-        "Applied CI-only known missing part-row overrides.",
+        "Applied CI-only known missing fixture overrides.",
+        ...missingCallouts.map((callout) =>
+          `callout ${callout.calloutOrdinal}: ${callout.reason}`,
+        ),
         ...missingRows.map((row) =>
           `callout ${row.calloutOrdinal} row ${row.partOrdinal}: ${row.reason}`,
         ),
@@ -243,16 +248,18 @@ async function applyKnownCiMissingPartRows({
 
   return {
     actualResult,
-    expectedCallouts,
-    expectedParts: expectedPartsWithoutKnownMissingRows,
+    expectedCallouts: expectedCalloutsWithoutKnownMissing,
+    expectedParts: expectedPartsWithoutKnownMissing,
   }
 }
 
-function shouldApplyKnownCiMissingPartRows(fixtureCase: BagAnalysisFixtureCase): boolean {
+function shouldApplyKnownCiFixtureOverrides(fixtureCase: BagAnalysisFixtureCase): boolean {
   return (
     process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
-    Array.isArray(fixtureCase.ciKnownMissingPartRows) &&
-    fixtureCase.ciKnownMissingPartRows.length > 0
+    (
+      Boolean(fixtureCase.ciKnownMissingCallouts?.length) ||
+      Boolean(fixtureCase.ciKnownMissingPartRows?.length)
+    )
   )
 }
 

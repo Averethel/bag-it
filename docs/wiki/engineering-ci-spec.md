@@ -77,8 +77,10 @@ path uses this large-session mode and a fixture manifest has an explicit
 pages so off-scope full-manual raster drift cannot fail the CI gate. Fixture
 manifests may also declare `ciKnownMissingPartRows` for specific user-approved
 rows that Linux browser PDF rasterization drops while local browser validation
-remains strict; this override is active only when the CI raster-drift
-environment flag is set and must include a row-level reason. The legacy
+remains strict, and `ciKnownMissingCallouts` for exact user-approved callouts
+lost only by that same Linux Chrome raster path. These overrides are active only
+when the CI raster-drift environment flag is set and must include a callout- or
+row-level reason. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.
