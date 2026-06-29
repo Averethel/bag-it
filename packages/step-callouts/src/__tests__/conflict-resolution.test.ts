@@ -2023,6 +2023,52 @@ describe("stepCallout conflict resolution", () => {
     expect(result.snapshot.failures.duplicate).toBe(1)
   })
 
+  it("rejects overlapping quantity fill-panel duplicates below the general duplicate overlap", () => {
+    const preferredPanel = { height: 86, width: 167, x: 502, y: 41 }
+    const widerDuplicate = { height: 102, width: 135, x: 462, y: 39 }
+    const result = resolveStepCalloutConflicts([
+      createManualStyleQuantityReasonEvidence("preferred-panel", preferredPanel, "fill-panel", {
+        background: 1,
+        border: 1,
+        quantity: 1,
+      }, "raster-lower-row-quantity-label"),
+      createManualStyleQuantityReasonEvidence("wider-duplicate", widerDuplicate, "fill-panel", {
+        background: 1,
+        border: 0.5,
+        quantity: 1,
+      }, "raster-lower-row-quantity-label"),
+    ])
+
+    expect(statusByCandidateId(result.resolvedCallouts)).toEqual({
+      "preferred-panel": "accepted",
+      "wider-duplicate": "rejected",
+    })
+    expect(result.snapshot.failures.duplicate).toBe(1)
+  })
+
+  it("rejects linux chrome weak fill-panel fragments that overlap a stronger accepted fill panel", () => {
+    const preferredPanel = { height: 70, width: 151, x: 510, y: 49 }
+    const widerDuplicate = { height: 102, width: 135, x: 462, y: 39 }
+    const result = resolveStepCalloutConflicts([
+      createManualStyleQuantityReasonEvidence("preferred-panel", preferredPanel, "fill-panel", {
+        background: 1,
+        border: 1,
+        quantity: 1,
+      }, "raster-lower-row-quantity-label"),
+      createManualStyleQuantityReasonEvidence("wider-duplicate", widerDuplicate, "fill-panel", {
+        background: 1,
+        border: 0.34810126582278483,
+        quantity: 1,
+      }, "raster-lower-row-quantity-label"),
+    ])
+
+    expect(statusByCandidateId(result.resolvedCallouts)).toEqual({
+      "preferred-panel": "accepted",
+      "wider-duplicate": "rejected",
+    })
+    expect(result.snapshot.failures.duplicate).toBe(1)
+  })
+
   it("rejects line-rectangle fragments that overlap an accepted fill panel", () => {
     const fillPanel = { height: 92, width: 193, x: 93, y: 549 }
     const lineFragment = { height: 138, width: 98, x: 190, y: 547 }

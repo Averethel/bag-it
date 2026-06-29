@@ -9,7 +9,7 @@ import type {
   Region,
 } from "./contracts"
 import { createBackgroundModel } from "./background-model"
-import { extractCalloutPartsForPage, recoverCompactMissingLowerPeerItems, suppressDuplicateOwnedPartRows } from "./extractor"
+import { extractCalloutPartsForPage, recoverReadableCompactMissingPeerItems, suppressDuplicateOwnedPartRows } from "./extractor"
 import { applyDuplicatePartImageTransfers, resolveDuplicateOwnedPartRows } from "./part-duplicate-owners"
 import { clipRegionTop, readExcludedUpperLabelClipTop } from "./part-crop-top-recovery"
 import { readCalloutBackground } from "./pixels"
@@ -49,7 +49,7 @@ export function extractCalloutPartsForScaledPage({
   const calloutResults = extracted.callouts.map((callout) => {
     const scaledReadableItems = createScaledReadableItems(callout.items, scaleX, scaleY)
     const sourceReadableItems = scaledReadableItems.map((entry) => entry.source)
-    const recoveredSourceItems = recoverScaledReadableCompactMissingLowerPeerItems(
+    const recoveredSourceItems = recoverScaledReadableCompactMissingPeerItems(
       page,
       scaledCalloutById.get(callout.calloutId),
       sourceReadableItems,
@@ -103,7 +103,7 @@ function createScaledReadableItems(
   return pairs.filter((pair) => readableItems.has(pair.scaled))
 }
 
-function recoverScaledReadableCompactMissingLowerPeerItems(
+function recoverScaledReadableCompactMissingPeerItems(
   page: CalloutPartPageInput,
   callout: CalloutPartCalloutInput | undefined,
   items: readonly CalloutPartItem[],
@@ -120,7 +120,7 @@ function recoverScaledReadableCompactMissingLowerPeerItems(
     { excludedRegions: items.map((item) => item.quantityLabel.region) },
   )
 
-  return recoverCompactMissingLowerPeerItems(page, callout, background, backgroundModel, items)
+  return recoverReadableCompactMissingPeerItems(page, callout, background, backgroundModel, items)
 }
 
 function resolveBasePageBounds(

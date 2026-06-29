@@ -23,8 +23,9 @@ const EXPANDED_COMPACT_FILL_PANEL_BACKGROUND_MIN = 0.7
 const EXPANDED_COMPACT_FILL_PANEL_WIDTH_MAX = 120
 const EXPANDED_COMPACT_FILL_PANEL_OVERLAP_MIN = 0.95
 const RASTER_LOWER_ROW_QUANTITY_LABEL_REASON = "raster-lower-row-quantity-label"
-const WEAK_FILL_PANEL_FRAGMENT_BORDER_MAX = 0.34
+const WEAK_FILL_PANEL_FRAGMENT_BORDER_MAX = 0.36
 const WEAK_FILL_PANEL_FRAGMENT_OVERLAP_MIN = 0.45
+const QUANTITY_FILL_PANEL_DUPLICATE_OVERLAP_MIN = 0.58
 const STRONG_FILL_PANEL_DUPLICATE_BORDER_MIN = 0.9
 
 export function resolveDuplicateStepCalloutDrafts(
@@ -65,9 +66,32 @@ function hasPreferredOverlap(
     (
       stepCalloutRegionSmallerOverlapRatio(draft.evidence.candidate.region, keptDraft.evidence.candidate.region) >=
         DUPLICATE_OVERLAP_MIN ||
+      hasQuantityFillPanelDuplicateOverlap(draft, keptDraft) ||
       hasWeakFillPanelFragmentOverlap(draft, keptDraft) ||
       hasLineRectangleFragmentOverlap(draft, keptDraft)
     ),
+  )
+}
+
+function hasQuantityFillPanelDuplicateOverlap(
+  draft: StepCalloutResolutionDraft,
+  keptDraft: StepCalloutResolutionDraft,
+): boolean {
+  return (
+    draft.status === "accepted" &&
+    keptDraft.status === "accepted" &&
+    draft.evidence.candidate.source === "fill-panel" &&
+    keptDraft.evidence.candidate.source === "fill-panel" &&
+    readStepCalloutEvidenceSignalValue(draft.evidence.scores, "background") >=
+      EXPANDED_COMPACT_FILL_PANEL_BACKGROUND_MIN &&
+    readStepCalloutEvidenceSignalValue(keptDraft.evidence.scores, "background") >=
+      EXPANDED_COMPACT_FILL_PANEL_BACKGROUND_MIN &&
+    readStepCalloutEvidenceSignalValue(draft.evidence.scores, "quantity") >= 0.6 &&
+    readStepCalloutEvidenceSignalValue(keptDraft.evidence.scores, "quantity") >= 0.6 &&
+    stepCalloutRegionSmallerOverlapRatio(
+      draft.evidence.candidate.region,
+      keptDraft.evidence.candidate.region,
+    ) >= QUANTITY_FILL_PANEL_DUPLICATE_OVERLAP_MIN
   )
 }
 

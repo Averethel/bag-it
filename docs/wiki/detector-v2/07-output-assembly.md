@@ -22,8 +22,8 @@ Build steps and Bags can stay shared.
 
 - `/` reads detector and part-extractor versions from the v2 adapter
 - legacy sessions restored on `/` become stale because production now emits
-  detector version `2.0.0-alpha.18` and part extractor version
-  `2.0.0-alpha.162`
+  detector version `2.0.0-alpha.19` and part extractor version
+  `2.0.0-alpha.164`
 - completion transfer uses page and crop anchors only after rerun
 
 ## Implementation

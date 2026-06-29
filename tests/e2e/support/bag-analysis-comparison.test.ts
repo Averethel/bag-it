@@ -87,6 +87,9 @@ describe("bag-analysis comparator primitives", () => {
   })
 
   it("detects color drift on matched part rows", () => {
+    const expected = expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 })
+    expected.color.manualClassTrusted = true
+
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -100,7 +103,7 @@ describe("bag-analysis comparator primitives", () => {
                 status: "review",
                 swatchHex: "#676963",
                 manualClassId: "manual-color-002",
-                manualClassTrusted: false,
+                manualClassTrusted: true,
                 rawManualClassId: "manual-color-002",
               }),
             ],
@@ -125,16 +128,14 @@ describe("bag-analysis comparator primitives", () => {
           {
             ordinal: 0,
             pageNumber: 1,
-            parts: [
-              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
-            ],
+            parts: [expected],
           },
         ],
       },
     })
 
     expect(match.failures).toContain(
-      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/untrusted/manual-color-001, got Dark Bluish Gray/gray/review/manual-color-002/untrusted/manual-color-002",
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/trusted/manual-color-001, got Dark Bluish Gray/gray/review/manual-color-002/trusted/manual-color-002",
     )
   })
 
@@ -188,7 +189,7 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toEqual([])
   })
 
-  it("ignores swatch drift when semantic color class is unchanged", () => {
+  it("ignores swatch and advisory-name drift for untrusted manual color classes", () => {
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -197,13 +198,13 @@ describe("bag-analysis comparator primitives", () => {
             crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
             partItems: [
               actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
-                name: "Green",
-                family: "green",
+                name: "Dark Azure",
+                family: "blue",
                 status: "review",
                 swatchHex: "#195328",
-                manualClassId: "manual-color-001",
+                manualClassId: "manual-color-018",
                 manualClassTrusted: false,
-                rawManualClassId: "manual-color-001",
+                rawManualClassId: "manual-color-018",
               }),
             ],
           },
@@ -238,7 +239,7 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toEqual([])
   })
 
-  it("fails color class drift even when swatch drift is tiny", () => {
+  it("fails when the current output has no detected color class", () => {
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -246,15 +247,20 @@ describe("bag-analysis comparator primitives", () => {
             pageNumber: 1,
             crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
             partItems: [
-              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
-                name: "Lime",
-                family: "green",
-                status: "review",
-                swatchHex: "#165026",
-                manualClassId: "manual-color-001",
-                manualClassTrusted: false,
-                rawManualClassId: "manual-color-001",
-              }),
+              {
+                quantity: { text: "1x", value: 1 },
+                partImage: {
+                  region: { x: 20, y: 20, width: 8, height: 8 },
+                  alphaMask: {
+                    width: 1,
+                    height: 1,
+                    data: { 0: 255 } as Record<string, number>,
+                  },
+                },
+                quantityLabel: {
+                  region: { x: 1, y: 1, width: 3, height: 2 },
+                },
+              },
             ],
           },
         ],
@@ -286,7 +292,7 @@ describe("bag-analysis comparator primitives", () => {
     })
 
     expect(match.failures).toContain(
-      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/untrusted/manual-color-001, got Lime/green/review/manual-color-001/untrusted/manual-color-001",
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/untrusted/manual-color-001, got missing/missing/missing/no-manual-class/untrusted/no-raw-class",
     )
   })
 
@@ -424,18 +430,51 @@ describe("bag-analysis comparator primitives", () => {
   it("uses centralized alpha mask pass criteria at threshold edges", () => {
     expect(ALPHA_MASK_PASS_CRITERIA).toEqual({
       maxActualExtraOpaquePixels: 12,
+      maxActualExtraOpaquePixelsAtNearFullCoverage: 96,
+      maxActualExtraOpaqueRatioAtFullCoverage: 0.035,
+      maxActualExtraOpaqueRatioAtNearFullCoverage: 0.08,
       minExpectedCoverage: 0.95,
+      minExpectedCoverageForExtraRatio: 0.995,
+      minExpectedCoverageForNearFullExtraRatio: 0.99,
     })
     expect(alphaMaskComparisonPasses({
       actualExtraOpaquePixels: 12,
+      actualExtraRatio: 0.5,
       expectedCoverage: 0.95,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
     expect(alphaMaskComparisonPasses({
       actualExtraOpaquePixels: 13,
+      actualExtraRatio: 0.5,
       expectedCoverage: 1,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
     expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 40,
+      actualExtraRatio: 0.031,
+      expectedCoverage: 1,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 40,
+      actualExtraRatio: 0.031,
+      expectedCoverage: 0.989,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 81,
+      actualExtraRatio: 0.076,
+      expectedCoverage: 0.991,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 97,
+      actualExtraRatio: 0.076,
+      expectedCoverage: 0.991,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 81,
+      actualExtraRatio: 0.081,
+      expectedCoverage: 0.991,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
       actualExtraOpaquePixels: 0,
+      actualExtraRatio: 0,
       expectedCoverage: 0.9499,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
   })

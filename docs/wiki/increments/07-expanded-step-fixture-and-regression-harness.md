@@ -45,14 +45,14 @@ Deliver:
 ## Validation Notes
 
 - The committed manifest currently covers eleven approved manual-derived cases.
-- Detector `2.0.0-alpha.18` removes structured PDF text from the step-callout
+- Detector `2.0.0-alpha.19` removes structured PDF text from the step-callout
   contract. Callout quantity evidence now comes from the shared raster quantity
   label package that also backs callout-part extraction.
 - The browser fixture gate covers the manual-008 page 2 banner guard: page-scale
   raster paragraph panels must not be accepted as build-step callouts because
   their glyph fragments resemble `Nx` labels. Strong border/background/quantity
   evidence can still accept a genuine wide callout panel.
-- Detector `2.0.0-alpha.18` invalidates alpha12 through alpha17
+- Detector `2.0.0-alpha.19` invalidates alpha12 through alpha18
   results after adding capped non-dark raster edge-contrast evidence for
   thin/light fill-panel outlines, dominant edge-sampled page background
   estimation, page-local background fallback under sparse/misleading
@@ -68,12 +68,18 @@ Deliver:
   use the small-panel exception, and transparent panels require foreground
   density bounds, which keeps lower-contrast ramp instruction panels and dense
   build-art fragments out of accepted callouts.
-- Part extractor `2.0.0-alpha.163` adds reviewed Animals row regressions:
+- Part extractor `2.0.0-alpha.163` added reviewed Animals row regressions:
   step 115 keeps the left `4x` row in a two-label panel even when part ink
   overlaps the printed label box, and step 219 reads the high-scale printed
   label as `5x` rather than `6x`. `manual-011` is the approved Animals
   bag-analysis e2e fixture and captures the current 275 callout / 464 part-row
   browser output.
+- Part extractor `2.0.0-alpha.164` and detector `2.0.0-alpha.19` target
+  Linux Chrome 149 fixture drift without refreshing fixtures: compact peer-row
+  recovery now handles leading same-row labels, missing upper peer rows,
+  suppressed trailing peers, and compact `8x/9x/2x` normalization, while the
+  detector rejects weak fill-panel duplicates that overlap a stronger accepted
+  quantity-backed fill panel.
 - Fixture content under `tests/e2e/fixtures/bag-analysis/**` remains frozen
   unless the proposed visual/JSON differences are shown and explicitly approved
   by the user before any rebaseline, staging, or commit.

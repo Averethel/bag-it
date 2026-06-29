@@ -19,13 +19,13 @@ local callout background color from interior pixels.
 Keep explicit detector versioning. The current detector version is:
 
 ```ts
-2.0.0-alpha.18
+2.0.0-alpha.19
 ```
 
 Part image and quantity-label extraction has its own version:
 
 ```ts
-2.0.0-alpha.163
+2.0.0-alpha.164
 ```
 
 Part color calibration has its own version:
@@ -91,10 +91,10 @@ probe or the extraction response, the app terminates the worker pool and
 retries the whole part-extraction pass once so partial stale output is not
 rendered.
 
-The production route currently emits detector version `2.0.0-alpha.18` from
+The production route currently emits detector version `2.0.0-alpha.19` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
-part extractor version `2.0.0-alpha.163` from package
+part extractor version `2.0.0-alpha.164` from package
 `@bag-it/callout-parts` and part color calibration version `2.0.0-alpha.65`
 from `@bag-it/part-colors`. Callout evidence and part extraction both use
 visible raster `/^\d+x$/i` quantity labels from
@@ -104,7 +104,7 @@ labels after glyph assembly are rejected by raster glyph spacing plus
 page-relative area and position checks, not by reading source text or manual
 ids; strong border/background/quantity evidence can still accept a genuinely
 wide callout panel without a predefined callout aspect-ratio contract.
-Detector `2.0.0-alpha.18` scores non-dark raster edge
+Detector `2.0.0-alpha.19` scores non-dark raster edge
 contrast against the inferred fill-panel background, capped as weak border
 evidence, so Animals-style green outlines can support raster quantity anchored
 fill panels without becoming the strong dark-border path. It estimates page
@@ -216,6 +216,14 @@ is no close lower-row conflict, preserving small left-hand parts in two-label
 Animals panels. High-scale printed `5x` glyphs also win before the `6x`
 classifier when their center shift is just below the old threshold, so browser
 rendered extraction reports `5x` instead of `6x` for that row shape.
+Alpha 164 targets Linux Chrome 149 fixture drift without changing approved
+fixtures. Compact peer recovery now covers leading same-row labels, two-missing
+upper peer rows with ownership rerun, suppressed same-row trailing peers, and a
+narrow compact `8x/9x/2x` normalization. Scaled extraction runs the same
+readable peer recovery after scaled readability filtering. The step resolver
+also rejects weak fill-panel fragments that overlap a stronger accepted
+quantity-backed fill panel, covering the Hall Tower page-46 duplicate while
+keeping overlapping true callouts out of the rule.
 Alpha 83 keeps the alpha69 dense-callout behavior and adds row-spanning
 lower-label ownership for Upper Courtyard style panels. When a lower label's
 row band starts far below the label because the visual part spans multiple

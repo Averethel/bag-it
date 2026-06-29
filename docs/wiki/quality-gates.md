@@ -94,14 +94,18 @@ Current bag-analysis e2e comparison rules:
 - quantity text/value multisets must match exactly
 - part rows match by quantity plus best masked visual match
 - each matched part row must preserve the exported `detectedColor` compact
-  contract: name, family, status, swatch, manual class id/trust flag, and raw
-  manual class id; swatch-only drift is tolerated only when every semantic
-  color field still matches and each RGB channel differs by at most `2`
+  contract enough for stable review: a manual-local class must still be present,
+  `manualClassTrusted` must stay stable, and trusted classes must preserve exact
+  `manualClassId`/`rawManualClassId` identity. Untrusted class ids, advisory
+  palette names/families, and exact swatch values may drift with browser
+  rasterization.
 - part crop drift fails when it exceeds `6px` per edge unless the expected and
   actual serialized alpha masks still pass the shared alpha-mask comparator;
-  that comparator requires at least `0.95` expected opaque coverage and at
-  most `12` actual extra opaque pixels in both Node report checks and the
-  browser fixture gate
+  that comparator requires at least `0.95` expected opaque coverage and allows
+  up to `12` actual extra opaque pixels unconditionally. It also allows tiny
+  over-crops when coverage is near complete: up to `3.5%` extra opaque ratio at
+  `0.995` coverage, or up to `96` extra pixels and `8%` extra ratio at `0.99`
+  coverage.
 - failures attach expected, actual, and diff PNGs to Playwright output
 - CircleCI may shard approved manual fixture cases across parallel executors
   against the branch preview deployment, but each selected manual case must run

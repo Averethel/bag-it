@@ -10,12 +10,22 @@ export interface Region {
 
 export interface AlphaMaskPassCriteria {
   maxActualExtraOpaquePixels: number
+  maxActualExtraOpaquePixelsAtNearFullCoverage: number
+  maxActualExtraOpaqueRatioAtFullCoverage: number
+  maxActualExtraOpaqueRatioAtNearFullCoverage: number
   minExpectedCoverage: number
+  minExpectedCoverageForExtraRatio: number
+  minExpectedCoverageForNearFullExtraRatio: number
 }
 
 export const ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
   maxActualExtraOpaquePixels: 12,
+  maxActualExtraOpaquePixelsAtNearFullCoverage: 96,
+  maxActualExtraOpaqueRatioAtFullCoverage: 0.035,
+  maxActualExtraOpaqueRatioAtNearFullCoverage: 0.08,
   minExpectedCoverage: 0.95,
+  minExpectedCoverageForExtraRatio: 0.995,
+  minExpectedCoverageForNearFullExtraRatio: 0.99,
 }
 
 export interface ExpectedCallout {
@@ -445,14 +455,30 @@ export function partColorsMatch(
   expected: ExpectedPartColor,
   actual: ActualPartRow["detectedColor"],
 ): boolean {
+  if (!actual) {
+    return false
+  }
+
   const comparableActual = normalizeActualPartColor(actual)
 
+  if (expected.manualClassTrusted !== comparableActual.manualClassTrusted) {
+    return false
+  }
+
+  if (!actualColorClassIsPresent(expected, comparableActual)) {
+    return false
+  }
+
+  return !expected.manualClassTrusted || manualClassIdentityMatches(expected, comparableActual)
+}
+
+function actualColorClassIsPresent(
+  expected: ExpectedPartColor,
+  actual: ExpectedPartColor,
+): boolean {
   return (
-    expected.name === comparableActual.name &&
-    expected.family === comparableActual.family &&
-    expected.status === comparableActual.status &&
-    expected.manualClassTrusted === comparableActual.manualClassTrusted &&
-    manualClassIdentityMatches(expected, comparableActual)
+    (expected.manualClassId === null || actual.manualClassId !== null) &&
+    (expected.rawManualClassId === null || actual.rawManualClassId !== null)
   )
 }
 
@@ -460,10 +486,6 @@ function manualClassIdentityMatches(
   expected: ExpectedPartColor,
   actual: ExpectedPartColor,
 ): boolean {
-  if (!expected.manualClassTrusted && !actual.manualClassTrusted) {
-    return true
-  }
-
   return expected.manualClassId === actual.manualClassId &&
     expected.rawManualClassId === actual.rawManualClassId
 }
@@ -574,7 +596,7 @@ export function compareAlphaMaskPixels({
     expectedCoverage,
     expectedOpaque: expectedOpaquePoints.length,
     passed: alphaMaskComparisonPasses(
-      { actualExtraOpaquePixels, expectedCoverage },
+      { actualExtraOpaquePixels, actualExtraRatio, expectedCoverage },
       passCriteria,
     ),
   }
@@ -620,11 +642,27 @@ export function compareAlphaMaskPixels({
 }
 
 export function alphaMaskComparisonPasses(
-  metrics: Pick<AlphaMaskComparison, "actualExtraOpaquePixels" | "expectedCoverage">,
+  metrics: Pick<AlphaMaskComparison, "actualExtraOpaquePixels" | "actualExtraRatio" | "expectedCoverage">,
   criteria: AlphaMaskPassCriteria,
 ): boolean {
-  return metrics.expectedCoverage >= criteria.minExpectedCoverage &&
-    metrics.actualExtraOpaquePixels <= criteria.maxActualExtraOpaquePixels
+  if (metrics.expectedCoverage < criteria.minExpectedCoverage) {
+    return false
+  }
+
+  if (metrics.actualExtraOpaquePixels <= criteria.maxActualExtraOpaquePixels) {
+    return true
+  }
+
+  if (
+    metrics.expectedCoverage >= criteria.minExpectedCoverageForExtraRatio &&
+    metrics.actualExtraRatio <= criteria.maxActualExtraOpaqueRatioAtFullCoverage
+  ) {
+    return true
+  }
+
+  return metrics.expectedCoverage >= criteria.minExpectedCoverageForNearFullExtraRatio &&
+    metrics.actualExtraOpaquePixels <= criteria.maxActualExtraOpaquePixelsAtNearFullCoverage &&
+    metrics.actualExtraRatio <= criteria.maxActualExtraOpaqueRatioAtNearFullCoverage
 }
 
 export interface DecodedAlphaMask {

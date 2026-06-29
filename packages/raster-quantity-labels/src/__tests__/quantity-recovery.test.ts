@@ -3,10 +3,11 @@ import type { Region } from "../contracts"
 import type { GlyphComponent } from "../glyph-mask"
 import type { QuantityCandidate } from "../quantity-candidate-types"
 import { rejectPartArtCandidates } from "../quantity-part-art-rejection"
-import { createQuantityRecoveryPlans } from "../quantity-recovery"
+import { createQuantityRecoveryPlans, recoverPostRejectionQuantityCandidates } from "../quantity-recovery"
 import {
   TEST_BLACK,
   TEST_BLUE_PANEL,
+  TEST_GRAY_PART,
   createSyntheticPage,
   paintBorder,
   paintRasterQuantityLabel,
@@ -102,6 +103,50 @@ describe("quantity recovery plans", () => {
 
     expect(rejectPartArtCandidates(page, TEST_BLUE_PANEL, candidates))
       .not.toContain(fakeRecoveredCandidate)
+  })
+
+  it("recovers a compact same-row trailing peer from label ink and broad part foreground", () => {
+    const anchor = createQuantityCandidate("6x", 34, 52, 12)
+    const page = createSyntheticPage((data) => {
+      paintCallout(data)
+      paintRegion(data, { height: 28, width: 44, x: 68, y: 22 }, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "1x", 73, 52)
+    })
+
+    const recovered = recoverPostRejectionQuantityCandidates(page, CALLOUT_REGION, TEST_BLUE_PANEL, [anchor])
+    const trailingPeer = recovered.find((candidate) =>
+      candidate.recoveryKind === "compact-missing-same-row-trailing-peer"
+    )
+
+    expect(trailingPeer).toMatchObject({
+      region: { height: 7, width: 10, x: 74, y: 52 },
+      text: "1x",
+      value: 1,
+    })
+  })
+
+  it("recovers a missing compact upper peer row from inferred label ink and part foreground", () => {
+    const calloutRegion = { height: 88, width: 70, x: 20, y: 5 }
+    const lowerRow = [
+      createQuantityCandidate("1x", 30, 66, 12),
+      createQuantityCandidate("1x", 54, 66, 12),
+    ]
+    const page = createSyntheticPage((data) => {
+      paintRegion(data, calloutRegion, TEST_BLUE_PANEL)
+      paintBorder(data, calloutRegion, TEST_BLACK)
+      paintRegion(data, { height: 14, width: 18, x: 27, y: 16 }, TEST_GRAY_PART)
+      paintRegion(data, { height: 14, width: 18, x: 51, y: 16 }, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "1x", 30, 31)
+      paintRasterQuantityLabel(data, "1x", 54, 31)
+    })
+
+    const recovered = recoverPostRejectionQuantityCandidates(page, calloutRegion, TEST_BLUE_PANEL, lowerRow)
+      .filter((candidate) => candidate.recoveryKind === "compact-missing-upper-peer-row")
+
+    expect(recovered.map((candidate) => candidate.region)).toEqual([
+      { height: 7, width: 12, x: 30, y: 31 },
+      { height: 7, width: 12, x: 54, y: 31 },
+    ])
   })
 })
 

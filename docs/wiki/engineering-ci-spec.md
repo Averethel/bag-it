@@ -89,12 +89,20 @@ JSON. The Playwright gate resumes the minimal session through `/`, forces fresh
 analysis from the embedded manual bytes, waits for scan, part extraction, and
 preview hydration, downloads the browser-produced session, and compares callouts
 and parts with strict region/masked-visual tolerances. Part-color comparison
-validates semantic color class identity (`name`, `family`, `status`, trust flag,
-and trusted manual class ids) but does not fail on exact `swatchHex` drift,
-because browser rasterization can move manual-local centroids while keeping the
-same user-facing class. Replay runners, PPM fixtures, Playwright snapshot
+validates that a manual-local color class is still emitted and that
+`manualClassTrusted` stays stable. Exact `manualClassId`/`rawManualClassId`
+identity is enforced only for trusted classes; untrusted class ids,
+`swatchHex`, `name`, and `family` are advisory review metadata and may drift
+with browser rasterization. Replay runners, PPM fixtures, Playwright snapshot
 baselines, package fixture roots, and saved-session refresh flows are excluded
 from the active validation workflow.
+Masked part comparisons require at least 95% expected alpha coverage. They allow
+up to 12 extra opaque pixels unconditionally, or up to 3.5% extra opaque pixels
+only when expected coverage is at least 99.5%, so tiny crop support drift is
+separate from missing or cut-off part evidence. Near-full coverage crops also
+allow up to 96 extra opaque pixels and 8% extra opaque ratio when expected
+coverage is at least 99%, covering small over-crops while still rejecting
+undercuts.
 
 Detector tuning also has a private-aware regression gate:
 `npm run validate:detector-regressions` validates any local part-color report
@@ -105,6 +113,10 @@ mismatch or missing rows; `active` color labels score only. `npm run
 validate:detector-tuning` is stricter and fails when the required local tuning
 gates are absent, currently Middle Wall color and Lower Courtyard crop
 snapshots. `npm run verify` includes the non-strict detector regression gate.
+Normal Vitest collection excludes `.bag-it/**`, `test-results/**`, and
+`playwright-report/**`; private scratch Playwright specs and exported browser
+reports in those roots are invoked explicitly when needed and must not affect
+the unit-test gate.
 
 The app dev server must ignore generated local artifact roots such as
 `.bag-it/**`, `.npm-cache/**`, and `.pnpm-store/**`; TypeScript must exclude

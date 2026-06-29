@@ -6,7 +6,13 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     css: true,
-    exclude: ["tests/e2e/**/*.spec.ts", "node_modules/**"],
+    exclude: [
+      ".bag-it/**",
+      "playwright-report/**",
+      "test-results/**",
+      "tests/e2e/**/*.spec.ts",
+      "node_modules/**",
+    ],
   },
   resolve: {
     alias: {
