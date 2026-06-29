@@ -1833,6 +1833,70 @@ describe("BaggingApp shell", () => {
       unobserve() {}
     })
 
+    renderApp({ scanStepCallouts })
+
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+    })
+
+    await user.upload(screen.getByLabelText(/pdf manual/i), manual)
+    await expectTooltipAfterHover(
+      user,
+      await screen.findByRole("button", { name: "Remove selected manual" }),
+      "Remove selected manual",
+    )
+    await screen.findByRole("img", { name: "Callout 1 crop" })
+
+    const increaseMultiplierButton = screen.getByRole("button", {
+      name: "Increase step 1 multiplier",
+    })
+    await expectTooltipAfterHover(user, increaseMultiplierButton, "Increase step 1 multiplier")
+    await user.click(increaseMultiplierButton)
+    const decreaseMultiplierButton = screen.getByRole("button", {
+      name: "Decrease step 1 multiplier",
+    })
+    await expectTooltipAfterHover(
+      user,
+      decreaseMultiplierButton,
+      "Decrease step 1 multiplier",
+    )
+    const partMatchCallCountBeforeMultiplierReset =
+      partMatchingMock.createPartMatchGroups.mock.calls.length
+    await user.click(decreaseMultiplierButton)
+
+    await user.click(screen.getByRole("tab", { name: /bags/i }))
+
+    const samePartSwitch = screen.getByRole("switch", {
+      name: "Group parts inside bags",
+    })
+
+    await waitFor(() => {
+      const laneCalls = partMatchingMock.createPartMatchGroups.mock.calls
+        .slice(partMatchCallCountBeforeMultiplierReset)
+        .map(([input]) => input as {
+          pairScorerConfig?: { metadata?: { lane?: string } } | null
+        })
+        .filter((input) => input.pairScorerConfig?.metadata?.lane)
+
+      expect(laneCalls.map((input) => input.pairScorerConfig?.metadata?.lane))
+        .toEqual(expect.arrayContaining(["auto", "suggested"]))
+    })
+    await waitFor(() => expect(samePartSwitch).toBeEnabled())
+    await user.click(samePartSwitch)
+
+    expect(samePartSwitch).toBeChecked()
+
+    const expandButton = await screen.findByRole("button", {
+      name: "Expand part group 1",
+    })
+
+    await expectTooltipAfterHover(user, expandButton, "Expand part group 1")
+  })
+
+  it("shows tooltips for suggested part group controls", async () => {
+    const user = userEvent.setup()
+    const scanStepCallouts = vi.fn(async () => repeatedPartStepResult(2))
+
     partMatchingMock.createPartMatchGroups.mockImplementation((input) => {
       const groupInput = input as Parameters<typeof import("@bag-it/part-matching")["createPartMatchGroups"]>[0]
       const lane = groupInput.pairScorerConfig?.metadata?.lane
@@ -1862,24 +1926,7 @@ describe("BaggingApp shell", () => {
     })
 
     await user.upload(screen.getByLabelText(/pdf manual/i), manual)
-    await expectTooltipAfterHover(
-      user,
-      await screen.findByRole("button", { name: "Remove selected manual" }),
-      "Remove selected manual",
-    )
     await screen.findByRole("img", { name: "Callout 1 crop" })
-
-    const increaseMultiplierButton = screen.getByRole("button", {
-      name: "Increase step 1 multiplier",
-    })
-    await expectTooltipAfterHover(user, increaseMultiplierButton, "Increase step 1 multiplier")
-    await user.click(increaseMultiplierButton)
-    await expectTooltipAfterHover(
-      user,
-      screen.getByRole("button", { name: "Decrease step 1 multiplier" }),
-      "Decrease step 1 multiplier",
-    )
-
     await user.click(screen.getByRole("tab", { name: /bags/i }))
 
     const samePartSwitch = screen.getByRole("switch", {
@@ -1887,7 +1934,7 @@ describe("BaggingApp shell", () => {
     })
 
     await waitFor(() => expect(samePartSwitch).toBeEnabled())
-    fireEvent.click(samePartSwitch)
+    await user.click(samePartSwitch)
 
     const rejectButton = await screen.findByRole("button", {
       name: "Reject suggested part group 1",
@@ -1954,7 +2001,7 @@ describe("BaggingApp shell", () => {
 
     await waitFor(() => expect(samePartSwitch).toBeEnabled())
 
-    fireEvent.click(samePartSwitch)
+    await user.click(samePartSwitch)
 
     const groupedTable = screen.getByRole("table", {
       name: "Bag checklist rows",

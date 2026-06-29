@@ -36,6 +36,29 @@ Object.defineProperty(window, "ResizeObserver", {
   value: TestResizeObserver,
 })
 
+type JSDOMError = Error & {
+  detail?: unknown
+  type?: string
+}
+
+type JSDOMVirtualConsole = {
+  on(event: "jsdomError", listener: (error: JSDOMError) => void): void
+  removeAllListeners(event: "jsdomError"): void
+}
+
+const jsdomVirtualConsole = (window as Window & {
+  _virtualConsole?: JSDOMVirtualConsole
+})._virtualConsole
+
+jsdomVirtualConsole?.removeAllListeners("jsdomError")
+jsdomVirtualConsole?.on("jsdomError", (error) => {
+  if (error.type === "css parsing") {
+    return
+  }
+
+  console.error(error.stack, error.detail)
+})
+
 const originalConsoleError = console.error
 const originalConsoleWarn = console.warn
 let consoleIssues: string[] = []
