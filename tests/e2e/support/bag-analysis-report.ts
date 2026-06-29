@@ -110,8 +110,8 @@ interface DataUrlTriplet {
 
 const IMAGE_CHUNK_SIZE = 25
 const REPORT_MAX_RENDERED_ISSUES_PER_CASE = readOptionalPositiveIntegerEnv(
-  "BAG_ANALYSIS_REPORT_MAX_ISSUES_PER_CASE",
-)
+  "BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE",
+) ?? (process.env.CI ? 50 : null)
 
 export async function createBagAnalysisCaseReport({
   actualResult,
@@ -810,6 +810,7 @@ function writeCaseHtml(outputRoot: string, report: BagAnalysisCaseReport): void 
         <p class="meta">Device pixel ratio: ${report.browserInfo.devicePixelRatio}</p>
         <p class="meta">Downloaded session: ${escapeHtml(path.basename(report.downloadedSessionPath))}</p>
         <p class="meta">Issues: ${report.totalIssueCount}; rendered: ${report.issues.length}</p>
+        <p class="meta">Rendered issue cap: ${REPORT_MAX_RENDERED_ISSUES_PER_CASE ?? "none"}</p>
         ${report.issues.length < report.totalIssueCount
           ? `<p class="meta">Visual evidence capped by BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE.</p>`
           : ""}
