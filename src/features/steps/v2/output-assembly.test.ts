@@ -142,6 +142,45 @@ describe("v2 output assembly", () => {
     expect(result.callouts).toEqual([])
   })
 
+  it("maps page advisories to Build steps page attention items", () => {
+    const sourceRegion = { height: 30, width: 42, x: 60, y: 16 }
+    const result = assembleV2BuildStepsResult(
+      [createSyntheticV2Page()],
+      [createResolvedCallout("accepted", ACCEPTED_REGION, "accepted")],
+      [createEvidence("accepted", ACCEPTED_REGION, 2.7, 0.9)],
+      {
+        detectorVersion: "v2-test",
+        pageAdvisories: [
+          {
+            confidence: 0.91,
+            id: "possible-step-multiplier-repeat-2x",
+            kind: "possible-step-multiplier",
+            pageNumber: 1,
+            source: "raster",
+            sourceRegion,
+            text: "2x",
+            value: 2,
+          },
+        ],
+        pageCount: 1,
+        pageLimit: null,
+      },
+    )
+
+    expect(result.pageAttentionItems).toEqual([
+      {
+        confidence: 0.91,
+        id: "possible-step-multiplier-repeat-2x",
+        kind: "possible-step-multiplier",
+        pageNumber: 1,
+        source: "raster",
+        sourceRegion,
+        text: "2x",
+        value: 2,
+      },
+    ])
+  })
+
   it("emits section boundary hints for off-style rejected callouts near the first visible callout band", () => {
     const offStyleRegion = { height: 22, width: 36, x: 68, y: 12 }
     const result = assembleV2BuildStepsResult(

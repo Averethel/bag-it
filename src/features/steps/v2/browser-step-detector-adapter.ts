@@ -183,6 +183,7 @@ export async function scanPdfStepCalloutsV2FromFile(
       detectorVersion: STEP_CALLOUT_DETECTOR_V2_VERSION,
       pageCount: scan.pageCount,
       pageLimit: options.maxPages ?? null,
+      pageAdvisories: detectionReport.pageAdvisories,
     },
   )
   const result = {

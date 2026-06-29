@@ -7,11 +7,6 @@ export interface StepSourceRegion {
   height: number
 }
 
-export interface StepPageTextItem {
-  text: string
-  region: StepSourceRegion
-}
-
 export interface StepImagePreview {
   imageDataUrl?: string
   width: number
@@ -28,7 +23,6 @@ export interface StepPageImage {
   height: number
   data: Uint8ClampedArray
   preview?: StepImagePreview
-  textItems?: StepPageTextItem[]
 }
 
 export type StepProcessingPhase =
@@ -86,7 +80,7 @@ export interface StepPageAttentionItem {
   id: string
   pageNumber: number
   kind: "possible-step-multiplier"
-  source: "text" | "raster"
+  source: "raster"
   text: string
   value: number
   confidence: number

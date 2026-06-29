@@ -56,7 +56,7 @@ function isStepPageAttentionItem(value: unknown): boolean {
     typeof value.id === "string" &&
     isFiniteNumber(value.pageNumber) &&
     value.kind === "possible-step-multiplier" &&
-    (value.source === "text" || value.source === "raster") &&
+    value.source === "raster" &&
     typeof value.text === "string" &&
     isFiniteNumber(value.value) &&
     isFiniteNumber(value.confidence) &&
