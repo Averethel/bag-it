@@ -4,7 +4,6 @@ import type { GlyphComponent } from "./glyph-mask"
 export type QuantityRecoveryKind =
   | "attached-baseline"
   | "compact-missing-lower-peer"
-  | "compact-missing-same-row-leading-peer"
   | "compact-upper-multirow"
   | "connected-top-cap"
   | "large-dense-top"

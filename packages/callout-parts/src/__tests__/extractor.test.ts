@@ -52,63 +52,6 @@ describe("callout part extractor", () => {
     expect(extractTexts(page)).toEqual(labels)
   })
 
-  it("recovers a missing leading same-row compact label when peer spacing and part ink agree", () => {
-    const page = createSyntheticPage((data) => {
-      paintCallout(data)
-      paintRegion(data, { height: 10, width: 14, x: 26, y: 36 }, TEST_GREEN_PART)
-      paintRegion(data, { height: 10, width: 14, x: 60, y: 36 }, TEST_GRAY_PART)
-      paintRegion(data, { height: 10, width: 14, x: 92, y: 36 }, TEST_GRAY_PART)
-      paintRasterQuantityLabel(data, "1x", 58, 52)
-      paintRasterQuantityLabel(data, "1x", 90, 52)
-    })
-
-    const items = extractCalloutPartsForPage({
-      callouts: [createCallout()],
-      page,
-    }).items
-
-    expect(items.map((item) => item.quantityLabel.text)).toEqual(["1x", "1x", "1x"])
-    expect(items[0].quantityLabel.recoveryKind).toBe("compact-missing-same-row-leading-peer")
-    expect(items[0].partImage.region.x).toBeLessThan(items[1].partImage.region.x)
-  })
-
-  it("does not recover a missing leading same-row label without part ink", () => {
-    const page = createSyntheticPage((data) => {
-      paintCallout(data)
-      paintRegion(data, { height: 10, width: 14, x: 60, y: 36 }, TEST_GRAY_PART)
-      paintRegion(data, { height: 10, width: 14, x: 92, y: 36 }, TEST_GRAY_PART)
-      paintRasterQuantityLabel(data, "1x", 58, 52)
-      paintRasterQuantityLabel(data, "1x", 90, 52)
-    })
-
-    const items = extractCalloutPartsForPage({
-      callouts: [createCallout()],
-      page,
-    }).items
-
-    expect(items.map((item) => item.quantityLabel.text)).toEqual(["1x", "1x"])
-  })
-
-  it("does not recover a leading same-row label in multi-row callouts", () => {
-    const page = createSyntheticPage((data) => {
-      paintCallout(data)
-      paintRegion(data, { height: 10, width: 14, x: 26, y: 30 }, TEST_GREEN_PART)
-      paintRegion(data, { height: 10, width: 14, x: 60, y: 30 }, TEST_GRAY_PART)
-      paintRegion(data, { height: 10, width: 14, x: 92, y: 30 }, TEST_GRAY_PART)
-      paintRasterQuantityLabel(data, "1x", 58, 44)
-      paintRasterQuantityLabel(data, "1x", 90, 44)
-      paintRegion(data, { height: 8, width: 14, x: 26, y: 50 }, TEST_GRAY_PART)
-      paintRasterQuantityLabel(data, "1x", 26, 62)
-    })
-
-    const items = extractCalloutPartsForPage({
-      callouts: [createCallout()],
-      page,
-    }).items
-
-    expect(items.map((item) => item.quantityLabel.recoveryKind)).toEqual([undefined, undefined, undefined])
-  })
-
   it("reads dense open four glyphs before closed-loop template fallback", () => {
     const digit = createGlyphFromPattern(DENSE_OPEN_FOUR, 0, 0)
     const x = createGlyphFromPattern(SMALL_X, 9, 3)

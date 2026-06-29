@@ -25,7 +25,7 @@ Keep explicit detector versioning. The current detector version is:
 Part image and quantity-label extraction has its own version:
 
 ```ts
-2.0.0-alpha.164
+2.0.0-alpha.163
 ```
 
 Part color calibration has its own version:
@@ -94,7 +94,7 @@ rendered.
 The production route currently emits detector version `2.0.0-alpha.18` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
-part extractor version `2.0.0-alpha.164` from package
+part extractor version `2.0.0-alpha.163` from package
 `@bag-it/callout-parts` and part color calibration version `2.0.0-alpha.65`
 from `@bag-it/part-colors`. Callout evidence and part extraction both use
 visible raster `/^\d+x$/i` quantity labels from
@@ -216,12 +216,6 @@ is no close lower-row conflict, preserving small left-hand parts in two-label
 Animals panels. High-scale printed `5x` glyphs also win before the `6x`
 classifier when their center shift is just below the old threshold, so browser
 rendered extraction reports `5x` instead of `6x` for that row shape.
-Alpha 164 recovers a missing leading compact same-row label only in single-row
-callouts, when two low-value peers share text, row, size, and spacing, the
-inferred label stays inside the callout interior, and separate part ink exists
-above the inferred slot. This targets Linux Chrome raster drift where a
-leftmost `1x` glyph can drop out while the adjacent peer labels and part art
-remain stable.
 Alpha 83 keeps the alpha69 dense-callout behavior and adds row-spanning
 lower-label ownership for Upper Courtyard style panels. When a lower label's
 row band starts far below the label because the visual part spans multiple
