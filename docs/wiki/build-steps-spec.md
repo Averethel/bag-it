@@ -19,7 +19,7 @@ local callout background color from interior pixels.
 Keep explicit detector versioning. The current detector version is:
 
 ```ts
-2.0.0-alpha.19
+2.0.0-alpha.20
 ```
 
 Part image and quantity-label extraction has its own version:
@@ -91,7 +91,7 @@ probe or the extraction response, the app terminates the worker pool and
 retries the whole part-extraction pass once so partial stale output is not
 rendered.
 
-The production route currently emits detector version `2.0.0-alpha.19` from
+The production route currently emits detector version `2.0.0-alpha.20` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
 part extractor version `2.0.0-alpha.164` from package
@@ -104,7 +104,7 @@ labels after glyph assembly are rejected by raster glyph spacing plus
 page-relative area and position checks, not by reading source text or manual
 ids; strong border/background/quantity evidence can still accept a genuinely
 wide callout panel without a predefined callout aspect-ratio contract.
-Detector `2.0.0-alpha.19` scores non-dark raster edge
+Detector `2.0.0-alpha.20` scores non-dark raster edge
 contrast against the inferred fill-panel background, capped as weak border
 evidence, so Animals-style green outlines can support raster quantity anchored
 fill panels without becoming the strong dark-border path. It estimates page
@@ -224,6 +224,11 @@ readable peer recovery after scaled readability filtering. The step resolver
 also rejects weak fill-panel fragments that overlap a stronger accepted
 quantity-backed fill panel, covering the Hall Tower page-46 duplicate while
 keeping overlapping true callouts out of the rule.
+Detector alpha 20 adds a narrow Linux Chrome 149 compact-top strong-border
+acceptance path for border or line-rectangle candidates with real lower-row
+raster quantity labels. It restores small blue top-row callouts whose fill
+background scores slightly below the manual-style threshold on Linux, while
+keeping too-narrow fragments rejected.
 Alpha 83 keeps the alpha69 dense-callout behavior and adds row-spanning
 lower-label ownership for Upper Courtyard style panels. When a lower label's
 row band starts far below the label because the visual part spans multiple

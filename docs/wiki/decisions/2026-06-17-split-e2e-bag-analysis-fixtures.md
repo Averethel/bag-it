@@ -115,6 +115,6 @@ of this acceptance pass.
 
 On 2026-06-28, `manual-011` was added as the approved Animals-style
 bag-analysis e2e fixture after user review of the remaining Animals misses. The
-fixture captures detector `2.0.0-alpha.19`, part extractor `2.0.0-alpha.164`,
+fixture captures detector `2.0.0-alpha.20`, part extractor `2.0.0-alpha.164`,
 and part color calibration `2.0.0-alpha.65` output: 275 callouts and 464 part
 rows from the real `/` app flow.

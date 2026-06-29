@@ -91,6 +91,13 @@ const TOP_STRONG_BORDER_PANEL_BORDER_MIN = 0.9
 const TOP_STRONG_BORDER_PANEL_TOP_RATIO_MAX = 0.15
 const TOP_STRONG_BORDER_PANEL_WIDTH_MAX = 320
 const TOP_STRONG_BORDER_PANEL_WIDTH_MIN = 120
+const TOP_COMPACT_STRONG_BORDER_PANEL_AREA_MIN = 2500
+const TOP_COMPACT_STRONG_BORDER_PANEL_AREA_RATIO_MAX = 0.02
+const TOP_COMPACT_STRONG_BORDER_PANEL_BACKGROUND_MIN = 0.55
+const TOP_COMPACT_STRONG_BORDER_PANEL_BORDER_MIN = 0.9
+const TOP_COMPACT_STRONG_BORDER_PANEL_TOP_RATIO_MAX = 0.15
+const TOP_COMPACT_STRONG_BORDER_PANEL_WIDTH_MAX = 120
+const TOP_COMPACT_STRONG_BORDER_PANEL_WIDTH_MIN = 40
 const PAGE_LOCAL_WEAK_TOP_PANEL_AREA_MIN = 12000
 const PAGE_LOCAL_WEAK_TOP_PANEL_BACKGROUND_MIN = 0.09
 const PAGE_LOCAL_WEAK_TOP_PANEL_BORDER_MIN = 0.34
@@ -187,6 +194,7 @@ function hasAcceptedScore(
     hasPageLocalCompactTopFillPanelEvidence(evidence, page) ||
     hasTopManualStyleFillPanelEvidence(evidence, page) ||
     hasTopStrongBorderPanelEvidence(evidence, page) ||
+    hasTopCompactStrongBorderPanelEvidence(evidence, page) ||
     hasPageLocalThinBorderPanelEvidence(evidence, page) ||
     (hasAcceptedEvidence(evidence, page) && evidence.totalScore >= ACCEPTED_TOTAL_MIN)
   )
@@ -222,6 +230,7 @@ function hasAcceptedEvidence(
     hasPageLocalCompactTopFillPanelEvidence(evidence, page) ||
     hasTopManualStyleFillPanelEvidence(evidence, page) ||
     hasTopStrongBorderPanelEvidence(evidence, page) ||
+    hasTopCompactStrongBorderPanelEvidence(evidence, page) ||
     hasPageLocalThinBorderPanelEvidence(evidence, page) ||
     hasPageLocalStrongPanelEvidence(evidence, page)
   )
@@ -406,6 +415,40 @@ function hasTopStrongBorderPanelEvidence(
       TOP_STRONG_BORDER_PANEL_BACKGROUND_MIN &&
     readStepCalloutEvidenceSignalValue(evidence.scores, "border") >=
       TOP_STRONG_BORDER_PANEL_BORDER_MIN &&
+    readStepCalloutEvidenceSignalValue(evidence.scores, "quantity") >= SIGNAL_STRONG_MIN
+  )
+}
+
+function hasTopCompactStrongBorderPanelEvidence(
+  evidence: StepCalloutCandidateEvidence,
+  page: StepCalloutPageInput | undefined,
+): boolean {
+  if (
+    !page ||
+    (
+      evidence.candidate.source !== "border" &&
+      evidence.candidate.source !== "line-rectangle"
+    )
+  ) {
+    return false
+  }
+
+  const region = evidence.candidate.region
+  const area = stepCalloutRegionArea(region)
+  const areaRatio = area / (page.width * page.height)
+
+  return (
+    !hasPageScaleTextBannerShape(region, page) &&
+    region.y / page.height <= TOP_COMPACT_STRONG_BORDER_PANEL_TOP_RATIO_MAX &&
+    region.width >= TOP_COMPACT_STRONG_BORDER_PANEL_WIDTH_MIN &&
+    region.width <= TOP_COMPACT_STRONG_BORDER_PANEL_WIDTH_MAX &&
+    area >= TOP_COMPACT_STRONG_BORDER_PANEL_AREA_MIN &&
+    areaRatio <= TOP_COMPACT_STRONG_BORDER_PANEL_AREA_RATIO_MAX &&
+    hasQuantityEvidenceReason(evidence, RASTER_LOWER_ROW_QUANTITY_LABEL_REASON) &&
+    readStepCalloutEvidenceSignalValue(evidence.scores, "background") >=
+      TOP_COMPACT_STRONG_BORDER_PANEL_BACKGROUND_MIN &&
+    readStepCalloutEvidenceSignalValue(evidence.scores, "border") >=
+      TOP_COMPACT_STRONG_BORDER_PANEL_BORDER_MIN &&
     readStepCalloutEvidenceSignalValue(evidence.scores, "quantity") >= SIGNAL_STRONG_MIN
   )
 }

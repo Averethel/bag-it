@@ -1614,6 +1614,46 @@ describe("stepCallout conflict resolution", () => {
     expect(result.snapshot.failures["false-positive-candidate"]).toBe(0)
   })
 
+  it("accepts linux chrome compact top strong-border panels with lower-row raster quantity labels", () => {
+    const page = createRasterNumberedPage([], { height: 596, width: 842 })
+    const result = resolveStepCalloutConflicts([
+      createQuantityReasonEvidence(
+        "top-compact-linux-line-rectangle",
+        { height: 62, width: 48, x: 440, y: 27 },
+        "border",
+        {
+          background: 0.566,
+          border: 1,
+          quantity: 1,
+        },
+        "raster-lower-row-quantity-label",
+      ),
+    ], { pages: [page] })
+
+    expect(result.resolvedCallouts[0].status).toBe("accepted")
+    expect(result.snapshot.failures["false-positive-candidate"]).toBe(0)
+  })
+
+  it("rejects too-narrow linux chrome compact top strong-border fragments", () => {
+    const page = createRasterNumberedPage([], { height: 596, width: 842 })
+    const result = resolveStepCalloutConflicts([
+      createQuantityReasonEvidence(
+        "too-narrow-top-compact-fragment",
+        { height: 80, width: 29, x: 604, y: 60 },
+        "border",
+        {
+          background: 0.58,
+          border: 1,
+          quantity: 1,
+        },
+        "raster-lower-row-quantity-label",
+      ),
+    ], { pages: [page] })
+
+    expect(result.resolvedCallouts[0].status).toBe("rejected")
+    expect(result.snapshot.failures["false-positive-candidate"]).toBe(1)
+  })
+
   it("accepts small manual-style panels on 1080px rendered pages", () => {
     const page = createRasterNumberedPage([], { height: 1080, width: 1080 })
     const result = resolveStepCalloutConflicts([
