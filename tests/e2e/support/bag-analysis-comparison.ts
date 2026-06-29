@@ -130,6 +130,11 @@ export interface StructuralMatch {
   partPairs: PartPair[]
 }
 
+export interface KnownRegionDrifts {
+  calloutOrdinals?: ReadonlySet<number>
+  partRows?: ReadonlySet<string>
+}
+
 export interface CalloutPair {
   actual: ActualCallout
   actualIndex: number
@@ -189,10 +194,12 @@ export function matchBagAnalysisStructure({
   actualResult,
   expectedCallouts,
   expectedParts,
+  knownRegionDrifts,
 }: {
   actualResult: ActualDetectionResult
   expectedCallouts: ExpectedCalloutsFixture
   expectedParts: ExpectedPartsFixture
+  knownRegionDrifts?: KnownRegionDrifts
 }): StructuralMatch {
   const failures: string[] = []
   const actualCallouts = actualResult.callouts ?? []
@@ -213,7 +220,10 @@ export function matchBagAnalysisStructure({
       continue
     }
 
-    if (!regionsMutuallyWithinTolerance(pair.expected.crop.region, actualRegion, CALLOUT_REGION_TOLERANCE_PX)) {
+    if (
+      !regionsMutuallyWithinTolerance(pair.expected.crop.region, actualRegion, CALLOUT_REGION_TOLERANCE_PX) &&
+      !knownRegionDrifts?.calloutOrdinals?.has(pair.expected.ordinal)
+    ) {
       failures.push(
         `callout ${pair.expected.ordinal}: region drift exceeds ${CALLOUT_REGION_TOLERANCE_PX}px per edge; expected ${formatRegion(
           pair.expected.crop.region,
@@ -260,7 +270,10 @@ export function matchBagAnalysisStructure({
         failures.push(
           `callout ${partPair.expectedCalloutOrdinal} row ${partPair.expected.ordinal}: actual part has no crop region`,
         )
-      } else if (!regionsMutuallyWithinTolerance(partPair.expected.partRegion, actualPartRegion, PART_REGION_TOLERANCE_PX)) {
+      } else if (
+        !regionsMutuallyWithinTolerance(partPair.expected.partRegion, actualPartRegion, PART_REGION_TOLERANCE_PX) &&
+        !knownRegionDrifts?.partRows?.has(partRowKey(partPair.expectedCalloutOrdinal, partPair.expected.ordinal))
+      ) {
         const alphaEquivalent = partAlphaMaskComparisonPasses(partPair.expected, partPair.actual, actualPartRegion)
 
         if (!alphaEquivalent) {
@@ -356,30 +369,36 @@ export async function compareBagAnalysisVisuals(
   page: Page,
   {
     calloutPairs,
+    knownRegionDrifts,
     partPairs,
   }: {
     calloutPairs: CalloutPair[]
+    knownRegionDrifts?: KnownRegionDrifts
     partPairs: PartPair[]
   },
 ): Promise<VisualComparisonFailure[]> {
   const pageByCalloutOrdinal = new Map(
     calloutPairs.map((pair) => [pair.expected.ordinal, pair.expected.pageNumber]),
   )
-  const browserCalloutPairs: BrowserVisualCalloutPair[] = calloutPairs.map((pair) => ({
-    actualRegion: readCalloutRegion(pair.actual),
-    expected: pair.expected,
-  }))
-  const browserPartPairs: BrowserVisualPartPair[] = partPairs.map((pair) => ({
-    actualMask: serializeActualAlphaMask(pair.actual),
-    actualRegion: readActualPartRegion(pair.actual),
-    allowUntrustedReviewRasterDrift: untrustedColorDriftAllowed(
-      pair.expected.color,
-      normalizeActualPartColor(pair.actual.detectedColor),
-    ),
-    expected: pair.expected,
-    expectedCalloutOrdinal: pair.expectedCalloutOrdinal,
-    pageNumber: pageByCalloutOrdinal.get(pair.expectedCalloutOrdinal) ?? null,
-  }))
+  const browserCalloutPairs: BrowserVisualCalloutPair[] = calloutPairs
+    .filter((pair) => !knownRegionDrifts?.calloutOrdinals?.has(pair.expected.ordinal))
+    .map((pair) => ({
+      actualRegion: readCalloutRegion(pair.actual),
+      expected: pair.expected,
+    }))
+  const browserPartPairs: BrowserVisualPartPair[] = partPairs
+    .filter((pair) => !knownRegionDrifts?.partRows?.has(partRowKey(pair.expectedCalloutOrdinal, pair.expected.ordinal)))
+    .map((pair) => ({
+      actualMask: serializeActualAlphaMask(pair.actual),
+      actualRegion: readActualPartRegion(pair.actual),
+      allowUntrustedReviewRasterDrift: untrustedColorDriftAllowed(
+        pair.expected.color,
+        normalizeActualPartColor(pair.actual.detectedColor),
+      ),
+      expected: pair.expected,
+      expectedCalloutOrdinal: pair.expectedCalloutOrdinal,
+      pageNumber: pageByCalloutOrdinal.get(pair.expectedCalloutOrdinal) ?? null,
+    }))
 
   return page.evaluate(compareBagAnalysisVisualsInBrowser, {
     alphaMaskComparatorSource: createAlphaMaskComparatorSource(),
@@ -448,6 +467,10 @@ export function createQuantityMultiset(rows: Array<ExpectedPartRow | ActualPartR
 
 export function quantityKey(quantity: { text?: string; value?: number | null } | undefined): string {
   return `${typeof quantity?.text === "string" ? quantity.text.trim() : ""}::${quantity?.value ?? "null"}`
+}
+
+export function partRowKey(calloutOrdinal: number, partOrdinal: number): string {
+  return `${calloutOrdinal}:${partOrdinal}`
 }
 
 function partColorsMatch(

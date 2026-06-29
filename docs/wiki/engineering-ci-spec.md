@@ -80,7 +80,11 @@ rows that Linux browser PDF rasterization drops while local browser validation
 remains strict, and `ciKnownMissingCallouts` for exact user-approved callouts
 lost only by that same Linux Chrome raster path. These overrides are active only
 when the CI raster-drift environment flag is set and must include a callout- or
-row-level reason. The legacy
+row-level reason. Manifests may also declare exact `ciKnownCalloutRegionDrifts`
+and `ciKnownPartRegionDrifts` for Linux Chrome page-edge crop padding drift;
+these suppress only the named region/visual crop comparison while leaving
+counts, quantities, colors, quantity-label regions, and all non-declared
+regions strict. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.

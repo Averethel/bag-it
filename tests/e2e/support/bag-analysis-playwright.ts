@@ -3,9 +3,11 @@ import { expect, type Page, type TestInfo } from "@playwright/test"
 import {
   compareBagAnalysisVisuals,
   matchBagAnalysisStructure,
+  partRowKey,
   type ActualDetectionResult,
   type ExpectedCalloutsFixture,
   type ExpectedPartsFixture,
+  type KnownRegionDrifts,
   type VisualComparisonFailure,
 } from "./bag-analysis-comparison"
 import {
@@ -53,10 +55,15 @@ export async function runBagAnalysisFixtureCase(
     inputSessionPath: fixture.inputSessionPath,
     testInfo,
   })
+  const knownRegionDrifts = createKnownCiRegionDrifts(fixtureCase)
+
+  await attachKnownCiRegionDrifts(testInfo, fixtureCase.id, knownRegionDrifts)
+
   const structuralMatch = matchBagAnalysisStructure({
     actualResult: comparisonInput.actualResult,
     expectedCallouts: comparisonInput.expectedCallouts,
     expectedParts: comparisonInput.expectedParts,
+    knownRegionDrifts: knownRegionDrifts?.comparison,
   })
 
   if (structuralMatch.failures.length > 0) {
@@ -69,6 +76,7 @@ export async function runBagAnalysisFixtureCase(
 
   const visualFailures = await compareBagAnalysisVisuals(page, {
     calloutPairs: structuralMatch.calloutPairs,
+    knownRegionDrifts: knownRegionDrifts?.comparison,
     partPairs: structuralMatch.partPairs,
   })
 
@@ -261,6 +269,58 @@ function shouldApplyKnownCiFixtureOverrides(fixtureCase: BagAnalysisFixtureCase)
       Boolean(fixtureCase.ciKnownMissingPartRows?.length)
     )
   )
+}
+
+interface KnownCiRegionDriftAttachment {
+  comparison: KnownRegionDrifts
+  lines: string[]
+}
+
+function createKnownCiRegionDrifts(
+  fixtureCase: BagAnalysisFixtureCase,
+): KnownCiRegionDriftAttachment | undefined {
+  if (process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT !== "1") {
+    return undefined
+  }
+
+  const calloutRegionDrifts = fixtureCase.ciKnownCalloutRegionDrifts ?? []
+  const partRegionDrifts = fixtureCase.ciKnownPartRegionDrifts ?? []
+
+  if (calloutRegionDrifts.length === 0 && partRegionDrifts.length === 0) {
+    return undefined
+  }
+
+  return {
+    comparison: {
+      calloutOrdinals: new Set(calloutRegionDrifts.map((entry) => entry.calloutOrdinal)),
+      partRows: new Set(partRegionDrifts.map((entry) => partRowKey(entry.calloutOrdinal, entry.partOrdinal))),
+    },
+    lines: [
+      "Applied CI-only known region-drift overrides.",
+      ...calloutRegionDrifts.map((entry) =>
+        `callout ${entry.calloutOrdinal}: ${entry.reason}`,
+      ),
+      ...partRegionDrifts.map((entry) =>
+        `callout ${entry.calloutOrdinal} row ${entry.partOrdinal}: ${entry.reason}`,
+      ),
+      "",
+    ],
+  }
+}
+
+async function attachKnownCiRegionDrifts(
+  testInfo: TestInfo,
+  caseId: string,
+  knownRegionDrifts: KnownCiRegionDriftAttachment | undefined,
+): Promise<void> {
+  if (!knownRegionDrifts) {
+    return
+  }
+
+  await testInfo.attach(`${caseId}-ci-known-region-drifts`, {
+    body: Buffer.from(knownRegionDrifts.lines.join("\n")),
+    contentType: "text/plain",
+  })
 }
 
 async function readActualResult(

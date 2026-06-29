@@ -90,6 +90,10 @@ Current bag-analysis e2e comparison rules:
 - callouts match by page plus best region/visual match, never generated ids
 - actual and expected callout bounds must contain each other within `2px` per
   edge
+- CircleCI may apply exact manifest-declared `ciKnownCalloutRegionDrifts` for
+  Linux Chrome page-edge crop padding drift; each entry requires a
+  callout-level reason, skips only that callout's region/visual crop comparison,
+  and is active only under the CI raster-drift flag
 - callout visual comparison fails missing ink, changed full-callout content, or
   extra neighboring content outside the expected region expanded by `2px`
 - part row count per matched callout must match exactly
@@ -113,6 +117,10 @@ Current bag-analysis e2e comparison rules:
   most `0.025` actual extra opaque ratio in Node report checks, local browser
   fixture gates, and all rows outside the CI-only untrusted-review coverage
   exception
+- CircleCI may apply exact manifest-declared `ciKnownPartRegionDrifts` for
+  Linux Chrome page-edge part-crop padding drift; each entry requires a row-level
+  reason, skips only that part row's region/masked visual comparison, and keeps
+  quantity, quantity-label region, row count, and color checks strict
 - approved fixture input sessions over `50 MiB` compare the browser's in-page
   `window.__bagItE2EState.result` instead of downloading the full session file;
   smaller cases still exercise and attach browser session downloads

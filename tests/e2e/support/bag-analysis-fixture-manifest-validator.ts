@@ -82,9 +82,19 @@ function validateFixtureCase(
     `${caseLabel}.ciKnownMissingCallouts`,
     failures,
   )
+  expectOptionalCalloutReasonEntries(
+    fixtureCase.ciKnownCalloutRegionDrifts,
+    `${caseLabel}.ciKnownCalloutRegionDrifts`,
+    failures,
+  )
   expectOptionalKnownMissingPartRows(
     fixtureCase.ciKnownMissingPartRows,
     `${caseLabel}.ciKnownMissingPartRows`,
+    failures,
+  )
+  expectOptionalPartReasonEntries(
+    fixtureCase.ciKnownPartRegionDrifts,
+    `${caseLabel}.ciKnownPartRegionDrifts`,
     failures,
   )
 
@@ -104,6 +114,14 @@ function validateFixtureCase(
 }
 
 function expectOptionalKnownMissingCallouts(
+  value: unknown,
+  label: string,
+  failures: string[],
+): void {
+  expectOptionalCalloutReasonEntries(value, label, failures)
+}
+
+function expectOptionalCalloutReasonEntries(
   value: unknown,
   label: string,
   failures: string[],
@@ -131,6 +149,14 @@ function expectOptionalKnownMissingCallouts(
 }
 
 function expectOptionalKnownMissingPartRows(
+  value: unknown,
+  label: string,
+  failures: string[],
+): void {
+  expectOptionalPartReasonEntries(value, label, failures)
+}
+
+function expectOptionalPartReasonEntries(
   value: unknown,
   label: string,
   failures: string[],
