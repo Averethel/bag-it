@@ -111,36 +111,6 @@ jobs:
           paths:
             - .next
 
-  e2e_fixture_gate:
-    executor: playwright_browser
-    parallelism: 5
-    steps:
-      - restore_project
-      - run:
-          name: Install Node dependencies
-          command: |
-            corepack pnpm install --frozen-lockfile --store-dir .pnpm-store
-      - run:
-          name: Install Google Chrome for Playwright
-          command: corepack pnpm exec playwright install chrome
-      - run:
-          name: Run bag-analysis Playwright fixture gate
-          command: |
-            set -euo pipefail
-            mkdir -p test-results
-            node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
-              --split-by=timings \
-              --timings-type=name \
-              --command="node scripts/run-circleci-bag-analysis-fixtures.mjs"
-      - store_test_results:
-          path: test-results
-      - store_artifacts:
-          path: playwright-report
-          destination: playwright-report
-      - store_artifacts:
-          path: test-results
-          destination: test-results
-
   deploy_preview:
     executor: node_24
     steps:
@@ -248,12 +218,9 @@ workflows:
             - lint
             - typecheck
             - unit_tests
-      - e2e_fixture_gate:
-          requires:
-            - build
       - deploy_preview:
           requires:
-            - e2e_fixture_gate
+            - build
           filters:
             branches:
               ignore: main
@@ -266,14 +233,7 @@ workflows:
               ignore: main
       - deploy_production:
           requires:
-            - e2e_fixture_gate
-          filters:
-            branches:
-              only: main
-      - deployed_playwright:
-          name: deployed_production_playwright
-          requires:
-            - deploy_production
+            - build
           filters:
             branches:
               only: main

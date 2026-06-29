@@ -103,10 +103,10 @@ Current bag-analysis e2e comparison rules:
   most `0.025` actual extra opaque ratio in both Node report checks and the
   browser fixture gate
 - failures attach expected, actual, and diff PNGs to Playwright output
-- CircleCI may shard approved manual fixture cases across parallel executors,
-  but each selected manual case must run the same strict browser comparison as
-  local `validate:e2e-fixtures`; sharding changes runtime only, not tolerance
-  or fixture approval policy
+- CircleCI may shard approved manual fixture cases across parallel executors
+  against the branch preview deployment, but each selected manual case must run
+  the same strict browser comparison as local `validate:e2e-fixtures`; sharding
+  changes runtime only, not tolerance or fixture approval policy
 
 Approved manual-derived fixture content is frozen until the user explicitly
 approves a refresh. Agents must not rebaseline, regenerate, rewrite, stage, or

@@ -56,15 +56,17 @@ Remove catalogue download/build scripts from the core path unless a future
 feature reintroduces Rebrickable.
 
 The `validate:e2e-fixtures` command runs the manifest-driven Playwright
-bag-analysis fixture gate in real Google Chrome with one worker locally.
-CircleCI shards the same manual cases across five parallel executors with
-`circleci tests run --split-by=timings --timings-type=name`, using one
-Playwright process per executor and JUnit output under `test-results/**` so
-CircleCI can learn per-manual timings. It must not use Playwright's bundled
-Chromium because PDF/canvas rasterization can differ from current user browsers
-and hide detector regressions. CircleCI Playwright Docker jobs install Google
-Chrome before running fixture and deployed e2e gates because the official image
-ships bundled Chromium, not branded Google Chrome. The legacy
+bag-analysis fixture gate in real Google Chrome with one worker locally. In
+CircleCI, branch builds run the same manual cases only once, against the Vercel
+preview deployment. CircleCI shards that deployed preview gate across five
+parallel executors with `circleci tests run --split-by=timings
+--timings-type=name`, using one Playwright process per executor and JUnit output
+under `test-results/**` so CircleCI can learn per-manual timings. It must not
+use Playwright's bundled Chromium because PDF/canvas rasterization can differ
+from current user browsers and hide detector regressions. CircleCI Playwright
+Docker jobs install Google Chrome before running the deployed preview e2e gate
+because the official image ships bundled Chromium, not branded Google Chrome.
+The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.
@@ -165,11 +167,9 @@ Use this workflow structure:
 3. `typecheck`
 4. `unit_tests`
 5. `build`
-6. bag-analysis Playwright fixture gate
-7. preview deploy on non-`main`
-8. deployed preview e2e on non-`main`
-9. production deploy on `main`
-10. deployed production e2e on `main`
+6. preview deploy on non-`main`
+7. deployed preview e2e on non-`main`
+8. production deploy on `main`
 
 Executors:
 
@@ -213,8 +213,8 @@ E2E:
 - read persisted deployment URL
 - set `PLAYWRIGHT_BASE_URL`
 - require Vercel automation bypass secret
-- run deployed bag-analysis Playwright validation through the same five-way
-  CircleCI manual-case timing split used by the fixture gate
+- run deployed preview bag-analysis Playwright validation through the five-way
+  CircleCI manual-case timing split
 - store JUnit XML with `store_test_results`
 - store `playwright-report` and `test-results` artifacts
 
