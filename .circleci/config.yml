@@ -195,6 +195,7 @@ jobs:
               --command="node scripts/run-circleci-bag-analysis-fixtures.mjs"
             status="$?"
             set -e
+            printf "%s\n" "${status}" > test-results/deployed-playwright-status.txt
 
             if [ "${status}" -ne 0 ] && [ -s "${BAG_ANALYSIS_SELECTED_CASES_FILE}" ]; then
               export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${BAG_ANALYSIS_SELECTED_CASES_FILE}")"
@@ -202,8 +203,6 @@ jobs:
               echo "Generating bag-analysis visual difference report for ${BAG_ANALYSIS_CASE_IDS}"
               corepack pnpm exec playwright test tests/e2e/bag-analysis-report.spec.ts --project=chrome --reporter=line || true
             fi
-
-            exit "${status}"
       - store_test_results:
           path: test-results
       - store_artifacts:
@@ -212,6 +211,11 @@ jobs:
       - store_artifacts:
           path: test-results
           destination: test-results
+      - run:
+          name: Fail on deployed Playwright validation failure
+          command: |
+            status="$(cat test-results/deployed-playwright-status.txt)"
+            exit "${status}"
 
 workflows:
   verify_and_deploy:
