@@ -215,6 +215,9 @@ E2E:
 - require Vercel automation bypass secret
 - run deployed preview bag-analysis Playwright validation through the five-way
   CircleCI manual-case timing split
+- when a deployed preview shard fails, rerun the assigned manual cases through
+  `bag-analysis-report.spec.ts` and write a visual difference report under
+  `test-results/bag-analysis-diff-report-<node>/`
 - store JUnit XML with `store_test_results`
 - store `playwright-report` and `test-results` artifacts
 

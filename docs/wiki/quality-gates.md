@@ -107,6 +107,9 @@ Current bag-analysis e2e comparison rules:
   against the branch preview deployment, but each selected manual case must run
   the same strict browser comparison as local `validate:e2e-fixtures`; sharding
   changes runtime only, not tolerance or fixture approval policy
+- failed CircleCI deployed-preview shards must publish a visual difference
+  report artifact for the assigned manual cases under `test-results/**`; the
+  report is review evidence only and does not approve fixture updates
 
 Approved manual-derived fixture content is frozen until the user explicitly
 approves a refresh. Agents must not rebaseline, regenerate, rewrite, stage, or

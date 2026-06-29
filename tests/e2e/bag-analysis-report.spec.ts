@@ -11,6 +11,7 @@ import {
   writeBagAnalysisReportIndex,
   type BagAnalysisReportSummary,
 } from "./support/bag-analysis-report"
+import type { ActualDetectionResult } from "./support/bag-analysis-comparison"
 
 const manifest = loadBagAnalysisManifest()
 const selectedCaseIds = new Set(
@@ -22,6 +23,11 @@ const selectedCaseIds = new Set(
 const selectedCases = selectedCaseIds.size === 0
   ? manifest.cases
   : manifest.cases.filter((fixtureCase) => selectedCaseIds.has(fixtureCase.id))
+const SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES = 50 * 1024 * 1024
+
+interface DownloadedBagItSession {
+  stepDetectionResult?: ActualDetectionResult | null
+}
 
 test.describe.configure({ mode: "serial" })
 
@@ -50,13 +56,12 @@ test("write bag-analysis fixture difference report", async ({ browser }, testInf
       await page.getByLabel("Continue session file").setInputFiles(fixture.inputSessionPath)
       await waitForPipelineReady(page)
 
-      const downloadedSessionPath = path.join(outputRoot, fixtureCase.id, `${fixtureCase.id}.downloaded.bagit-session.json`)
-      const session = await downloadSession(page, downloadedSessionPath)
-      const actualResult = session.stepDetectionResult
-
-      if (!actualResult) {
-        throw new Error(`${fixtureCase.id}: downloaded session has no stepDetectionResult`)
-      }
+      const { actualResult, downloadedSessionPath } = await readActualResultForReport({
+        fixtureCaseId: fixtureCase.id,
+        inputSessionPath: fixture.inputSessionPath,
+        outputRoot,
+        page,
+      })
 
       summaries.push(await createBagAnalysisCaseReport({
         actualResult,
@@ -165,7 +170,7 @@ async function waitForPipelineReady(page: import("@playwright/test").Page): Prom
 async function downloadSession(
   page: import("@playwright/test").Page,
   downloadedSessionPath: string,
-): Promise<any> {
+): Promise<DownloadedBagItSession> {
   fs.mkdirSync(path.dirname(downloadedSessionPath), { recursive: true })
 
   const downloadPromise = page.waitForEvent("download")
@@ -176,7 +181,61 @@ async function downloadSession(
 
   await download.saveAs(downloadedSessionPath)
 
-  return JSON.parse(fs.readFileSync(downloadedSessionPath, "utf8"))
+  return JSON.parse(fs.readFileSync(downloadedSessionPath, "utf8")) as DownloadedBagItSession
+}
+
+async function readActualResultForReport({
+  fixtureCaseId,
+  inputSessionPath,
+  outputRoot,
+  page,
+}: {
+  fixtureCaseId: string
+  inputSessionPath: string
+  outputRoot: string
+  page: import("@playwright/test").Page
+}): Promise<{
+  actualResult: ActualDetectionResult
+  downloadedSessionPath: string
+}> {
+  const downloadedSessionPath = path.join(outputRoot, fixtureCaseId, `${fixtureCaseId}.downloaded.bagit-session.json`)
+
+  if (fs.statSync(inputSessionPath).size <= SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES) {
+    const session = await downloadSession(page, downloadedSessionPath)
+
+    if (!session.stepDetectionResult) {
+      throw new Error(`${fixtureCaseId}: downloaded session has no stepDetectionResult`)
+    }
+
+    return {
+      actualResult: session.stepDetectionResult,
+      downloadedSessionPath,
+    }
+  }
+
+  const skippedPath = path.join(outputRoot, fixtureCaseId, `${fixtureCaseId}.download-skipped.txt`)
+
+  fs.mkdirSync(path.dirname(skippedPath), { recursive: true })
+  fs.writeFileSync(
+    skippedPath,
+    [
+      `Skipped browser session download for ${fixtureCaseId}.`,
+      `Input session exceeds ${SESSION_DOWNLOAD_FIXTURE_LIMIT_BYTES} bytes.`,
+      "Report comparison uses window.__bagItE2EState.result to avoid CI Chrome crashes on huge session downloads.",
+      "",
+    ].join("\n"),
+  )
+
+  const actualResult = await page.evaluate(() => window.__bagItE2EState?.result ?? null)
+
+  if (!actualResult) {
+    throw new Error(`${fixtureCaseId}: in-page e2e state has no result`)
+  }
+
+  return {
+    actualResult: actualResult as ActualDetectionResult,
+    downloadedSessionPath: skippedPath,
+  }
 }
 
 function createTimestampSlug(): string {

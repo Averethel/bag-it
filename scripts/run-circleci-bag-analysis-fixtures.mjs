@@ -39,6 +39,20 @@ function selectManualIds(input, manualIds) {
   return manualIds.filter((manualId) => manualIdSet.has(manualId))
 }
 
+function writeSelectedManualIds(selectedManualIds) {
+  const selectedCasesFile = process.env.BAG_ANALYSIS_SELECTED_CASES_FILE
+
+  if (!selectedCasesFile) {
+    return
+  }
+
+  fs.mkdirSync(path.dirname(selectedCasesFile), { recursive: true })
+  fs.writeFileSync(
+    selectedCasesFile,
+    selectedManualIds.length > 0 ? `${selectedManualIds.join("\n")}\n` : "",
+  )
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -90,4 +104,5 @@ if (argv.includes("--list")) {
 }
 
 const selectedManualIds = selectManualIds(readSelectedInput(argv), manualIds)
+writeSelectedManualIds(selectedManualIds)
 process.exit(runPlaywright(selectedManualIds))
