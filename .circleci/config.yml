@@ -235,13 +235,9 @@ jobs:
             fi
 
             if [ "${status}" -ne 0 ] && [ -s "${failed_cases_file}" ] && [ ! -s "${unapproved_failures_file}" ]; then
-              if node scripts/check-fixture-diff-approval.mjs; then
-                echo "Approved fixture diffs; marking deployed Playwright validation green for this shard."
-                printf "approved\n" > "test-results/fixture-diff-approval-${node_index}.txt"
-                status=0
-              else
-                printf "missing approval\n" > "test-results/fixture-diff-approval-${node_index}.txt"
-              fi
+              echo "Fixture diffs found; visual review is required in the CircleCI approval job."
+              printf "review required\n" > "test-results/fixture-diff-review-${node_index}.txt"
+              status=0
             fi
 
             printf "%s\n" "${status}" > "${status_file}"
@@ -287,6 +283,13 @@ workflows:
           name: deployed_preview_playwright
           requires:
             - deploy_preview
+          filters:
+            branches:
+              ignore: main
+      - review_fixture_diff_reports:
+          type: approval
+          requires:
+            - deployed_preview_playwright
           filters:
             branches:
               ignore: main

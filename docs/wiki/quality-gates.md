@@ -116,9 +116,10 @@ Current bag-analysis e2e comparison rules:
   bounded but still visible
 - CircleCI visual reports must inline images in HTML artifacts so reviewers can
   judge differences from the artifact page without broken sibling image links
-- A reviewer may approve fixture-comparison drift for a PR by adding the
-  `fixture-diff-approved` label and rerunning deployed e2e; this approval does
-  not update fixtures and must not hide non-fixture failures
+- A reviewer may approve fixture-comparison drift from the CircleCI
+  `review_fixture_diff_reports` approval job after inspecting the published
+  report artifacts; this approval does not update fixtures and must not hide
+  non-fixture failures
 - fixture difference reports must include color mismatches as row-level issues
   with the part crop and full-callout context, even when the structural gate
   fails before the visual comparison stage

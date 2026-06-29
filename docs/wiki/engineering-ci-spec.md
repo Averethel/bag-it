@@ -227,10 +227,12 @@ E2E:
 - CI report generation sets `BAG_ANALYSIS_REPORT_INLINE_IMAGES=1`, so CircleCI
   HTML artifacts are self-contained and do not depend on sibling PNG artifact
   URLs for visual review
-- fixture comparison failures can be explicitly approved by adding the PR label
-  `fixture-diff-approved` and rerunning the deployed e2e job; only structural or
-  visual fixture-comparison failures are eligible for this approval bypass, while
-  browser, deploy, app, missing-output, or other unclassified failures stay red
+- if deployed preview e2e finds only structural or visual fixture-comparison
+  failures, the shard writes `fixture-diff-review-<node>.txt`, exits green, and
+  the workflow moves to the `review_fixture_diff_reports` CircleCI approval job
+  so a reviewer can inspect the report artifacts and approve or reject the run
+- browser, deploy, app, missing-output, or other unclassified failures are not
+  eligible for manual fixture review and stay red
 - store JUnit XML with `store_test_results`
 - store `playwright-report` and `test-results` artifacts
 
