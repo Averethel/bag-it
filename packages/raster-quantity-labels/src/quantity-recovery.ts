@@ -10,12 +10,8 @@ import {
 import type { QuantityCandidate } from "./quantity-candidate-types"
 import {
   COMPACT_MISSING_LOWER_PEER_RECOVERY_KIND,
-  COMPACT_MISSING_SAME_ROW_TRAILING_PEER_RECOVERY_KIND,
-  COMPACT_MISSING_UPPER_PEER_ROW_RECOVERY_KIND,
   createQuantityRetryRecoveryPlans,
   recoverCompactMissingLowerPeerCandidates,
-  recoverCompactMissingSameRowTrailingPeerCandidates,
-  recoverCompactMissingUpperPeerRowCandidates,
   recoverQuantityRetryCandidates,
 } from "./quantity-retry-recovery"
 import type { QuantityRecoveryPlan } from "./quantity-recovery-types"
@@ -42,11 +38,7 @@ export function recoverPostRejectionQuantityCandidates(
   postRejectionCandidates: readonly QuantityCandidate[],
 ): QuantityCandidate[] {
   const recovered = createQuantityRecoveryPlans(postRejectionCandidates, calloutRegion)
-    .filter((plan) =>
-      plan.kind === COMPACT_MISSING_LOWER_PEER_RECOVERY_KIND ||
-      plan.kind === COMPACT_MISSING_SAME_ROW_TRAILING_PEER_RECOVERY_KIND ||
-      plan.kind === COMPACT_MISSING_UPPER_PEER_ROW_RECOVERY_KIND
-    )
+    .filter((plan) => plan.kind === COMPACT_MISSING_LOWER_PEER_RECOVERY_KIND)
     .flatMap((plan) => recoverCandidatesForPlan(page, calloutRegion, background, postRejectionCandidates, plan))
 
   return mergeQuantityCandidates(postRejectionCandidates, recovered)
@@ -75,14 +67,6 @@ function recoverCandidatesForPlan(
   if (plan.source === "lower-threshold") {
     if (plan.kind === COMPACT_MISSING_LOWER_PEER_RECOVERY_KIND) {
       return recoverCompactMissingLowerPeerCandidates(page, calloutRegion, background, initialCandidates, plan)
-    }
-
-    if (plan.kind === COMPACT_MISSING_SAME_ROW_TRAILING_PEER_RECOVERY_KIND) {
-      return recoverCompactMissingSameRowTrailingPeerCandidates(page, calloutRegion, background, initialCandidates, plan)
-    }
-
-    if (plan.kind === COMPACT_MISSING_UPPER_PEER_ROW_RECOVERY_KIND) {
-      return recoverCompactMissingUpperPeerRowCandidates(page, calloutRegion, background, initialCandidates, plan)
     }
 
     return recoverQuantityRetryCandidates(page, calloutRegion, background, plan)

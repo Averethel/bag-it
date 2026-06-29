@@ -12,11 +12,7 @@ import { extractCalloutPartsForPage, suppressDuplicateOwnedPartRows } from "../e
 import { applyDuplicatePartImageTransfers, resolveDuplicateOwnedPartRows } from "../part-duplicate-owners"
 import { scrubPartImageBackground } from "../part-image-background-scrub"
 import { unionRegions } from "../regions"
-import {
-  clipScaledPartImageByDiagnostics,
-  extractCalloutPartsForScaledPage,
-  recoverScaledReadableSuppressedFragmentTrailingPeerItems,
-} from "../scaled-extractor"
+import { clipScaledPartImageByDiagnostics, extractCalloutPartsForScaledPage } from "../scaled-extractor"
 import { fillTopGapBridgeSupport } from "../part-support-top"
 import { createPartImageForLabel } from "../part-foreground"
 import { createPartImage } from "../part-image"
@@ -448,19 +444,6 @@ describe("callout part extractor", () => {
     ])
   })
 
-  it("drops a weak orphan upper one row after final extraction", () => {
-    const kept = suppressDuplicateOwnedPartRows([
-      withQuantityConfidence(
-        createDuplicateTestItem("1x", { height: 11, width: 14, x: 88, y: 72 }, { height: 21, width: 26, x: 82, y: 54 }),
-        0.76,
-      ),
-      createDuplicateTestItem("1x", { height: 11, width: 14, x: 60, y: 108 }, { height: 50, width: 37, x: 52, y: 62 }),
-      createDuplicateTestItem("1x", { height: 11, width: 14, x: 88, y: 108 }, { height: 60, width: 37, x: 80, y: 52 }),
-    ])
-
-    expect(kept.map((item) => item.quantityLabel.region.y)).toEqual([108, 108])
-  })
-
   it("drops low-value near-empty part-art rows after crop extraction", () => {
     const realPart = { height: 26, width: 36, x: 84, y: 72 }
     const fakePart = { height: 34, width: 28, x: 88, y: 50 }
@@ -551,23 +534,6 @@ describe("callout part extractor", () => {
       { height: 11, width: 14, x: 60, y: 480 },
       { height: 11, width: 14, x: 130, y: 498 },
     ])
-  })
-
-  it("drops close upper column part-art labels from rerun suppression", () => {
-    const upperPartArt = withQuantityConfidence(
-      createDuplicateTestItem("4x", { height: 11, width: 14, x: 469, y: 404 }, { height: 50, width: 37, x: 458, y: 396 }),
-      0.75,
-    )
-    const leftPrinted = createDuplicateTestItem("1x", { height: 11, width: 14, x: 441, y: 440 }, { height: 50, width: 37, x: 431, y: 396 })
-    const lowerPrinted = createDuplicateTestItem("1x", { height: 11, width: 14, x: 469, y: 440 }, { height: 31, width: 35, x: 458, y: 415 })
-    const allItems = [upperPartArt, leftPrinted, lowerPrinted]
-    const resolution = resolveDuplicateOwnedPartRows(
-      allItems.map((item) => item.quantityLabel),
-      allItems,
-    )
-
-    expect(resolution.keptItems).not.toContain(upperPartArt)
-    expect(resolution.rerunSuppressionLabels).not.toContain(upperPartArt.quantityLabel)
   })
 
   it("keeps the printed upper row when lower part art steals its crop", () => {
@@ -1670,48 +1636,6 @@ describe("callout part extractor", () => {
     }
   })
 
-  it("recovers a suppressed compact trailing peer from scaled readable diagnostics", () => {
-    const callout = {
-      background: TEST_BLUE_PANEL,
-      id: "suppressed-trailing-peer",
-      pageNumber: 1,
-      region: { height: 80, width: 135, x: 510, y: 49 },
-    }
-    const page = createWideSyntheticPage(700, 150, (data, width) => {
-      paintLargeRegion(data, width, callout.region, TEST_BLUE_PANEL)
-      paintLargeRegion(data, width, { height: 41, width: 57, x: 511, y: 66 }, TEST_BROWN_PART)
-      paintLargeRegion(data, width, { height: 53, width: 87, x: 556, y: 54 }, TEST_GRAY_PART)
-    })
-    const anchor = {
-      ...createDuplicateTestItem(
-        "6x",
-        { height: 11, width: 15, x: 520, y: 102 },
-        { height: 41, width: 57, x: 511, y: 66 },
-      ),
-      calloutId: callout.id,
-    }
-    anchor.partImage.diagnostics = {
-      excludedLabelRegions: [{ height: 6, width: 9, x: 575, y: 108 }],
-      finalCropBounds: anchor.partImage.region,
-      rawForegroundPixelCount: anchor.partImage.alphaMask.data.length,
-    }
-
-    const result = recoverScaledReadableSuppressedFragmentTrailingPeerItems({
-      baseCallout: callout,
-      page,
-      pairs: [{ scaled: anchor, source: anchor }],
-      scaledCallout: callout,
-      scaleX: 1,
-      scaleY: 1,
-    })
-
-    expect(result.map((item) => item.quantityLabel.text)).toEqual(["6x", "1x"])
-    expect(result[1].quantityLabel.recoveryKind).toBe("compact-missing-same-row-trailing-peer")
-    expect(result[1].partImage.region).toEqual({ height: 54, width: 87, x: 556, y: 53 })
-    expect(readOpaquePixelsInRegion(result[1], { height: 20, width: 30, x: 590, y: 64 }))
-      .toBeGreaterThan(0)
-  })
-
   it("keeps quantity labels transparent in part image masks and stays inside callout borders", () => {
     const page = createSyntheticPage((data) => {
       paintCallout(data)
@@ -2271,37 +2195,6 @@ describe("callout part extractor", () => {
     expect(item!.region.y).toBeLessThanOrEqual(29)
   })
 
-  it("keeps singleton raised part-art labels from clipping same-column lower peer crops", () => {
-    const callout = { height: 86, width: 68, x: 430, y: 380 }
-    const upperFalseLabel = createTestQuantityLabel("1x", 467, 402)
-    const labels = [
-      upperFalseLabel,
-      createTestQuantityLabel("1x", 441, 440),
-      createTestQuantityLabel("1x", 469, 440),
-    ]
-    const page = createWideSyntheticPage(540, 500, (data, width) => {
-      paintLargeRegion(data, width, callout, TEST_BLUE_PANEL)
-      paintLargeBorder(data, width, callout, TEST_BLACK)
-      paintLargeRegion(data, width, { height: 50, width: 37, x: 431, y: 396 }, TEST_GREEN_PART)
-      paintLargeRegion(data, width, { height: 60, width: 37, x: 458, y: 386 }, TEST_GRAY_PART)
-      paintLargeRasterQuantityLabel(data, width, "1x", 441, 440)
-      paintLargeRasterQuantityLabel(data, width, "1x", 469, 440)
-    })
-    const item = createPartImageForLabel(
-      page,
-      { background: TEST_BLUE_PANEL, id: "raised-singleton-part-art", pageNumber: 1, region: callout },
-      createFlatBackgroundModel(TEST_BLUE_PANEL),
-      labels,
-      labels,
-      labels[2]!,
-    )
-
-    expect(item).toBeDefined()
-    expect(item!.region.y).toBeLessThanOrEqual(386)
-    expect(readMaskAlpha(item!.alphaMask, { x: 471, y: 404 }, item!.region)).toBe(255)
-    expect(readMaskAlpha(item!.alphaMask, { x: 471, y: 440 }, item!.region)).toBe(0)
-  })
-
   it("keeps near-background bottom edge pixels below the strong outline opaque", () => {
     const bottomEdge = { height: 4, width: 20, x: 30, y: 37 }
     const exactBackgroundBelow = { height: 3, width: 20, x: 30, y: 42 }
@@ -2541,16 +2434,6 @@ function createDuplicateTestItem(
   }
 }
 
-function withQuantityConfidence(item: CalloutPartItem, confidence: number): CalloutPartItem {
-  return {
-    ...item,
-    quantityLabel: {
-      ...item.quantityLabel,
-      confidence,
-    },
-  }
-}
-
 function createCallout(): CalloutPartCalloutInput {
   return {
     background: TEST_BLUE_PANEL,
@@ -2650,15 +2533,6 @@ function inset(region: Region, insetSize: number): Region {
     width: region.width - insetSize * 2,
     x: region.x + insetSize,
     y: region.y + insetSize,
-  }
-}
-
-function scaleRegionForTest(region: Region, scale: number): Region {
-  return {
-    height: region.height * scale,
-    width: region.width * scale,
-    x: region.x * scale,
-    y: region.y * scale,
   }
 }
 

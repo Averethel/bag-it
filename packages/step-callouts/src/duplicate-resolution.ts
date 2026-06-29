@@ -26,9 +26,6 @@ const RASTER_LOWER_ROW_QUANTITY_LABEL_REASON = "raster-lower-row-quantity-label"
 const WEAK_FILL_PANEL_FRAGMENT_BORDER_MAX = 0.34
 const WEAK_FILL_PANEL_FRAGMENT_OVERLAP_MIN = 0.45
 const STRONG_FILL_PANEL_DUPLICATE_BORDER_MIN = 0.9
-const OVERLAPPING_FILL_PANEL_FRAGMENT_HORIZONTAL_OVERLAP_MIN = 0.55
-const OVERLAPPING_FILL_PANEL_FRAGMENT_VERTICAL_OVERLAP_MIN = 0.8
-const OVERLAPPING_FILL_PANEL_FRAGMENT_SCORE_DROP_MIN = 0.2
 
 export function resolveDuplicateStepCalloutDrafts(
   drafts: readonly StepCalloutResolutionDraft[],
@@ -68,45 +65,10 @@ function hasPreferredOverlap(
     (
       stepCalloutRegionSmallerOverlapRatio(draft.evidence.candidate.region, keptDraft.evidence.candidate.region) >=
         DUPLICATE_OVERLAP_MIN ||
-      hasOverlappingFillPanelFragment(draft, keptDraft) ||
       hasWeakFillPanelFragmentOverlap(draft, keptDraft) ||
       hasLineRectangleFragmentOverlap(draft, keptDraft)
     ),
   )
-}
-
-function hasOverlappingFillPanelFragment(
-  draft: StepCalloutResolutionDraft,
-  keptDraft: StepCalloutResolutionDraft,
-): boolean {
-  if (
-    draft.status !== "accepted" ||
-    keptDraft.status !== "accepted" ||
-    draft.evidence.candidate.source !== "fill-panel" ||
-    keptDraft.evidence.candidate.source !== "fill-panel"
-  ) {
-    return false
-  }
-
-  const draftRegion = draft.evidence.candidate.region
-  const keptRegion = keptDraft.evidence.candidate.region
-
-  if (!hasOverlappingFillPanelFragmentShape(draftRegion, keptRegion)) {
-    return false
-  }
-
-  return draftRegion.width < keptRegion.width ||
-    draft.evidence.totalScore <= keptDraft.evidence.totalScore - OVERLAPPING_FILL_PANEL_FRAGMENT_SCORE_DROP_MIN
-}
-
-function hasOverlappingFillPanelFragmentShape(
-  left: StepCalloutResolutionDraft["evidence"]["candidate"]["region"],
-  right: StepCalloutResolutionDraft["evidence"]["candidate"]["region"],
-): boolean {
-  return horizontalSmallerOverlapRatio(left, right) >=
-    OVERLAPPING_FILL_PANEL_FRAGMENT_HORIZONTAL_OVERLAP_MIN &&
-    verticalSmallerOverlapRatio(left, right) >=
-      OVERLAPPING_FILL_PANEL_FRAGMENT_VERTICAL_OVERLAP_MIN
 }
 
 function hasWeakFillPanelFragmentOverlap(
@@ -166,64 +128,10 @@ function compareResolutionDrafts(
   return (
     statusRank(left.status) - statusRank(right.status) ||
     compareExpandedCompactFillPanelPreference(left, right) ||
-    compareOverlappingFillPanelWidthPreference(left, right) ||
     right.evidence.totalScore - left.evidence.totalScore ||
     stepCalloutRegionArea(left.evidence.candidate.region) - stepCalloutRegionArea(right.evidence.candidate.region) ||
     compareStepCalloutResolutionDraftPosition(left, right)
   )
-}
-
-function compareOverlappingFillPanelWidthPreference(
-  left: StepCalloutResolutionDraft,
-  right: StepCalloutResolutionDraft,
-): number {
-  if (
-    left.status !== "accepted" ||
-    right.status !== "accepted" ||
-    left.evidence.candidate.source !== "fill-panel" ||
-    right.evidence.candidate.source !== "fill-panel"
-  ) {
-    return 0
-  }
-
-  const leftRegion = left.evidence.candidate.region
-  const rightRegion = right.evidence.candidate.region
-
-  if (
-    verticalSmallerOverlapRatio(leftRegion, rightRegion) <
-      OVERLAPPING_FILL_PANEL_FRAGMENT_VERTICAL_OVERLAP_MIN ||
-    horizontalSmallerOverlapRatio(leftRegion, rightRegion) <
-      OVERLAPPING_FILL_PANEL_FRAGMENT_HORIZONTAL_OVERLAP_MIN
-  ) {
-    return 0
-  }
-
-  if (Math.abs(left.evidence.totalScore - right.evidence.totalScore) >=
-    OVERLAPPING_FILL_PANEL_FRAGMENT_SCORE_DROP_MIN) {
-    return 0
-  }
-
-  return rightRegion.width - leftRegion.width
-}
-
-function horizontalSmallerOverlapRatio(
-  left: StepCalloutResolutionDraft["evidence"]["candidate"]["region"],
-  right: StepCalloutResolutionDraft["evidence"]["candidate"]["region"],
-): number {
-  const overlap = Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x)
-  const smallerWidth = Math.min(left.width, right.width)
-
-  return smallerWidth <= 0 ? 0 : Math.max(0, overlap) / smallerWidth
-}
-
-function verticalSmallerOverlapRatio(
-  left: StepCalloutResolutionDraft["evidence"]["candidate"]["region"],
-  right: StepCalloutResolutionDraft["evidence"]["candidate"]["region"],
-): number {
-  const overlap = Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y)
-  const smallerHeight = Math.min(left.height, right.height)
-
-  return smallerHeight <= 0 ? 0 : Math.max(0, overlap) / smallerHeight
 }
 
 function compareExpandedCompactFillPanelPreference(

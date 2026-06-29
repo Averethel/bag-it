@@ -1,6 +1,6 @@
 import type { QuantityRecoveryKind } from "@bag-it/raster-quantity-labels"
 
-export const CALLOUT_PART_EXTRACTOR_VERSION = "2.0.0-alpha.169"
+export const CALLOUT_PART_EXTRACTOR_VERSION = "2.0.0-alpha.165"
 
 export interface Region {
   x: number

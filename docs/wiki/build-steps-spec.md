@@ -19,13 +19,13 @@ local callout background color from interior pixels.
 Keep explicit detector versioning. The current detector version is:
 
 ```ts
-2.0.0-alpha.20
+2.0.0-alpha.18
 ```
 
 Part image and quantity-label extraction has its own version:
 
 ```ts
-2.0.0-alpha.169
+2.0.0-alpha.165
 ```
 
 Part color calibration has its own version:
@@ -91,10 +91,10 @@ probe or the extraction response, the app terminates the worker pool and
 retries the whole part-extraction pass once so partial stale output is not
 rendered.
 
-The production route currently emits detector version `2.0.0-alpha.20` from
+The production route currently emits detector version `2.0.0-alpha.18` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
-part extractor version `2.0.0-alpha.169` from package
+part extractor version `2.0.0-alpha.165` from package
 `@bag-it/callout-parts` and part color calibration version `2.0.0-alpha.65`
 from `@bag-it/part-colors`. Callout evidence and part extraction both use
 visible raster `/^\d+x$/i` quantity labels from
@@ -226,35 +226,6 @@ Alpha 165 clamps same-row shallow lower-label part crops to the label-row split
 boundary when Linux Chrome foreground support expands the crop left and down
 past the stable manual-local shape. The crop keeps quantities and row identity
 strict while normalizing the alpha mask and region before fixture comparison.
-Alpha 166 targets Linux Chrome fixture-only raster drift without refreshing
-fixtures. It recovers compact same-row trailing `1x` labels only when printed
-label ink and part-above evidence are present, infers compact upper `1x` peer
-rows in stacked two-by-two callouts only from dark printed label ink plus part
-ink above, and reads compact `8x` labels with a lower-right raster gap before
-the `9x` classifier. These rules fix Hall Tower manual-004 rows 228, 232, and
-362 plus manual-005 single-row trailing peer misses without using manual ids or
-fixture coordinates.
-Detector alpha19 rejects narrower overlapping fill-panel fragments when a
-wider same-page fill panel owns the same vertical span, fixing a Linux Chrome
-page-46 duplicate callout without changing approved fixtures. Detector alpha20
-lets materially stronger overlapping fill-panel evidence beat raw width and
-normalizes top-row manual-style fill-panel output regions from lower-row
-quantity labels when Linux Chrome clips the right edge. Part extractor alpha167
-keeps alpha166's raster-only scope and adds post-extraction cleanup for Linux
-Chrome drift: weak orphan upper `1x` part-art rows are dropped after crop
-extraction, native trailing `1x` labels that duplicate cleanup discarded are
-recovered with the same trailing-peer crop fallback, compact `8x/9x/2x` rows
-normalize the middle `9x` back to `8x`, and over-tall lower-row crops are
-clipped above the printed label when the row geometry shows bottom drift. Part
-extractor alpha168 keeps readable suppressed trailing `1x` labels available for
-post-cleanup recovery and removes close upper-column part-art labels from rerun
-suppression masks so lower-row part crops are not clipped by rejected part
-details. Part extractor alpha169 narrows same-row top-crop recovery to compact
-two-part callouts whose right crop starts meaningfully below the left peer, so
-normal aligned two-column rows are not over-lifted. It also lets compact
-trailing `1x` recovery use sparse surviving baseline ink and, after scaled
-readability filtering, recover a suppressed trailing-label fragment when a
-broad trailing part is present in Linux Chrome.
 Alpha 83 keeps the alpha69 dense-callout behavior and adds row-spanning
 lower-label ownership for Upper Courtyard style panels. When a lower label's
 row band starts far below the label because the visual part spans multiple

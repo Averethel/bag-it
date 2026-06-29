@@ -256,11 +256,10 @@ function classifyEightBySource(
     aspect <= 1.05 &&
     countDenseRowsInBand(sourceFeatures, 0, 0.26, 0.56) >= 1 &&
     countDenseRowsInBand(sourceFeatures, 0.34, 0.62, 0.56) >= 1 &&
-    countDenseRowsInBand(sourceFeatures, 0.62, 1, 0.56) >= 1 &&
+    countDenseRowsInBand(sourceFeatures, 0.62, 1, 0.62) >= 1 &&
     countLeftEdgeRows(sourceFeatures, 0.16, 0.5) >= Math.max(2, glyph.region.height * 0.16) &&
-    countMissingRightEdgeRows(sourceFeatures, 0.22, 0.42) === 0 &&
-    countLeftEdgeRows(sourceFeatures, 0.54, 0.96) >= Math.max(3, Math.round(glyph.region.height * 0.24)) &&
-    countRightEdgeRows(sourceFeatures, 0.54, 0.96) >= Math.max(1, Math.round(glyph.region.height * 0.1)) &&
+    countLeftEdgeRows(sourceFeatures, 0.54, 0.96) >= Math.max(3, glyph.region.height * 0.28) &&
+    countRightEdgeRows(sourceFeatures, 0.54, 0.96) >= Math.max(3, glyph.region.height * 0.28) &&
     countMissingLeftEdgeRows(sourceFeatures, 0.62, 0.78) === 0 &&
     countMissingLeftEdgeRows(sourceFeatures, 0.78, 1) <= readRoundedLoopEdgeMissLimit(glyph)
     ? { confidence: 0.84, digit: "8" }

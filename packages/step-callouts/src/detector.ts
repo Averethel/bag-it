@@ -25,7 +25,7 @@ import type {
 } from "./contracts"
 import { createPageInputStageSnapshot } from "./page-input"
 
-export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.20"
+export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.18"
 
 export interface StepCalloutDetection {
   evidence: StepCalloutCandidateEvidence | null
