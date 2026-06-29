@@ -59,9 +59,10 @@ The `validate:e2e-fixtures` command runs the manifest-driven Playwright
 bag-analysis fixture gate in real Google Chrome with one worker locally. In
 CircleCI, branch builds run the same manual cases only once, against the Vercel
 preview deployment. CircleCI shards that deployed preview gate across five
-parallel executors with `circleci tests run --split-by=timings
---timings-type=name`, using one Playwright process per executor and JUnit output
-under `test-results/**` so CircleCI can learn per-manual timings. It must not
+parallel executors by passing bare `manual-###` case ids to `circleci tests run
+--split-by=timings --timings-type=name`; Playwright e2e test titles must remain
+the same bare case ids so CircleCI can learn per-manual timings from JUnit
+output under `test-results/**`. It must not
 use Playwright's bundled Chromium because PDF/canvas rasterization can differ
 from current user browsers and hide detector regressions. CircleCI Playwright
 Docker jobs install Google Chrome before running the deployed preview e2e gate

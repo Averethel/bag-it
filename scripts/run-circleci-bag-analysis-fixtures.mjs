@@ -7,7 +7,6 @@ const manifestPath = path.join(
   process.cwd(),
   "tests/e2e/fixtures/bag-analysis/manifest.json",
 )
-const testTitlePrefix = "bag-analysis fixture gate \u203A"
 
 function loadManualIds() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
@@ -21,7 +20,7 @@ function loadManualIds() {
 
 function printCircleCiTestNames(manualIds) {
   for (const manualId of manualIds) {
-    console.log(`${testTitlePrefix} ${manualId}`)
+    console.log(manualId)
   }
 }
 
