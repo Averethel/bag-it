@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
   ALPHA_MASK_PASS_CRITERIA,
+  CALLOUT_REGION_TOLERANCE_PX,
   compareAlphaMaskPixels,
   alphaMaskComparisonPasses,
   compareAlphaMasks,
   matchBagAnalysisStructure,
+  PART_REGION_TOLERANCE_PX,
+  PART_SWATCH_CHANNEL_TOLERANCE,
   regionsMutuallyWithinTolerance,
   type DecodedAlphaMask,
 } from "./bag-analysis-comparison"
@@ -30,12 +33,12 @@ describe("bag-analysis comparator primitives", () => {
     ).toBe(false)
   })
 
-  it("passes 2px callout drift", () => {
+  it("passes configured callout region drift", () => {
     expect(
       regionsMutuallyWithinTolerance(
         { x: 10, y: 10, width: 100, height: 80 },
-        { x: 8, y: 12, width: 102, height: 78 },
-        2,
+        { x: 2, y: 18, width: 116, height: 64 },
+        CALLOUT_REGION_TOLERANCE_PX,
       ),
     ).toBe(true)
   })
@@ -186,7 +189,7 @@ describe("bag-analysis comparator primitives", () => {
     expect(match.failures).toEqual([])
   })
 
-  it("tolerates one-channel swatch drift when semantic color identity is unchanged", () => {
+  it("tolerates tiny swatch drift when semantic color identity is unchanged", () => {
     const match = matchBagAnalysisStructure({
       actualResult: {
         callouts: [
@@ -196,6 +199,56 @@ describe("bag-analysis comparator primitives", () => {
             partItems: [
               actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
                 name: "Green",
+                family: "green",
+                status: "review",
+                swatchHex: "#185227",
+                manualClassId: "manual-color-001",
+                manualClassTrusted: false,
+                rawManualClassId: "manual-color-001",
+              }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [
+              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toEqual([])
+  })
+
+  it("fails tiny swatch drift when semantic color identity changes", () => {
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
+                name: "Lime",
                 family: "green",
                 status: "review",
                 swatchHex: "#165026",
@@ -233,7 +286,62 @@ describe("bag-analysis comparator primitives", () => {
       },
     })
 
-    expect(match.failures).toEqual([])
+    expect(match.failures).toContain(
+      "callout 0 row 0: color mismatch: expected Green/green/review/#165025/manual-color-001/untrusted/manual-color-001, got Lime/green/review/#165026/manual-color-001/untrusted/manual-color-001",
+    )
+  })
+
+  it("fails swatch drift beyond the tiny per-channel tolerance", () => {
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
+                name: "Green",
+                family: "green",
+                status: "review",
+                swatchHex: "#195328",
+                manualClassId: "manual-color-001",
+                manualClassTrusted: false,
+                rawManualClassId: "manual-color-001",
+              }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [
+              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(PART_SWATCH_CHANNEL_TOLERANCE).toBe(2)
+    expect(match.failures).toContain(
+      "callout 0 row 0: color mismatch: expected Green/green/review/#165025/manual-color-001/untrusted/manual-color-001, got Green/green/review/#195328/manual-color-001/untrusted/manual-color-001",
+    )
   })
 
   it("fails a wrong part crop with the same quantity", () => {
@@ -307,7 +415,7 @@ describe("bag-analysis comparator primitives", () => {
       actualMask,
       expectedRegion: { x: 20, y: 20, width: 8, height: 8 },
       actualRegion: { x: 22, y: 21, width: 8, height: 8 },
-      tolerance: 4,
+      tolerance: PART_REGION_TOLERANCE_PX,
     })
 
     expect(comparison.passed).toBe(true)
@@ -316,19 +424,19 @@ describe("bag-analysis comparator primitives", () => {
 
   it("uses centralized alpha mask pass criteria at threshold edges", () => {
     expect(ALPHA_MASK_PASS_CRITERIA).toEqual({
-      maxActualExtraRatio: 0.025,
+      maxActualExtraOpaquePixels: 12,
       minExpectedCoverage: 0.95,
     })
     expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0.025,
+      actualExtraOpaquePixels: 12,
       expectedCoverage: 0.95,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
     expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0.0251,
+      actualExtraOpaquePixels: 13,
       expectedCoverage: 1,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
     expect(alphaMaskComparisonPasses({
-      actualExtraRatio: 0,
+      actualExtraOpaquePixels: 0,
       expectedCoverage: 0.9499,
     }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
   })

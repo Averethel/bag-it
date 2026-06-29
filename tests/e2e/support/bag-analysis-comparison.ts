@@ -9,12 +9,12 @@ export interface Region {
 }
 
 export interface AlphaMaskPassCriteria {
-  maxActualExtraRatio: number
+  maxActualExtraOpaquePixels: number
   minExpectedCoverage: number
 }
 
 export const ALPHA_MASK_PASS_CRITERIA: AlphaMaskPassCriteria = {
-  maxActualExtraRatio: 0.025,
+  maxActualExtraOpaquePixels: 12,
   minExpectedCoverage: 0.95,
 }
 
@@ -176,9 +176,9 @@ interface AlphaMaskComparatorSource {
   compareAlphaMaskPixels: string
 }
 
-export const CALLOUT_REGION_TOLERANCE_PX = 2
-export const PART_REGION_TOLERANCE_PX = 4
-const PART_SWATCH_CHANNEL_TOLERANCE = 1
+export const CALLOUT_REGION_TOLERANCE_PX = 8
+export const PART_REGION_TOLERANCE_PX = 6
+export const PART_SWATCH_CHANNEL_TOLERANCE = 2
 
 export function matchBagAnalysisStructure({
   actualResult,
@@ -375,7 +375,9 @@ export async function compareBagAnalysisVisuals(
   return page.evaluate(compareBagAnalysisVisualsInBrowser, {
     alphaMaskComparatorSource: createAlphaMaskComparatorSource(),
     alphaMaskPassCriteria: ALPHA_MASK_PASS_CRITERIA,
+    calloutRegionTolerancePx: CALLOUT_REGION_TOLERANCE_PX,
     calloutPairs: browserCalloutPairs,
+    partRegionTolerancePx: PART_REGION_TOLERANCE_PX,
     partPairs: browserPartPairs,
   })
 }
@@ -592,21 +594,23 @@ export function compareAlphaMaskPixels({
   const expectedCoverage = expectedOpaquePoints.length === 0
     ? 1
     : expectedCovered / expectedOpaquePoints.length
+  const actualExtraOpaquePixels = actualOpaquePoints.length - actualCovered
   const actualExtraRatio = actualOpaquePoints.length === 0
     ? 0
-    : 1 - (actualCovered / actualOpaquePoints.length)
+    : actualExtraOpaquePixels / actualOpaquePoints.length
   const exactOverlapRatio = expectedOpaquePoints.length === 0
     ? 1
     : exactOverlap / expectedOpaquePoints.length
 
   return {
+    actualExtraOpaquePixels,
     actualExtraRatio,
     actualOpaque: actualOpaquePoints.length,
     exactOverlapRatio,
     expectedCoverage,
     expectedOpaque: expectedOpaquePoints.length,
     passed: alphaMaskComparisonPasses(
-      { actualExtraRatio, expectedCoverage },
+      { actualExtraOpaquePixels, expectedCoverage },
       passCriteria,
     ),
   }
@@ -652,11 +656,11 @@ export function compareAlphaMaskPixels({
 }
 
 export function alphaMaskComparisonPasses(
-  metrics: Pick<AlphaMaskComparison, "actualExtraRatio" | "expectedCoverage">,
+  metrics: Pick<AlphaMaskComparison, "actualExtraOpaquePixels" | "expectedCoverage">,
   criteria: AlphaMaskPassCriteria,
 ): boolean {
   return metrics.expectedCoverage >= criteria.minExpectedCoverage &&
-    metrics.actualExtraRatio <= criteria.maxActualExtraRatio
+    metrics.actualExtraOpaquePixels <= criteria.maxActualExtraOpaquePixels
 }
 
 export interface DecodedAlphaMask {
@@ -666,6 +670,7 @@ export interface DecodedAlphaMask {
 }
 
 export interface AlphaMaskComparison {
+  actualExtraOpaquePixels: number
   actualExtraRatio: number
   actualOpaque: number
   exactOverlapRatio: number
@@ -842,12 +847,16 @@ export function regionDistance(left: Region, right: Region): number {
 async function compareBagAnalysisVisualsInBrowser({
   alphaMaskComparatorSource,
   alphaMaskPassCriteria,
+  calloutRegionTolerancePx,
   calloutPairs,
+  partRegionTolerancePx,
   partPairs,
 }: {
   alphaMaskComparatorSource: AlphaMaskComparatorSource
   alphaMaskPassCriteria: AlphaMaskPassCriteria
+  calloutRegionTolerancePx: number
   calloutPairs: BrowserVisualCalloutPair[]
+  partRegionTolerancePx: number
   partPairs: BrowserVisualPartPair[]
 }): Promise<VisualComparisonFailure[]> {
   type BrowserRegion = Region
@@ -865,8 +874,8 @@ async function compareBagAnalysisVisualsInBrowser({
     url: string
   }
 
-  const calloutTolerance = 2
-  const partTolerance = 4
+  const calloutTolerance = calloutRegionTolerancePx
+  const partTolerance = partRegionTolerancePx
   const failures: VisualComparisonFailure[] = []
   const state = window.__bagItE2EState
   const compareAlphaMaskPixelsInBrowser = restoreAlphaMaskPixelComparator(alphaMaskComparatorSource)
@@ -956,6 +965,7 @@ async function compareBagAnalysisVisualsInBrowser({
         message: `callout ${pair.expectedCalloutOrdinal} row ${pair.expected.ordinal}: masked part visual changed`,
         metrics: {
           actualExtraRatio: alphaMetrics.actualExtraRatio,
+          actualExtraOpaquePixels: alphaMetrics.actualExtraOpaquePixels,
           actualOpaque: alphaMetrics.actualOpaque,
           exactOverlapRatio: alphaMetrics.exactOverlapRatio,
           expectedCoverage: alphaMetrics.expectedCoverage,

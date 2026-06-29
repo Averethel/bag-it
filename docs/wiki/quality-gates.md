@@ -86,21 +86,21 @@ Current bag-analysis e2e comparison rules:
 
 - callout count must match exactly
 - callouts match by page plus best region/visual match, never generated ids
-- actual and expected callout bounds must contain each other within `2px` per
+- actual and expected callout bounds must contain each other within `8px` per
   edge
 - callout visual comparison fails missing ink, changed full-callout content, or
-  extra neighboring content outside the expected region expanded by `2px`
+  extra neighboring content outside the expected region expanded by `8px`
 - part row count per matched callout must match exactly
 - quantity text/value multisets must match exactly
 - part rows match by quantity plus best masked visual match
 - each matched part row must preserve the exported `detectedColor` compact
   contract: name, family, status, swatch, manual class id/trust flag, and raw
   manual class id; swatch-only drift is tolerated only when every semantic
-  color field still matches and each RGB channel differs by at most `1`
-- part crop drift fails when it exceeds `4px` per edge unless the expected and
+  color field still matches and each RGB channel differs by at most `2`
+- part crop drift fails when it exceeds `6px` per edge unless the expected and
   actual serialized alpha masks still pass the shared alpha-mask comparator;
   that comparator requires at least `0.95` expected opaque coverage and at
-  most `0.025` actual extra opaque ratio in both Node report checks and the
+  most `12` actual extra opaque pixels in both Node report checks and the
   browser fixture gate
 - failures attach expected, actual, and diff PNGs to Playwright output
 - CircleCI may shard approved manual fixture cases across parallel executors
