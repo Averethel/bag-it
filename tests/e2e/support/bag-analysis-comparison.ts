@@ -442,7 +442,7 @@ export function quantityKey(quantity: { text?: string; value?: number | null } |
   return `${typeof quantity?.text === "string" ? quantity.text.trim() : ""}::${quantity?.value ?? "null"}`
 }
 
-function partColorsMatch(
+export function partColorsMatch(
   expected: ExpectedPartColor,
   actual: ActualPartRow["detectedColor"],
 ): boolean {
@@ -503,7 +503,7 @@ function manualClassIdentityMatches(
     expected.rawManualClassId === actual.rawManualClassId
 }
 
-function normalizeActualPartColor(color: ActualPartRow["detectedColor"]): ExpectedPartColor {
+export function normalizeActualPartColor(color: ActualPartRow["detectedColor"]): ExpectedPartColor {
   return {
     name: typeof color?.name === "string" ? color.name : "missing",
     family: typeof color?.family === "string" ? color.family : "missing",
@@ -515,7 +515,7 @@ function normalizeActualPartColor(color: ActualPartRow["detectedColor"]): Expect
   }
 }
 
-function formatPartColor(color: ExpectedPartColor): string {
+export function formatPartColor(color: ExpectedPartColor): string {
   return [
     color.name,
     color.family,

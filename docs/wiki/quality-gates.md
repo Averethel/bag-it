@@ -110,6 +110,9 @@ Current bag-analysis e2e comparison rules:
 - failed CircleCI deployed-preview shards must publish a visual difference
   report artifact for the assigned manual cases under `test-results/**`; the
   report is review evidence only and does not approve fixture updates
+- fixture difference reports must include color mismatches as row-level issues
+  with the part crop and full-callout context, even when the structural gate
+  fails before the visual comparison stage
 
 Approved manual-derived fixture content is frozen until the user explicitly
 approves a refresh. Agents must not rebaseline, regenerate, rewrite, stage, or

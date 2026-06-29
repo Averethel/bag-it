@@ -7,9 +7,12 @@ import {
   compareAlphaMasks,
   createQuantityMultiset,
   decodeBase64Bytes,
+  formatPartColor,
   formatMultiset,
   formatRegion,
   matchBagAnalysisStructure,
+  normalizeActualPartColor,
+  partColorsMatch,
   quantityKey,
   readActualPartRegion,
   readActualQuantityLabelRegion,
@@ -575,6 +578,26 @@ function buildPendingDifferences({
           regionDrift: formatRegionDrift(expected.quantityLabelRegion, actualQuantityLabelRegion),
           rowOrdinal: expected.ordinal,
           type: "quantity-label-region",
+          calloutOrdinal: pair.expected.ordinal,
+        }))
+      }
+
+      if (!partColorsMatch(expected.color, partPair.actual.detectedColor)) {
+        issues.push(createIssue({
+          actualCalloutRegion,
+          actualRegion: actualPartRegion ?? undefined,
+          expectedCalloutRegion,
+          expectedRegion: expected.partRegion,
+          fixtureCase,
+          manualSource,
+          pageNumber: pair.expected.pageNumber,
+          quantity: expected.quantity.text,
+          reason: `color mismatch: expected ${formatPartColor(expected.color)}, got ${
+            formatPartColor(normalizeActualPartColor(partPair.actual.detectedColor))
+          }`,
+          rowOrdinal: expected.ordinal,
+          showAlphaLayer: true,
+          type: "part-color",
           calloutOrdinal: pair.expected.ordinal,
         }))
       }

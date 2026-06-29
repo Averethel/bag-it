@@ -186,7 +186,10 @@ jobs:
             set -euo pipefail
             export PLAYWRIGHT_BASE_URL="$(tail -n 1 vercel-deployment-url)"
             export VERCEL_AUTOMATION_BYPASS_SECRET="${VERCEL_AUTOMATION_BYPASS_SECRET}"
-            export BAG_ANALYSIS_SELECTED_CASES_FILE="test-results/selected-bag-analysis-cases-${CIRCLE_NODE_INDEX:-0}.txt"
+            node_index="${CIRCLE_NODE_INDEX:-0}"
+            selected_cases_file=".circleci-selected-bag-analysis-cases-${node_index}.txt"
+            status_file="test-results/deployed-playwright-status.txt"
+            export BAG_ANALYSIS_SELECTED_CASES_FILE="${selected_cases_file}"
             mkdir -p test-results
             set +e
             node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
@@ -195,14 +198,22 @@ jobs:
               --command="node scripts/run-circleci-bag-analysis-fixtures.mjs"
             status="$?"
             set -e
-            printf "%s\n" "${status}" > test-results/deployed-playwright-status.txt
 
-            if [ "${status}" -ne 0 ] && [ -s "${BAG_ANALYSIS_SELECTED_CASES_FILE}" ]; then
-              export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${BAG_ANALYSIS_SELECTED_CASES_FILE}")"
-              export BAG_ANALYSIS_DIFF_REPORT_DIR="test-results/bag-analysis-diff-report-${CIRCLE_NODE_INDEX:-0}"
-              echo "Generating bag-analysis visual difference report for ${BAG_ANALYSIS_CASE_IDS}"
-              corepack pnpm exec playwright test tests/e2e/bag-analysis-report.spec.ts --project=chrome --reporter=line || true
+            if [ -s "${selected_cases_file}" ]; then
+              cp "${selected_cases_file}" "test-results/selected-bag-analysis-cases-${node_index}.txt"
             fi
+
+            if [ "${status}" -ne 0 ] && [ -s "${selected_cases_file}" ]; then
+              export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${selected_cases_file}")"
+              export BAG_ANALYSIS_DIFF_REPORT_DIR="test-results/bag-analysis-diff-report-${node_index}"
+              echo "Generating bag-analysis visual difference report for ${BAG_ANALYSIS_CASE_IDS}"
+              corepack pnpm exec playwright test tests/e2e/bag-analysis-report.spec.ts \
+                --project=chrome \
+                --reporter=line \
+                --output="/tmp/bag-analysis-report-output-${node_index}" || true
+            fi
+
+            printf "%s\n" "${status}" > "${status_file}"
       - store_test_results:
           path: test-results
       - store_artifacts:
