@@ -224,6 +224,13 @@ E2E:
   the report still shows the total issue count, but renders visual evidence only
   for the first 50 issues per failed manual to keep failed jobs and artifacts
   bounded when a broad detector drift creates hundreds of differences
+- CI report generation sets `BAG_ANALYSIS_REPORT_INLINE_IMAGES=1`, so CircleCI
+  HTML artifacts are self-contained and do not depend on sibling PNG artifact
+  URLs for visual review
+- fixture comparison failures can be explicitly approved by adding the PR label
+  `fixture-diff-approved` and rerunning the deployed e2e job; only structural or
+  visual fixture-comparison failures are eligible for this approval bypass, while
+  browser, deploy, app, missing-output, or other unclassified failures stay red
 - store JUnit XML with `store_test_results`
 - store `playwright-report` and `test-results` artifacts
 

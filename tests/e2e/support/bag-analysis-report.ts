@@ -109,6 +109,7 @@ interface DataUrlTriplet {
 }
 
 const IMAGE_CHUNK_SIZE = 25
+const REPORT_INLINE_IMAGES = readBooleanEnv("BAG_ANALYSIS_REPORT_INLINE_IMAGES")
 const REPORT_MAX_RENDERED_ISSUES_PER_CASE = readOptionalPositiveIntegerEnv(
   "BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE",
 ) ?? (process.env.CI ? 50 : null)
@@ -786,6 +787,11 @@ function writeTriplet(
       continue
     }
 
+    if (REPORT_INLINE_IMAGES) {
+      written[kind] = dataUrl
+      continue
+    }
+
     const filename = `${safeFileName(issueId)}-${group}-${kind}.png`
     fs.writeFileSync(path.join(imagesDirectory, filename), dataUrlToBuffer(dataUrl))
     written[kind] = `images/${filename}`
@@ -839,6 +845,12 @@ function readOptionalPositiveIntegerEnv(name: string): number | null {
   const value = Number.parseInt(rawValue, 10)
 
   return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function readBooleanEnv(name: string): boolean {
+  const rawValue = process.env[name]?.trim().toLowerCase()
+
+  return rawValue === "1" || rawValue === "true" || rawValue === "yes"
 }
 
 function renderIssueHtml(issue: BagAnalysisDifference): string {

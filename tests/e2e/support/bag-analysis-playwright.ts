@@ -206,17 +206,20 @@ async function attachVisualFailures(
 }
 
 function formatVisualFailures(caseId: string, failures: VisualComparisonFailure[]): string {
-  return failures.map((failure) => {
-    const location = [
-      `${caseId}`,
-      failure.pageNumber ? `page ${failure.pageNumber}` : null,
-      failure.calloutOrdinal !== undefined ? `callout ${failure.calloutOrdinal}` : null,
-      failure.rowOrdinal !== undefined ? `row ${failure.rowOrdinal}` : null,
-      failure.quantity ? `qty ${failure.quantity}` : null,
-    ].filter(Boolean).join(" / ")
+  return [
+    `${caseId}: visual fixture comparison failed with ${failures.length} issue(s).`,
+    ...failures.map((failure) => {
+      const location = [
+        `${caseId}`,
+        failure.pageNumber ? `page ${failure.pageNumber}` : null,
+        failure.calloutOrdinal !== undefined ? `callout ${failure.calloutOrdinal}` : null,
+        failure.rowOrdinal !== undefined ? `row ${failure.rowOrdinal}` : null,
+        failure.quantity ? `qty ${failure.quantity}` : null,
+      ].filter(Boolean).join(" / ")
 
-    return `${location}: ${failure.message}; metrics=${JSON.stringify(failure.metrics ?? {})}`
-  }).join("\n")
+      return `${location}: ${failure.message}; metrics=${JSON.stringify(failure.metrics ?? {})}`
+    }),
+  ].join("\n")
 }
 
 function formatStructuralFailures(caseId: string, failures: string[]): string {

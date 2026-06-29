@@ -58,6 +58,20 @@ function writeFailedManualIds(failedManualIds) {
   writeManualIdsFile(failedCasesFile, failedManualIds)
 }
 
+function writeUnapprovedFailures(failures) {
+  const unapprovedFailuresFile = process.env.BAG_ANALYSIS_UNAPPROVED_FAILURES_FILE
+
+  if (!unapprovedFailuresFile) {
+    return
+  }
+
+  fs.mkdirSync(path.dirname(unapprovedFailuresFile), { recursive: true })
+  fs.writeFileSync(
+    unapprovedFailuresFile,
+    failures.length > 0 ? `${failures.join("\n")}\n` : "",
+  )
+}
+
 function writeManualIdsFile(filePath, manualIds) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(
@@ -108,19 +122,31 @@ function runPlaywright(selectedManualIds) {
   const status = result.status ?? 1
 
   if (status !== 0) {
-    writeFailedManualIds(readFailedManualIds(process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE, manualIds))
+    const failureReport = readFailureReport(process.env.PLAYWRIGHT_JUNIT_OUTPUT_FILE, manualIds)
+
+    writeFailedManualIds(failureReport.fixtureFailureManualIds)
+    writeUnapprovedFailures(failureReport.unapprovedFailures)
   }
 
   return status
 }
 
-function readFailedManualIds(junitPath, manualIds) {
+function readFailureReport(junitPath, manualIds) {
+  const emptyReport = {
+    fixtureFailureManualIds: [],
+    unapprovedFailures: [],
+  }
+
   if (!junitPath || !fs.existsSync(junitPath)) {
-    return []
+    return {
+      fixtureFailureManualIds: [],
+      unapprovedFailures: ["Playwright JUnit output was not found."],
+    }
   }
 
   const manualIdSet = new Set(manualIds)
-  const failedManualIds = []
+  const fixtureFailureManualIds = []
+  const unapprovedFailures = []
   const xml = fs.readFileSync(junitPath, "utf8")
   const testcasePattern = /<testcase\b[^>]*\bname="([^"]+)"[^>]*>([\s\S]*?)<\/testcase>/g
 
@@ -131,12 +157,51 @@ function readFailedManualIds(junitPath, manualIds) {
 
     const manualId = match[1].match(/manual-\d+/)?.[0]
 
-    if (manualId && manualIdSet.has(manualId) && !failedManualIds.includes(manualId)) {
-      failedManualIds.push(manualId)
+    if (!manualId || !manualIdSet.has(manualId)) {
+      unapprovedFailures.push(`Unknown failed test case: ${decodeXmlEntities(match[1])}`)
+      continue
     }
+
+    if (isFixtureComparisonFailure(match[2])) {
+      if (!fixtureFailureManualIds.includes(manualId)) {
+        fixtureFailureManualIds.push(manualId)
+      }
+      continue
+    }
+
+    unapprovedFailures.push(`${manualId}: ${readFailureMessage(match[2])}`)
   }
 
-  return failedManualIds
+  if (fixtureFailureManualIds.length === 0 && unapprovedFailures.length === 0) {
+    return emptyReport
+  }
+
+  return {
+    fixtureFailureManualIds,
+    unapprovedFailures,
+  }
+}
+
+function isFixtureComparisonFailure(testcaseBody) {
+  return (
+    testcaseBody.includes("structural fixture comparison failed") ||
+    testcaseBody.includes("visual fixture comparison failed")
+  )
+}
+
+function readFailureMessage(testcaseBody) {
+  const messageMatch = testcaseBody.match(/<(?:error|failure)\b[^>]*\bmessage="([^"]*)"/)
+
+  return messageMatch ? decodeXmlEntities(messageMatch[1]) : "non-fixture failure"
+}
+
+function decodeXmlEntities(value) {
+  return value
+    .replaceAll("&quot;", "\"")
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&")
 }
 
 const argv = process.argv.slice(2)

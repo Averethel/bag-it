@@ -189,9 +189,11 @@ jobs:
             node_index="${CIRCLE_NODE_INDEX:-0}"
             selected_cases_file=".circleci-selected-bag-analysis-cases-${node_index}.txt"
             failed_cases_file=".circleci-failed-bag-analysis-cases-${node_index}.txt"
+            unapproved_failures_file=".circleci-unapproved-bag-analysis-failures-${node_index}.txt"
             status_file="test-results/deployed-playwright-status.txt"
             export BAG_ANALYSIS_SELECTED_CASES_FILE="${selected_cases_file}"
             export BAG_ANALYSIS_FAILED_CASES_FILE="${failed_cases_file}"
+            export BAG_ANALYSIS_UNAPPROVED_FAILURES_FILE="${unapproved_failures_file}"
             mkdir -p test-results
             set +e
             node scripts/run-circleci-bag-analysis-fixtures.mjs --list | circleci tests run \
@@ -209,6 +211,10 @@ jobs:
               cp "${failed_cases_file}" "test-results/failed-bag-analysis-cases-${node_index}.txt"
             fi
 
+            if [ -s "${unapproved_failures_file}" ]; then
+              cp "${unapproved_failures_file}" "test-results/unapproved-bag-analysis-failures-${node_index}.txt"
+            fi
+
             report_cases_file=""
             if [ -s "${failed_cases_file}" ]; then
               report_cases_file="${failed_cases_file}"
@@ -219,12 +225,23 @@ jobs:
             if [ "${status}" -ne 0 ] && [ -n "${report_cases_file}" ]; then
               export BAG_ANALYSIS_CASE_IDS="$(paste -sd, "${report_cases_file}")"
               export BAG_ANALYSIS_DIFF_REPORT_DIR="test-results/bag-analysis-diff-report-${node_index}"
+              export BAG_ANALYSIS_REPORT_INLINE_IMAGES=1
               export BAG_ANALYSIS_REPORT_MAX_RENDERED_ISSUES_PER_CASE=50
               echo "Generating bag-analysis visual difference report for ${BAG_ANALYSIS_CASE_IDS}"
               corepack pnpm exec playwright test tests/e2e/bag-analysis-report.spec.ts \
                 --project=chrome \
                 --reporter=line \
                 --output="/tmp/bag-analysis-report-output-${node_index}" || true
+            fi
+
+            if [ "${status}" -ne 0 ] && [ -s "${failed_cases_file}" ] && [ ! -s "${unapproved_failures_file}" ]; then
+              if node scripts/check-fixture-diff-approval.mjs; then
+                echo "Approved fixture diffs; marking deployed Playwright validation green for this shard."
+                printf "approved\n" > "test-results/fixture-diff-approval-${node_index}.txt"
+                status=0
+              else
+                printf "missing approval\n" > "test-results/fixture-diff-approval-${node_index}.txt"
+              fi
             fi
 
             printf "%s\n" "${status}" > "${status_file}"
