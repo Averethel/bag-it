@@ -18,6 +18,7 @@ export interface BagAnalysisFixtureCase {
   approvalStatus: string
   calloutsPath: string
   contextPages: number[] | null
+  ciKnownMissingPartRows?: BagAnalysisKnownMissingPartRow[]
   expectedCallouts: number
   expectedColorRows: number
   expectedPageCounts: Record<string, number> | null
@@ -27,6 +28,12 @@ export interface BagAnalysisFixtureCase {
   partsPath: string
   regressionType: string
   sourceKind: string
+}
+
+export interface BagAnalysisKnownMissingPartRow {
+  calloutOrdinal: number
+  partOrdinal: number
+  reason: string
 }
 
 export interface LoadedBagAnalysisFixture {

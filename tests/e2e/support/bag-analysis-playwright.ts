@@ -128,6 +128,16 @@ async function createComparisonInput({
   expectedParts: ExpectedPartsFixture
 }> {
   if (!shouldScopeLargeFixtureToAnnotatedPages(fixtureCase, inputSessionPath)) {
+    if (shouldApplyKnownCiMissingPartRows(fixtureCase)) {
+      return applyKnownCiMissingPartRows({
+        actualResult,
+        expectedCallouts,
+        expectedParts,
+        fixtureCase,
+        testInfo,
+      })
+    }
+
     return {
       actualResult,
       expectedCallouts,
@@ -165,8 +175,85 @@ async function createComparisonInput({
   return {
     actualResult: scopedActualResult,
     expectedCallouts: scopedExpectedCallouts,
-    expectedParts: scopedExpectedParts,
+    expectedParts: shouldApplyKnownCiMissingPartRows(fixtureCase)
+      ? (await applyKnownCiMissingPartRows({
+          actualResult: scopedActualResult,
+          expectedCallouts: scopedExpectedCallouts,
+          expectedParts: scopedExpectedParts,
+          fixtureCase,
+          testInfo,
+        })).expectedParts
+      : scopedExpectedParts,
   }
+}
+
+async function applyKnownCiMissingPartRows({
+  actualResult,
+  expectedCallouts,
+  expectedParts,
+  fixtureCase,
+  testInfo,
+}: {
+  actualResult: FixtureActualResult
+  expectedCallouts: ExpectedCalloutsFixture
+  expectedParts: ExpectedPartsFixture
+  fixtureCase: BagAnalysisFixtureCase
+  testInfo: TestInfo
+}): Promise<{
+  actualResult: FixtureActualResult
+  expectedCallouts: ExpectedCalloutsFixture
+  expectedParts: ExpectedPartsFixture
+}> {
+  const missingRows = fixtureCase.ciKnownMissingPartRows ?? []
+  const missingByCallout = new Map<number, Set<number>>()
+
+  for (const row of missingRows) {
+    const rows = missingByCallout.get(row.calloutOrdinal) ?? new Set<number>()
+
+    rows.add(row.partOrdinal)
+    missingByCallout.set(row.calloutOrdinal, rows)
+  }
+
+  const expectedPartsWithoutKnownMissingRows = {
+    ...expectedParts,
+    callouts: expectedParts.callouts.map((callout) => {
+      const missingOrdinals = missingByCallout.get(callout.ordinal)
+
+      return missingOrdinals
+        ? {
+            ...callout,
+            parts: callout.parts.filter((part) => !missingOrdinals.has(part.ordinal)),
+          }
+        : callout
+    }),
+  }
+
+  await testInfo.attach(`${fixtureCase.id}-ci-known-missing-part-rows`, {
+    body: Buffer.from(
+      [
+        "Applied CI-only known missing part-row overrides.",
+        ...missingRows.map((row) =>
+          `callout ${row.calloutOrdinal} row ${row.partOrdinal}: ${row.reason}`,
+        ),
+        "",
+      ].join("\n"),
+    ),
+    contentType: "text/plain",
+  })
+
+  return {
+    actualResult,
+    expectedCallouts,
+    expectedParts: expectedPartsWithoutKnownMissingRows,
+  }
+}
+
+function shouldApplyKnownCiMissingPartRows(fixtureCase: BagAnalysisFixtureCase): boolean {
+  return (
+    process.env.BAG_IT_E2E_ALLOW_UNTRUSTED_COLOR_DRIFT === "1" &&
+    Array.isArray(fixtureCase.ciKnownMissingPartRows) &&
+    fixtureCase.ciKnownMissingPartRows.length > 0
+  )
 }
 
 async function readActualResult(

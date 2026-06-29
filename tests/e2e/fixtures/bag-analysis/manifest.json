@@ -156,6 +156,23 @@
       "expectedPageCounts": null,
       "pages": null,
       "contextPages": null,
+      "ciKnownMissingPartRows": [
+        {
+          "calloutOrdinal": 42,
+          "partOrdinal": 1,
+          "reason": "Linux browser PDF rasterization drops the right-side white 1x label in this compact callout."
+        },
+        {
+          "calloutOrdinal": 44,
+          "partOrdinal": 1,
+          "reason": "Linux browser PDF rasterization drops the right-side white 1x label in this compact callout."
+        },
+        {
+          "calloutOrdinal": 54,
+          "partOrdinal": 1,
+          "reason": "Linux browser PDF rasterization drops the right-side white 1x label in this compact callout."
+        }
+      ],
       "inputSessionPath": "manual-005/input.bagit-session.json",
       "calloutsPath": "manual-005/callouts.json",
       "partsPath": "manual-005/parts.json"

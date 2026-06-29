@@ -74,7 +74,11 @@ serializing very large session files. Smaller fixture cases still exercise the
 Download button and attach the downloaded session. When CircleCI's Linux Chrome
 path uses this large-session mode and a fixture manifest has an explicit
 `pages` list, structural and visual comparison is scoped to those annotated
-pages so off-scope full-manual raster drift cannot fail the CI gate. The legacy
+pages so off-scope full-manual raster drift cannot fail the CI gate. Fixture
+manifests may also declare `ciKnownMissingPartRows` for specific user-approved
+rows that Linux browser PDF rasterization drops while local browser validation
+remains strict; this override is active only when the CI raster-drift
+environment flag is set and must include a row-level reason. The legacy
 `webwright:validate` and `validate:saved-sessions:browser` entries remain
 compatibility aliases; new work should call `test:e2e` or
 `validate:e2e-fixtures`.

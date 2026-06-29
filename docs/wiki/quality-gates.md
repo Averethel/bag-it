@@ -117,6 +117,9 @@ Current bag-analysis e2e comparison rules:
 - in CircleCI's Linux Chrome fixture gate, large-session fixtures with explicit
   manifest `pages` compare only those annotated pages; local verification keeps
   full-fixture comparison unless the same CI raster-drift env is set
+- CircleCI may apply manifest-declared `ciKnownMissingPartRows` for exact
+  approved rows lost only by Linux browser PDF rasterization; local verification
+  remains strict and every override requires a row-level reason
 - failures attach expected, actual, and diff PNGs to Playwright output
 
 Approved manual-derived fixture content is frozen until the user explicitly
