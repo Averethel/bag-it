@@ -1507,39 +1507,26 @@ describe("BaggingApp shell", () => {
     const firstCheckbox = screen.getByRole("checkbox", {
       name: /mark bag 1 page 1 step 1 part 1 packed/i,
     })
-    const firstCheckboxControl = firstCheckbox
-      .closest('[data-scope="checkbox"]')
-      ?.querySelector('[data-part="control"]')
 
-    if (!(firstCheckboxControl instanceof HTMLElement)) {
-      throw new Error("Expected visible checkbox control")
-    }
+    fireEvent.click(firstCheckbox)
 
-    fireEvent.click(firstCheckboxControl)
-
-    expect(firstCheckbox).toBeChecked()
+    await waitFor(() => expect(firstCheckbox).toBeChecked())
     await waitFor(() => expect(screen.getByText("2/5 parts · 40%")).toBeInTheDocument())
 
-    const groupCheckboxControl = groupCheckbox
-      .closest('[data-scope="checkbox"]')
-      ?.querySelector('[data-part="control"]')
+    fireEvent.click(groupCheckbox)
 
-    if (!(groupCheckboxControl instanceof HTMLElement)) {
-      throw new Error("Expected visible group checkbox control")
-    }
-
-    fireEvent.click(groupCheckboxControl)
-
+    await waitFor(() => expect(groupCheckbox).toBeChecked())
     await waitFor(() => expect(screen.getByText("5/5 parts · 100%")).toBeInTheDocument())
     expect(firstCheckbox).toBeChecked()
 
-    fireEvent.click(firstCheckboxControl)
+    fireEvent.click(firstCheckbox)
 
-    expect(firstCheckbox).not.toBeChecked()
+    await waitFor(() => expect(firstCheckbox).not.toBeChecked())
     await waitFor(() => expect(screen.getByText("3/5 parts · 60%")).toBeInTheDocument())
 
-    fireEvent.click(groupCheckboxControl)
+    fireEvent.click(groupCheckbox)
 
+    await waitFor(() => expect(groupCheckbox).toBeChecked())
     await waitFor(() => expect(screen.getByText("5/5 parts · 100%")).toBeInTheDocument())
     expect(firstCheckbox).toBeChecked()
   })
