@@ -401,7 +401,10 @@ function recoverSuppressedFragmentTrailingPeerItems(
     if (
       !label ||
       items.some((item) => labelsOverlap(item.quantityLabel.region, label.region)) ||
-      !readTrailingPeerSuppressedFragment(anchor, label)
+      (
+        !readTrailingPeerSuppressedFragment(anchor, label) &&
+        !hasStrongTrailingPeerPartForeground(page, callout, background, label)
+      )
     ) {
       continue
     }
@@ -495,6 +498,43 @@ function readTrailingPeerSuppressedFragment(
     .sort((left, right) =>
       readRegionCenterDistance(left, labelCenter) - readRegionCenterDistance(right, labelCenter)
     )[0]
+}
+
+function hasStrongTrailingPeerPartForeground(
+  page: CalloutPartPageInput,
+  callout: CalloutPartCalloutInput,
+  background: ReturnType<typeof readCalloutBackground>,
+  label: CalloutQuantityLabel,
+): boolean {
+  const left = Math.max(callout.region.x, label.region.x - Math.max(10, Math.round(label.region.width * 1.1)))
+  const right = Math.min(
+    page.width,
+    callout.region.x + callout.region.width - 2,
+    label.region.x + Math.max(74, Math.round(label.region.width * 5.8)),
+  )
+  const top = Math.max(
+    callout.region.y + CALLOUT_BORDER_INSET,
+    label.region.y - Math.max(42, Math.round(label.region.height * 4.8)),
+  )
+  const bottom = label.region.y
+  let foregroundPixels = 0
+  const foregroundRows = new Set<number>()
+
+  if (right <= left || bottom <= top) {
+    return false
+  }
+
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      if (readAlpha(page, x, y) >= 32 && colorDistance(readPixel(page, x, y), background) >= 18) {
+        foregroundPixels += 1
+        foregroundRows.add(y)
+      }
+    }
+  }
+
+  return foregroundPixels >= Math.max(120, Math.round(label.region.width * label.region.height * 0.7)) &&
+    foregroundRows.size >= Math.max(12, Math.round(label.region.height * 0.9))
 }
 
 function readRegionCenterDistance(region: Region, point: { x: number; y: number }): number {

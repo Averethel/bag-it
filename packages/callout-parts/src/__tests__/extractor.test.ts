@@ -1550,6 +1550,24 @@ describe("callout part extractor", () => {
     }
   })
 
+  it("recovers an inferred trailing compact peer when Chrome drops its readable label ink", () => {
+    const trailingPart = { height: 28, width: 44, x: 68, y: 14 }
+    const page = createSyntheticPage((data) => {
+      paintCallout(data)
+      paintRegion(data, { height: 10, width: 14, x: 34, y: 34 }, TEST_GRAY_PART)
+      paintRegion(data, trailingPart, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "6x", 34, 52)
+    })
+    const items = extractCalloutPartsForPage({
+      callouts: [{ background: TEST_BLUE_PANEL, id: "compact-trailing-peer", pageNumber: 1, region: CALLOUT_REGION }],
+      page,
+    }).items
+
+    expect(items.map((item) => item.quantityLabel.text)).toEqual(["6x", "1x"])
+    expect(items[1].quantityLabel.recoveryKind).toBe("compact-missing-same-row-trailing-peer")
+    expect(readOpaquePixelsInRegion(items[1], trailingPart)).toBeGreaterThan(0)
+  })
+
   it("keeps quantity labels transparent in part image masks and stays inside callout borders", () => {
     const page = createSyntheticPage((data) => {
       paintCallout(data)
