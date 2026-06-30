@@ -69,27 +69,21 @@ export function createPartSupportMask(
   fillHorizontalInterior(mask, region)
   fillVerticalInterior(mask, region)
   const interiorMask = mask.slice()
-  if (enableTopSupport) {
-    const compactTopSupport = Boolean(ownedBounds && isCompactOwnedComponent(ownedBounds))
-
-    fillTopFaceSupport(mask, ownedMask, interiorMask, page, region, background)
-    if (!compactTopSupport) {
-      fillTopGapBridgeSupport(
-        mask,
-        page,
-        region,
-        background,
-        options.ownedRegion,
-        options.enableLowContrastFaceSupport,
-        options.lowContrastFaceSupportMode,
-        options.enableLongShallowTopRecovery ? ownedBounds : undefined,
-      )
-    }
-    removeDetachedTopSupport(mask, ownedMask, region.width, region.height, options.enableLongShallowTopRecovery)
+  fillConfiguredTopSupport({
+    background,
+    enableTopSupport,
+    interiorMask,
+    mask,
+    options,
+    ownedBounds,
+    ownedMask,
+    page,
+    region,
+  })
+  fillBottomEdgeSupport(mask, ownedMask, interiorMask, page, region, background)
+  if (options.lowContrastFaceSupportMode !== "sparse-top-and-left") {
     removeExcessCompactTopSupport(mask, ownedMask, ownedBounds, region.width, region.height)
   }
-  fillBottomEdgeSupport(mask, ownedMask, interiorMask, page, region, background)
-  removeExcessCompactTopSupport(mask, ownedMask, ownedBounds, region.width, region.height)
 
   return {
     data: mask,
@@ -101,6 +95,82 @@ export function createPartSupportMask(
       top: countSupportPixels(mask, ownedMask, SUPPORT_TOP_FACE),
     },
   }
+}
+
+function fillConfiguredTopSupport({
+  background,
+  enableTopSupport,
+  interiorMask,
+  mask,
+  options,
+  ownedBounds,
+  ownedMask,
+  page,
+  region,
+}: {
+  background: BackgroundModel
+  enableTopSupport: boolean
+  interiorMask: Uint8Array
+  mask: Uint8Array
+  options: PartSupportMaskOptions
+  ownedBounds: Region | undefined
+  ownedMask: Uint8Array
+  page: CalloutPartPageInput
+  region: Region
+}): void {
+  if (!enableTopSupport) {
+    return
+  }
+
+  const preserveSparseLowContrastSupport = options.lowContrastFaceSupportMode === "sparse-top-and-left"
+
+  fillTopFaceSupport(mask, ownedMask, interiorMask, page, region, background)
+  fillConfiguredTopGapBridgeSupport({
+    background,
+    mask,
+    options,
+    ownedBounds,
+    page,
+    preserveSparseLowContrastSupport,
+    region,
+  })
+  removeDetachedTopSupport(mask, ownedMask, region.width, region.height, options.enableLongShallowTopRecovery)
+  if (!preserveSparseLowContrastSupport) {
+    removeExcessCompactTopSupport(mask, ownedMask, ownedBounds, region.width, region.height)
+  }
+}
+
+function fillConfiguredTopGapBridgeSupport({
+  background,
+  mask,
+  options,
+  ownedBounds,
+  page,
+  preserveSparseLowContrastSupport,
+  region,
+}: {
+  background: BackgroundModel
+  mask: Uint8Array
+  options: PartSupportMaskOptions
+  ownedBounds: Region | undefined
+  page: CalloutPartPageInput
+  preserveSparseLowContrastSupport: boolean
+  region: Region
+}): void {
+  if (ownedBounds && isCompactOwnedComponent(ownedBounds) && !preserveSparseLowContrastSupport) {
+    return
+  }
+
+  fillTopGapBridgeSupport(
+    mask,
+    page,
+    region,
+    background,
+    options.ownedRegion,
+    options.enableLowContrastFaceSupport,
+    options.lowContrastFaceSupportMode,
+    options.enableLongShallowTopRecovery || preserveSparseLowContrastSupport ? ownedBounds : undefined,
+  )
 }
 
 function countSupportPixels(mask: Uint8Array, ownedMask: Uint8Array, value: number): number {

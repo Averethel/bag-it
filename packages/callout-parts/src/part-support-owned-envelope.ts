@@ -36,7 +36,15 @@ export function fillOwnedEnvelopeWeakTopSupport(
   }
 
   if (enableLowContrastFaceSupport) {
-    fillOwnedEnvelopeLowContrastFaceSupport(mask, page, region, envelope, bounds, lowContrastFaceSupportMode ?? "top-and-left")
+    fillOwnedEnvelopeLowContrastFaceSupport(
+      mask,
+      page,
+      region,
+      background,
+      envelope,
+      bounds,
+      lowContrastFaceSupportMode ?? "top-and-left",
+    )
   }
 
   if (!isOwnedEnvelopeTopSupportCandidate(envelope, bounds)) {
@@ -59,11 +67,18 @@ function fillOwnedEnvelopeLowContrastFaceSupport(
   mask: Uint8Array,
   page: CalloutPartPageInput,
   region: Region,
+  background: BackgroundModel,
   envelope: Region,
   bounds: Region,
   mode: LowContrastFaceSupportMode,
 ): void {
-  if (!isLowContrastFaceSupportCandidate(envelope, bounds)) {
+  if (!isLowContrastFaceSupportCandidate(envelope, bounds, mode)) {
+    return
+  }
+
+  if (mode === "sparse-top-and-left") {
+    fillSparseLowContrastTopFace(mask, page, region, background, envelope, bounds)
+    fillSparseLowContrastLeftFace(mask, page, region, background, envelope, bounds)
     return
   }
 
@@ -76,13 +91,33 @@ function fillOwnedEnvelopeLowContrastFaceSupport(
   }
 }
 
-function isLowContrastFaceSupportCandidate(envelope: Region, bounds: Region): boolean {
+function isLowContrastFaceSupportCandidate(
+  envelope: Region,
+  bounds: Region,
+  mode: LowContrastFaceSupportMode,
+): boolean {
+  if (mode === "sparse-top-and-left") {
+    return isSparseLowContrastFaceSupportCandidate(envelope, bounds)
+  }
+
   const overlap = readHorizontalOverlap(envelope, bounds)
 
   return bounds.height >= 14 &&
     bounds.width >= Math.max(28, Math.round(bounds.height * 1.25)) &&
     overlap >= Math.min(bounds.width, Math.max(16, Math.round(bounds.width * 0.72))) &&
     envelope.width <= Math.max(bounds.width * 1.8, bounds.width + 22)
+}
+
+function isSparseLowContrastFaceSupportCandidate(envelope: Region, bounds: Region): boolean {
+  const overlap = readHorizontalOverlap(envelope, bounds)
+
+  return bounds.height >= 12 &&
+    bounds.height <= 72 &&
+    bounds.width >= Math.max(6, Math.round(bounds.height * 0.35)) &&
+    bounds.width <= Math.max(60, Math.round(bounds.height * 3.4)) &&
+    overlap >= Math.max(4, Math.min(bounds.width, Math.round(bounds.width * 0.65))) &&
+    envelope.width >= Math.max(55, bounds.width + 34) &&
+    envelope.height >= Math.max(35, bounds.height + 18)
 }
 
 function fillLowContrastTopFace(
@@ -109,6 +144,53 @@ function fillLowContrastTopFace(
   fillAlphaSupportRect(mask, page, region, { bottom, left, right, top })
 }
 
+function fillSparseLowContrastTopFace(
+  mask: Uint8Array,
+  page: CalloutPartPageInput,
+  region: Region,
+  background: BackgroundModel,
+  envelope: Region,
+  bounds: Region,
+): void {
+  const topGap = bounds.y - envelope.y
+
+  if (
+    topGap < Math.max(10, Math.round(bounds.height * 0.55)) ||
+    topGap > Math.max(64, Math.round(bounds.height * 3.6))
+  ) {
+    return
+  }
+
+  fillVisiblePartSupportRect(mask, page, region, background, {
+    bottom: bounds.y - 1,
+    left: envelope.x,
+    right: envelope.x + envelope.width - 1,
+    top: envelope.y,
+  })
+}
+
+function fillSparseLowContrastLeftFace(
+  mask: Uint8Array,
+  page: CalloutPartPageInput,
+  region: Region,
+  background: BackgroundModel,
+  envelope: Region,
+  bounds: Region,
+): void {
+  const leftGap = bounds.x - envelope.x
+
+  if (leftGap < 2 || leftGap > Math.max(42, Math.round(bounds.height * 2.6))) {
+    return
+  }
+
+  fillVisiblePartSupportRect(mask, page, region, background, {
+    bottom: Math.min(envelope.y + envelope.height - 1, bounds.y + bounds.height - 1),
+    left: envelope.x,
+    right: bounds.x - 1,
+    top: envelope.y,
+  })
+}
+
 function fillLowContrastLeftFace(
   mask: Uint8Array,
   page: CalloutPartPageInput,
@@ -133,6 +215,24 @@ function fillLowContrastLeftFace(
   const bottom = Math.min(envelope.y + envelope.height - 1, bounds.y + bounds.height - 1)
 
   fillAlphaSupportRect(mask, page, region, { bottom, left, right, top })
+}
+
+function fillVisiblePartSupportRect(
+  mask: Uint8Array,
+  page: CalloutPartPageInput,
+  region: Region,
+  background: BackgroundModel,
+  rect: { bottom: number; left: number; right: number; top: number },
+): void {
+  if (rect.left > rect.right || rect.top > rect.bottom) {
+    return
+  }
+
+  visitLocalRect(rect, (x, y) => {
+    if (isOwnedEnvelopeVisiblePartPixel(page, region, background, x, y)) {
+      writeSupportPixel(mask, region.width, x, y, SUPPORT_TOP_FACE)
+    }
+  })
 }
 
 function fillAlphaSupportRect(

@@ -17,6 +17,7 @@ interface PartImageOptions {
   lowContrastFaceSupportMode?: LowContrastFaceSupportMode
   allowTopCropContext?: boolean
   enableTopSupport?: boolean
+  preserveSparseLowContrastTopSupport?: boolean
 }
 
 export function createPartImage(
@@ -55,6 +56,7 @@ export function createPartImage(
     foregroundBounds: rawForegroundBounds,
     foregroundPixelCount: selectedForegroundPixels.length,
     ownedRegion: clippedOwnedRegion,
+    preserveSparseLowContrastTopSupport: options.preserveSparseLowContrastTopSupport,
     region: clippedRegion,
     supportPixelsAdded: alphaMaskResult.supportPixelsAdded,
   })

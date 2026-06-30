@@ -2109,6 +2109,69 @@ describe("callout part extractor", () => {
     expect(item!.region.y).toBeLessThanOrEqual(29)
   })
 
+  it("recovers sparse low-contrast top faces when tiny false labels would shrink the crop zone", () => {
+    const callout = { height: 100, width: 122, x: 12, y: 10 }
+    const sparseWeakFace = { b: 245, g: 220, r: 190 }
+    const targetLabel = createTestQuantityLabel("1x", 36, 78)
+    const labels = [
+      targetLabel,
+      { confidence: 0.55, region: { height: 5, width: 8, x: 96, y: 65 }, text: "1x", value: 1 },
+      { confidence: 0.55, region: { height: 5, width: 8, x: 104, y: 68 }, text: "1x", value: 1 },
+    ]
+    const page = createSyntheticPage((data) => {
+      paintLargeRegion(data, 160, callout, TEST_BLUE_PANEL)
+      paintLargeBorder(data, 160, callout, TEST_BLACK)
+      paintLargeRegion(data, 160, { height: 32, width: 96, x: 24, y: 24 }, sparseWeakFace)
+      paintLargeRegion(data, 160, { height: 18, width: 8, x: 42, y: 56 }, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "1x", targetLabel.region.x, targetLabel.region.y)
+    })
+    const item = createPartImageForLabel(
+      page,
+      { background: TEST_BLUE_PANEL, id: "sparse-low-contrast-single", pageNumber: 1, region: callout },
+      createFlatBackgroundModel(TEST_BLUE_PANEL),
+      labels,
+      labels,
+      targetLabel,
+    )
+
+    expect(item).toBeDefined()
+    expect(readMaskAlpha(item!.alphaMask, { x: 112, y: 30 }, item!.region)).toBeGreaterThan(0)
+    expect(item!.region.y).toBeLessThanOrEqual(30)
+    expect(item!.region.x + item!.region.width).toBeGreaterThanOrEqual(112)
+  })
+
+  it("recovers sparse low-contrast top faces for right-side two-label rows without borrowing the left part", () => {
+    const callout = { height: 104, width: 186, x: 20, y: 10 }
+    const sparseWeakFace = { b: 245, g: 220, r: 190 }
+    const labels = [
+      createTestQuantityLabel("1x", 42, 82),
+      createTestQuantityLabel("1x", 98, 82),
+      { confidence: 0.55, region: { height: 6, width: 10, x: 146, y: 64 }, text: "1x", value: 1 },
+    ]
+    const page = createWideSyntheticPage(240, 150, (data, width) => {
+      paintLargeRegion(data, width, callout, TEST_BLUE_PANEL)
+      paintLargeBorder(data, width, callout, TEST_BLACK)
+      paintLargeRegion(data, width, { height: 18, width: 46, x: 42, y: 58 }, TEST_GRAY_PART)
+      paintLargeRegion(data, width, { height: 28, width: 100, x: 102, y: 30 }, sparseWeakFace)
+      paintLargeRegion(data, width, { height: 18, width: 52, x: 106, y: 58 }, TEST_GRAY_PART)
+      paintLargeRasterQuantityLabel(data, width, "1x", labels[0].region.x, labels[0].region.y)
+      paintLargeRasterQuantityLabel(data, width, "1x", labels[1].region.x, labels[1].region.y)
+    })
+    const item = createPartImageForLabel(
+      page,
+      { background: TEST_BLUE_PANEL, id: "sparse-low-contrast-row", pageNumber: 1, region: callout },
+      createFlatBackgroundModel(TEST_BLUE_PANEL),
+      labels,
+      labels,
+      labels[1],
+    )
+
+    expect(item).toBeDefined()
+    expect(readMaskAlpha(item!.alphaMask, { x: 194, y: 36 }, item!.region)).toBeGreaterThan(0)
+    expect(readMaskAlpha(item!.alphaMask, { x: 58, y: 64 }, item!.region)).toBe(0)
+    expect(item!.region.x + item!.region.width).toBeGreaterThanOrEqual(194)
+  })
+
   it("keeps near-background bottom edge pixels below the strong outline opaque", () => {
     const bottomEdge = { height: 4, width: 20, x: 30, y: 37 }
     const exactBackgroundBelow = { height: 3, width: 20, x: 30, y: 42 }

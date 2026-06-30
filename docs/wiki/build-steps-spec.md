@@ -25,7 +25,7 @@ Keep explicit detector versioning. The current detector version is:
 Part image and quantity-label extraction has its own version:
 
 ```ts
-2.0.0-alpha.164
+2.0.0-alpha.165
 ```
 
 Part color calibration has its own version:
@@ -94,7 +94,7 @@ rendered.
 The production route currently emits detector version `2.0.0-alpha.20` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
-part extractor version `2.0.0-alpha.164` from package
+part extractor version `2.0.0-alpha.165` from package
 `@bag-it/callout-parts` and part color calibration version `2.0.0-alpha.65`
 from `@bag-it/part-colors`. Callout evidence and part extraction both use
 visible raster `/^\d+x$/i` quantity labels from

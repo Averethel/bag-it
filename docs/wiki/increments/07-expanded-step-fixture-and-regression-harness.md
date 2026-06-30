@@ -81,6 +81,10 @@ Deliver:
   detector rejects weak fill-panel duplicates that overlap a stronger accepted
   quantity-backed fill panel and accepts compact top strong-border panels whose
   Linux-rendered fill background scores just below the manual-style threshold.
+- Part extractor `2.0.0-alpha.165` rebaselines two user-approved `manual-011`
+  Animals crops after visual review: callout 39 row 0 and callout 171 row 1 now
+  keep the full low-contrast white part geometry instead of the stale lower-half
+  crop.
 - Fixture content under `tests/e2e/fixtures/bag-analysis/**` remains frozen
   unless the proposed visual/JSON differences are shown and explicitly approved
   by the user before any rebaseline, staging, or commit.

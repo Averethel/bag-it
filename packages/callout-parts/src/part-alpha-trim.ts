@@ -42,6 +42,7 @@ export function trimPartAlphaMask({
   foregroundBounds,
   foregroundPixelCount,
   ownedRegion,
+  preserveSparseLowContrastTopSupport = false,
   region,
   supportPixelsAdded,
 }: {
@@ -51,6 +52,7 @@ export function trimPartAlphaMask({
   foregroundBounds?: Region
   foregroundPixelCount?: number
   ownedRegion?: Region
+  preserveSparseLowContrastTopSupport?: boolean
   region: Region
   supportPixelsAdded: SupportPixelsAdded
 }): PartAlphaTrimResult {
@@ -75,12 +77,14 @@ export function trimPartAlphaMask({
     foregroundPixelCount,
     coordinateScale,
   )
-  const alphaTopClamp = clampEscapedTopEdgeAlpha(
-    shallowTopCleanedAlphaMask,
-    region,
-    foregroundBounds,
-    coordinateScale,
-  )
+  const alphaTopClamp = preserveSparseLowContrastTopSupport
+    ? { alphaMask: shallowTopCleanedAlphaMask, applied: false, removedPixels: 0 }
+    : clampEscapedTopEdgeAlpha(
+      shallowTopCleanedAlphaMask,
+      region,
+      foregroundBounds,
+      coordinateScale,
+    )
   const alphaBounds = readAlphaBounds(alphaTopClamp.alphaMask)
   const compactAlphaTrim = shouldUseTightAlphaPadding(
     alphaBounds ?? undefined,

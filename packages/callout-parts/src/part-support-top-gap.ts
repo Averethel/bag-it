@@ -47,7 +47,7 @@ export function fillTopGapBridgeSupport(
     page,
     region,
     background,
-    bounds,
+    longShallowBounds,
     ownedRegion,
     enableLowContrastFaceSupport,
     lowContrastFaceSupportMode,

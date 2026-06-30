@@ -114,7 +114,9 @@ Chrome session. `manual-003` had no report issues and `manual-008` was not part
 of this acceptance pass.
 
 On 2026-06-28, `manual-011` was added as the approved Animals-style
-bag-analysis e2e fixture after user review of the remaining Animals misses. The
-fixture captures detector `2.0.0-alpha.20`, part extractor `2.0.0-alpha.164`,
+bag-analysis e2e fixture after user review of the remaining Animals misses. On
+2026-06-30, callout 39 row 0 and callout 171 row 1 were refreshed after visual
+approval because the saved fixture cropped off visible top geometry. The
+fixture captures detector `2.0.0-alpha.20`, part extractor `2.0.0-alpha.165`,
 and part color calibration `2.0.0-alpha.65` output: 275 callouts and 464 part
 rows from the real `/` app flow.

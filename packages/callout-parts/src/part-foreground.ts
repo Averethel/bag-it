@@ -38,6 +38,14 @@ const LOW_CONTRAST_FACE_SUPPORT_THRESHOLDS = {
     minForegroundWidth: 100,
     minRegionWidth: 130,
   },
+  sparseRowFace: {
+    maxForegroundHeight: 36,
+    maxForegroundWidth: 110,
+    minForegroundWidthPadding: 10,
+    minOwnedRegionWidth: 55,
+    minRegionHeight: 35,
+    minRegionWidth: 70,
+  },
 } as const
 
 export function createPartImageForLabel(
@@ -50,9 +58,7 @@ export function createPartImageForLabel(
 ): CalloutPartImage | null {
   const interior = insetRegion(callout.region, CALLOUT_BORDER_INSET)
   const denseMode = isDenseLabelSet(ownershipLabels)
-  const cropOwnershipLabels = denseMode
-    ? removeCloseUpperDuplicateLabels(ownershipLabels, label)
-    : ownershipLabels
+  const cropOwnershipLabels = createCropOwnershipLabels(ownershipLabels, label, denseMode)
   const cropSuppressionLabels = denseMode
     ? removeCloseUpperDuplicateLabels(suppressionLabels, label)
     : suppressionLabels
@@ -63,6 +69,12 @@ export function createPartImageForLabel(
     return null
   }
 
+  const sparseLowContrastRecoveryZone = createPartOwnershipZones(
+    cropOwnershipLabels,
+    interior,
+    { denseMode: isLargeDenseGrid(cropOwnershipLabels) },
+  )
+    .find((candidate) => candidate.label === label)
   const searchRegion = createPartSearchRegion(zone, interior)
   const componentSuppressionMasks = createLabelSuppressionMasks(
     createComponentSuppressionLabels(cropSuppressionLabels, label),
@@ -76,6 +88,7 @@ export function createPartImageForLabel(
     .sort((left, right) => left.score - right.score)
   const region = selectPartRegion(page, components, zone, cropOwnershipLabels, interior, {
     allowRelatedComponents: !denseMode,
+    sparseLowContrastRecoveryZone,
     splitSameRowComponents: !denseMode,
     trimConnectedForegroundBelowLabel: denseMode,
   })
@@ -96,24 +109,27 @@ export function createPartImageForLabel(
     ? readLowContrastOwnedFaceSupportMode(lowContrastFaceSupportProbe)
     : undefined
 
-  return region
-    ? createPartImage(
-      page,
-      region.region,
-      backgroundModel,
-      region.ownedRegion,
-      createExcludedLabelRegions(cropOwnershipLabels),
-      region.foregroundPixels,
-      createLabelSuppressionMasks(alphaSuppressionLabels),
-      {
-        allowTopCropContext: tallDenseLongShallow,
-        allowLongShallowTopRecovery: region.allowLongShallowTopRecovery,
-        enableLowContrastFaceSupport: Boolean(lowContrastFaceSupportMode),
-        lowContrastFaceSupportMode,
-        enableTopSupport: !denseMode || isDenseTopSupportSafe(region.region, region.foregroundPixels),
-      },
-    )
-    : null
+  if (!region) {
+    return null
+  }
+
+  return createPartImage(
+    page,
+    region.region,
+    backgroundModel,
+    region.ownedRegion,
+    createExcludedLabelRegions(cropOwnershipLabels),
+    region.foregroundPixels,
+    createLabelSuppressionMasks(alphaSuppressionLabels),
+    {
+      allowTopCropContext: tallDenseLongShallow,
+      allowLongShallowTopRecovery: region.allowLongShallowTopRecovery,
+      enableLowContrastFaceSupport: Boolean(lowContrastFaceSupportMode),
+      lowContrastFaceSupportMode,
+      enableTopSupport: !denseMode || isDenseTopSupportSafe(region.region, region.foregroundPixels),
+      preserveSparseLowContrastTopSupport: lowContrastFaceSupportMode === "sparse-top-and-left",
+    },
+  )
 }
 
 function createLowContrastOwnedFaceSupportProbe(
@@ -125,7 +141,9 @@ function createLowContrastOwnedFaceSupportProbe(
   denseMode: boolean
   foregroundHeight?: number
   foregroundWidth?: number
+  allowLongShallowTopRecovery: boolean
   isRightmostInMultiLabelRow: boolean
+  isSparseLowContrastCandidate: boolean
   labelCount: number
   labelHeight: number
   scale: number
@@ -140,7 +158,9 @@ function createLowContrastOwnedFaceSupportProbe(
     denseMode,
     foregroundHeight: foreground?.height,
     foregroundWidth: foreground?.width,
+    allowLongShallowTopRecovery: region.allowLongShallowTopRecovery,
     isRightmostInMultiLabelRow: isRightmostInMultiLabelRow(labels, label),
+    isSparseLowContrastCandidate: region.allowSparseLowContrastFaceRecovery,
     labelCount: labels.length,
     labelHeight: label.region.height,
     scale,
@@ -155,7 +175,6 @@ function readLowContrastOwnedFaceSupportMode(
 ): LowContrastFaceSupportMode | undefined {
   if (
     probe.denseMode ||
-    !probe.isRightmostInMultiLabelRow ||
     typeof probe.foregroundHeight !== "number" ||
     typeof probe.foregroundWidth !== "number"
   ) {
@@ -167,7 +186,7 @@ function readLowContrastOwnedFaceSupportMode(
   const ownedRegionWidth = probe.ownedRegionWidth / probe.scale
   const regionHeight = probe.regionHeight / probe.scale
   const regionWidth = probe.regionWidth / probe.scale
-  const { compactMultiPartRowEnd, longRightmostPart, ownedEnvelope } =
+  const { compactMultiPartRowEnd, longRightmostPart, ownedEnvelope, sparseRowFace } =
     LOW_CONTRAST_FACE_SUPPORT_THRESHOLDS
   const hasOwnedEnvelope = regionHeight >= ownedEnvelope.minRegionHeight &&
     regionWidth >= Math.max(
@@ -178,22 +197,80 @@ function readLowContrastOwnedFaceSupportMode(
       ownedEnvelope.minOwnedRegionWidth,
       foregroundWidth * ownedEnvelope.ownedRegionToForegroundWidthRatio,
     )
-  const longRightmostPartMatches = probe.labelCount <= longRightmostPart.maxLabelCount &&
+  const longRightmostPartMatches = probe.isRightmostInMultiLabelRow &&
+    probe.labelCount <= longRightmostPart.maxLabelCount &&
     regionWidth >= longRightmostPart.minRegionWidth &&
     foregroundWidth >= longRightmostPart.minForegroundWidth &&
     foregroundHeight <= longRightmostPart.maxForegroundHeight &&
     hasOwnedEnvelope
-  const compactMultiPartRowEndMatches = probe.labelCount >= compactMultiPartRowEnd.minLabelCount &&
+  const compactMultiPartRowEndMatches = probe.isRightmostInMultiLabelRow &&
+    probe.labelCount >= compactMultiPartRowEnd.minLabelCount &&
     regionWidth <= compactMultiPartRowEnd.maxRegionWidth &&
     foregroundWidth <= compactMultiPartRowEnd.maxForegroundWidth &&
     foregroundHeight <= compactMultiPartRowEnd.maxForegroundHeight &&
     hasOwnedEnvelope
+  const sparseRowFaceMatches = (probe.isSparseLowContrastCandidate || probe.allowLongShallowTopRecovery) &&
+    regionHeight >= sparseRowFace.minRegionHeight &&
+    regionWidth >= sparseRowFace.minRegionWidth &&
+    foregroundWidth <= sparseRowFace.maxForegroundWidth &&
+    foregroundHeight <= sparseRowFace.maxForegroundHeight &&
+    ownedRegionWidth >= Math.max(
+      sparseRowFace.minOwnedRegionWidth,
+      foregroundWidth + sparseRowFace.minForegroundWidthPadding,
+    )
 
   if (longRightmostPartMatches) {
     return "left"
   }
 
-  return compactMultiPartRowEndMatches ? "top" : undefined
+  if (compactMultiPartRowEndMatches) {
+    return "top"
+  }
+
+  return sparseRowFaceMatches ? "sparse-top-and-left" : undefined
+}
+
+function createCropOwnershipLabels(
+  labels: readonly CalloutQuantityLabel[],
+  currentLabel: CalloutQuantityLabel,
+  denseMode: boolean,
+): CalloutQuantityLabel[] {
+  const baseLabels = denseMode
+    ? removeCloseUpperDuplicateLabels(labels, currentLabel)
+    : labels
+
+  return baseLabels.filter((label) =>
+    label === currentLabel || !isTinyNonPeerCropOwner(label, currentLabel),
+  )
+}
+
+function isTinyNonPeerCropOwner(
+  candidate: CalloutQuantityLabel,
+  label: CalloutQuantityLabel,
+): boolean {
+  if (hasComparableQuantityLabelSize(candidate, label)) {
+    return false
+  }
+
+  return isVerticallyNearLabelRow(candidate, label) || isTinyNonPeerNearLabel(candidate, label)
+}
+
+function isVerticallyNearLabelRow(
+  candidate: CalloutQuantityLabel,
+  label: CalloutQuantityLabel,
+): boolean {
+  const candidateBottom = candidate.region.y + candidate.region.height
+  const labelBottom = label.region.y + label.region.height
+  const candidateCenterY = regionCenter(candidate.region).y
+  const labelCenterY = regionCenter(label.region).y
+  const verticalGap = Math.max(
+    candidate.region.y - labelBottom,
+    label.region.y - candidateBottom,
+    0,
+  )
+
+  return verticalGap <= Math.max(18, Math.round(label.region.height * 1.8)) &&
+    Math.abs(candidateCenterY - labelCenterY) <= Math.max(28, Math.round(label.region.height * 2.6))
 }
 
 function createAlphaOwnershipLabels(
