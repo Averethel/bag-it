@@ -2,6 +2,7 @@ import type {
   RestoredPdfIntakeSession,
   restorePdfIntakeSessionFile,
 } from "@/features/bagging/session-file"
+import type { StepCalloutPageAdvisoryDiagnostic } from "@bag-it/step-callouts"
 import type { StepCalloutBagCompletionAnchor } from "@/features/bagging/bag-completion-anchors"
 import type { readPdfMetadataFromFile } from "@/features/pdf/browser-pdf-parser"
 import type { PdfIntakeError, PdfMetadata } from "@/features/pdf/pdf-intake"
@@ -27,6 +28,7 @@ export type ScanStepCallouts = (
   options?: {
     eagerPreviewImages?: boolean
     maxPages?: number
+    onPageAdvisoryDiagnostics?: (diagnostics: StepCalloutPageAdvisoryDiagnostic[]) => void
     onPreviewPageInput?: (pageInput: StepDetectorV2PageInput, baseBounds: PagePreviewBaseBounds) => void
     pageCount?: number
     parallelPageDetection?: boolean

@@ -3,11 +3,12 @@
 ## Status
 
 Active. This branch implements raster-only page advisories for possible repeated
-subassembly panels. Alpha20 improves advisory accuracy with internal page-role
+subassembly panels. Alpha21 improves advisory accuracy with internal page-role
 gating, lower-left attached-label OCR, BOM/table-like false-positive rejection,
-and a conservative trailing-BOM safe skip. The increment remains active until
-integration review and private real-browser checks accept the Lower Courtyard
-and Hall Tower examples.
+internal-only diagnostics, Hall-style connected-corner `2x` recovery, and a
+conservative trailing-BOM safe skip. The increment remains active until
+integration review accepts the Lower Courtyard and Hall Tower examples in the
+PR branch.
 
 ## Scope
 
@@ -20,6 +21,8 @@ Deliver:
   attention kind
 - no automatic multiplier, bag quantity, part row, or completion-anchor changes
 - synthetic unit coverage for positive and negative advisory cases
+- private browser validation for Lower Courtyard page 31 and Hall Tower pages
+  296/298
 - conservative trailing BOM/list scan skip that records unscanned pages in
   `skippedPageNumbers`
 
@@ -51,3 +54,6 @@ Deliver:
   manual replay.
 - Lower Courtyard page 31 and Hall Tower pages 296 and 298 are the current
   private examples to inspect before closing this increment.
+- Alpha21 private replay requires value-2 `possible-step-multiplier` advisories
+  on Lower Courtyard page 31 and Hall Tower pages 296 and 298, and no advisories
+  on observed Hall Tower BOM/tail pages.

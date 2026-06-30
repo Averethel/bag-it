@@ -17,6 +17,7 @@ import { createStepCalloutPageInput } from "../page-input"
 import {
   createSyntheticStepCalloutPage,
   paintBorder,
+  paintConnectedScaledRasterQuantityLabel,
   paintRasterQuantityLabel,
   paintRegion,
   TEST_BLACK,
@@ -221,6 +222,57 @@ describe("detectStepCallouts", () => {
 
     expect(report.pageAdvisories).toEqual([])
   })
+
+  it("recovers large connected repeat labels attached to squarish panel corners", () => {
+    const stepPage = createStepPage(1)
+    const repeatPage = createRepeatPanelPage("2x", {
+      connectedCornerLabel: true,
+      includeAccepted: false,
+      pageNumber: 2,
+    })
+    const report = resolveStepCalloutsFromPageEvidence(
+      [stepPage, repeatPage],
+      [
+        createCandidate("accepted", ACCEPTED_REGION, "fill-panel", 1),
+        createCandidate("repeat", REPEAT_PANEL_REGION, "border", 2),
+      ],
+      [
+        createEvidence("accepted", ACCEPTED_REGION, TEST_BLUE_PANEL, {
+          background: { reasons: ["manual-style-background:3"], value: 0.92 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.8 },
+          quantity: { reasons: ["raster-lower-row-quantity-label"], value: 1 },
+        }, { pageNumber: 1 }),
+        createEvidence("repeat", REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND, {
+          background: { reasons: ["off-manual-style-background:3"], value: 0.1 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.82 },
+          quantity: { reasons: ["no-raster-quantity-label"], value: 0 },
+        }, { pageNumber: 2 }),
+      ],
+      { includePageAdvisoryDiagnostics: true },
+    )
+
+    expect(report.pageAdvisories).toEqual([
+      expect.objectContaining({
+        pageNumber: 2,
+        text: "2x",
+        value: 2,
+      }),
+    ])
+    expect(report.pageAdvisoryDiagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        decision: "accepted",
+        labels: expect.arrayContaining([
+          expect.objectContaining({
+            accepted: true,
+            text: "2x",
+            value: 2,
+          }),
+        ]),
+        pageNumber: 2,
+      }),
+    ]))
+  })
+
 })
 
 function createStepPage(pageNumber: number) {
@@ -234,10 +286,12 @@ function createStepPage(pageNumber: number) {
 function createRepeatPanelPage(
   labelText: string,
   {
+    connectedCornerLabel = false,
     includeAccepted = true,
     pageNumber = 1,
     repeatLabelInsidePanel = false,
   }: {
+    connectedCornerLabel?: boolean
     includeAccepted?: boolean
     pageNumber?: number
     repeatLabelInsidePanel?: boolean
@@ -252,12 +306,23 @@ function createRepeatPanelPage(
 
     paintRegion(data, REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND)
     paintBorder(data, REPEAT_PANEL_REGION, TEST_BLACK)
-    paintRasterQuantityLabel(
-      data,
-      labelText,
-      repeatLabelInsidePanel ? REPEAT_PANEL_REGION.x + 6 : 58,
-      repeatLabelInsidePanel ? REPEAT_PANEL_REGION.y + REPEAT_PANEL_REGION.height - 12 : 45,
-    )
+    if (connectedCornerLabel) {
+      paintConnectedScaledRasterQuantityLabel(
+        data,
+        labelText,
+        REPEAT_PANEL_REGION.x - 26,
+        REPEAT_PANEL_REGION.y + REPEAT_PANEL_REGION.height + 2,
+        4,
+        2,
+      )
+    } else {
+      paintRasterQuantityLabel(
+        data,
+        labelText,
+        repeatLabelInsidePanel ? REPEAT_PANEL_REGION.x + 6 : 58,
+        repeatLabelInsidePanel ? REPEAT_PANEL_REGION.y + REPEAT_PANEL_REGION.height - 12 : 45,
+      )
+    }
   }), pageNumber)
 }
 

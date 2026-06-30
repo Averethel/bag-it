@@ -28,11 +28,12 @@ through `@bag-it/part-matching`, explicit session-file restoration for checked
 bag rows, and private-aware detector regression gates for local color/crop tuning
 snapshots, private row-label color evaluation, and private same-part match
 reports/labels. Increment 8 adds raster-only repeat-subassembly page advisories
-for off-style bordered panels with nearby outside `Nx` labels; alpha20 gates
+for off-style bordered panels with nearby outside `2x` labels; alpha21 gates
 those advisories by internal page role, suppresses BOM/table-like pages, keeps
-repeat-only build pages eligible, and records conservative trailing BOM safe
-skips through `skippedPageNumbers`. These advisories only mark Build steps
-pages for review and never change bag quantities automatically. Same-part
+repeat-only build pages eligible, records conservative trailing BOM safe skips
+through `skippedPageNumbers`, and adds internal diagnostics plus a narrow
+connected-corner recovery for Hall-style labels. These advisories only mark
+Build steps pages for review and never change bag quantities automatically. Same-part
 grouping now uses a two-lane policy: silent auto
 groups must remain zero-known-false-positive, while orange review-suggested
 groups may appear only below the measured correction budget and include fast

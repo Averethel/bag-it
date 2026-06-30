@@ -41,6 +41,8 @@ export {
 } from "./quantity-ocr"
 export {
   createGlyphFromPixels,
+  createGlyphMask,
+  findGlyphComponents,
   type GlyphComponent,
 } from "./glyph-mask"
 export type {

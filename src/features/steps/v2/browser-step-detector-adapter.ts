@@ -8,6 +8,7 @@ import {
   type StepCalloutCandidate,
   type StepCalloutCandidateEvidence,
   type StepCalloutManualStyle,
+  type StepCalloutPageAdvisoryDiagnostic,
   type StepCalloutPageRole,
 } from "@bag-it/step-callouts"
 import {
@@ -72,6 +73,7 @@ export interface StepDetectorV2ScanOptions {
   eagerPreviewImages?: boolean
   maxPages?: number
   onPreviewPageInput?: (pageInput: StepDetectorV2PageInput, baseBounds: StepDetectorV2PageBounds) => void
+  onPageAdvisoryDiagnostics?: (diagnostics: StepCalloutPageAdvisoryDiagnostic[]) => void
   pageCount?: number
   parallelPageDetection?: boolean
   signal?: AbortSignal
@@ -176,7 +178,11 @@ export async function scanPdfStepCalloutsV2FromFile(
     scan.pages,
     scan.candidates,
     scan.evidence,
+    {
+      includePageAdvisoryDiagnostics: Boolean(options.onPageAdvisoryDiagnostics),
+    },
   )
+  options.onPageAdvisoryDiagnostics?.(detectionReport.pageAdvisoryDiagnostics)
   const resolverFinishedAt = readPerformanceNow()
   const assembledResult = assembleV2BuildStepsResult(
     scan.pages,

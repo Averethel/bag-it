@@ -45,6 +45,7 @@ import {
   getSessionDownloadName,
 } from "@/features/bagging/session-file"
 import type { StepCalloutBagCompletionAnchor } from "@/features/bagging/bag-completion-anchors"
+import type { StepCalloutPageAdvisoryDiagnostic } from "@bag-it/step-callouts"
 import {
   createStepCalloutBagRows,
   createStepCalloutBaggingPlan,
@@ -67,6 +68,7 @@ import { COUNT_LABELS, formatCount } from "@/lib/count-format"
 
 declare global {
   interface Window {
+    __bagItEnableAdvisoryDiagnostics?: boolean
     __bagItValidationState?: {
       calloutCount: number
       currentDetectorVersion: string
@@ -91,6 +93,7 @@ declare global {
     __bagItE2EState?: {
       result: StepCalloutDetectionResult | null
       pageAssets: PagePreviewAsset[]
+      pageAdvisoryDiagnostics?: StepCalloutPageAdvisoryDiagnostic[]
       partMaskAssets: PartMaskPreviewAsset[]
       previewStatus: PreviewHydrationState["status"]
     }
@@ -147,6 +150,7 @@ export function useStepAnalysisJob({
   } = analysisState
   const abortControllerRef = useRef<AbortController | null>(null)
   const jobIdRef = useRef(0)
+  const pageAdvisoryDiagnosticsRef = useRef<StepCalloutPageAdvisoryDiagnostic[]>([])
   const isCurrentJob = useCallback((jobId: number) => jobIdRef.current === jobId, [])
   const setNotice = useCallback((nextNotice: string | null) => {
     dispatchAnalysisState({ type: "notice-set", notice: nextNotice })
@@ -327,6 +331,9 @@ export function useStepAnalysisJob({
     window.__bagItE2EState = {
       result: stepDetectionState.status === "ready" ? stepDetectionState.result : null,
       pageAssets: previewGeneration.previewAssetStore.readReadyPageAssets(),
+      pageAdvisoryDiagnostics: window.__bagItEnableAdvisoryDiagnostics
+        ? pageAdvisoryDiagnosticsRef.current
+        : undefined,
       partMaskAssets: previewGeneration.previewAssetStore.readReadyPartMaskAssets(),
       previewStatus: previewHydrationState.status,
     }
@@ -376,6 +383,7 @@ export function useStepAnalysisJob({
 
       previewGeneration.revokeRememberedPreviewObjectUrls()
       previewGeneration.purgeRuntimePreviewAssets()
+      pageAdvisoryDiagnosticsRef.current = []
       dispatchAnalysisState({ type: "step-scan-started", startedAt: scanStartTime })
       previewGeneration.setPreviewHydrationState({ status: "idle" })
       previewGeneration.startScanPreviewGeneration(file, nextMetadata.pageCount, controller, jobId)
@@ -393,6 +401,11 @@ export function useStepAnalysisJob({
           pageCount: nextMetadata.pageCount,
           parallelPageDetection: options.parallelPageDetection ?? true,
           signal: controller.signal,
+          onPageAdvisoryDiagnostics: window.__bagItEnableAdvisoryDiagnostics
+            ? (diagnostics) => {
+                pageAdvisoryDiagnosticsRef.current = diagnostics
+              }
+            : undefined,
           onProgress: (progress) => {
             if (isCurrentJob(jobId)) {
               dispatchAnalysisState({ type: "step-scan-progressed", progress })

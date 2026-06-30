@@ -10,6 +10,7 @@ export {
   scoreStepCalloutPageEvidence,
   STEP_CALLOUT_DETECTOR_VERSION,
   type StepCalloutDetection,
+  type StepCalloutDetectionOptions,
   type StepCalloutDetectionReport,
 } from "./detector"
 export {
@@ -19,10 +20,17 @@ export {
 export {
   classifyStepCalloutPageRole,
   classifyStepCalloutPageRoles,
+  hasStepCalloutQuantityEvidence,
   isRepeatPanelLikeEvidence,
   readStepCalloutEvidenceValue,
   type StepCalloutPageRole,
 } from "./page-roles"
+export type {
+  StepCalloutPageAdvisoryDecision,
+  StepCalloutPageAdvisoryDiagnostic,
+  StepCalloutPageAdvisoryLabelDiagnostic,
+  StepCalloutPageAdvisoryTrace,
+} from "./page-advisories"
 export type { StepCalloutManualStyle } from "./manual-style"
 export {
   clampStepCalloutRegionToPage,

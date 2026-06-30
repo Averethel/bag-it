@@ -25,9 +25,13 @@ import type {
   StepCalloutStageSnapshot,
 } from "./contracts"
 import { createPageInputStageSnapshot } from "./page-input"
-import { detectStepCalloutPageAdvisories } from "./page-advisories"
+import {
+  detectStepCalloutPageAdvisories,
+  traceStepCalloutPageAdvisories,
+  type StepCalloutPageAdvisoryDiagnostic,
+} from "./page-advisories"
 
-export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.20"
+export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.21"
 
 export interface StepCalloutDetection {
   evidence: StepCalloutCandidateEvidence | null
@@ -41,12 +45,18 @@ export interface StepCalloutDetectionReport {
   detections: StepCalloutDetection[]
   evidence: StepCalloutCandidateEvidence[]
   pageAdvisories: StepCalloutPageAdvisory[]
+  pageAdvisoryDiagnostics: StepCalloutPageAdvisoryDiagnostic[]
   resolvedCallouts: StepCalloutResolvedCallout[]
   stageSnapshots: StepCalloutStageSnapshot[]
 }
 
+export interface StepCalloutDetectionOptions {
+  includePageAdvisoryDiagnostics?: boolean
+}
+
 export function detectStepCallouts(
   pages: readonly StepCalloutPageInput[],
+  options: StepCalloutDetectionOptions = {},
 ): StepCalloutDetectionReport {
   const candidates = pages.flatMap(detectStepCalloutPageCandidates)
   const manualStyle = inferStepCalloutEvidenceManualStyle(pages, candidates)
@@ -62,6 +72,7 @@ export function detectStepCallouts(
     pages,
     candidates,
     evidence,
+    options,
   )
 }
 
@@ -90,6 +101,7 @@ export function resolveStepCalloutsFromPageEvidence(
   pages: readonly StepCalloutPageInput[],
   candidates: readonly StepCalloutCandidate[],
   evidence: readonly StepCalloutCandidateEvidence[],
+  options: StepCalloutDetectionOptions = {},
 ): StepCalloutDetectionReport {
   const candidateStage: StepCalloutCandidateStageResult = {
     candidates: [...candidates],
@@ -101,7 +113,7 @@ export function resolveStepCalloutsFromPageEvidence(
   }
   const resolutionStage = resolveStepCalloutConflicts(evidenceStage.evidence, { pages })
 
-  return createDetectionReport(pages, candidateStage, evidenceStage, resolutionStage)
+  return createDetectionReport(pages, candidateStage, evidenceStage, resolutionStage, options)
 }
 
 function createDetectionReport(
@@ -109,16 +121,26 @@ function createDetectionReport(
   candidateStage: StepCalloutCandidateStageResult,
   evidenceStage: StepCalloutEvidenceStageResult,
   resolutionStage: StepCalloutResolutionStageResult,
+  options: StepCalloutDetectionOptions,
 ): StepCalloutDetectionReport {
+  const pageAdvisoryTrace = options.includePageAdvisoryDiagnostics
+    ? traceStepCalloutPageAdvisories(
+        pages,
+        resolutionStage.resolvedCallouts,
+        evidenceStage.evidence,
+      )
+    : null
+
   return {
     candidates: candidateStage.candidates,
     detections: createDetections(resolutionStage.resolvedCallouts, evidenceStage.evidence),
     evidence: evidenceStage.evidence,
-    pageAdvisories: detectStepCalloutPageAdvisories(
-      pages,
-      resolutionStage.resolvedCallouts,
-      evidenceStage.evidence,
-    ),
+    pageAdvisories: pageAdvisoryTrace?.advisories ?? detectStepCalloutPageAdvisories(
+        pages,
+        resolutionStage.resolvedCallouts,
+        evidenceStage.evidence,
+      ),
+    pageAdvisoryDiagnostics: pageAdvisoryTrace?.diagnostics ?? [],
     resolvedCallouts: resolutionStage.resolvedCallouts,
     stageSnapshots: [
       createPageInputStageSnapshot(pages),

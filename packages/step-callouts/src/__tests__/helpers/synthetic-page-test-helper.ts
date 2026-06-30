@@ -83,6 +83,38 @@ export function paintRasterQuantityLabel(
   }
 }
 
+export function paintConnectedScaledRasterQuantityLabel(
+  data: Uint8ClampedArray,
+  text: string,
+  x: number,
+  y: number,
+  scaleX: number,
+  scaleY = scaleX,
+  color: TestStepCalloutColor = TEST_BLACK,
+): StepCalloutRegion {
+  let cursorX = x
+  let bottom = y
+
+  for (const character of text.toLowerCase()) {
+    const glyph = TEST_RASTER_GLYPHS[character]
+
+    if (!glyph) {
+      continue
+    }
+
+    paintScaledRasterGlyph(data, glyph, cursorX, y, scaleX, scaleY, color)
+    cursorX += glyph[0].length * scaleX
+    bottom = Math.max(bottom, y + glyph.length * scaleY)
+  }
+
+  return {
+    height: bottom - y,
+    width: Math.max(1, cursorX - x),
+    x,
+    y,
+  }
+}
+
 function createBlankPixels(): Uint8ClampedArray {
   const data = new Uint8ClampedArray(TEST_PAGE_WIDTH * TEST_PAGE_HEIGHT * RGBA_CHANNEL_COUNT)
   paintRegion(data, { height: TEST_PAGE_HEIGHT, width: TEST_PAGE_WIDTH, x: 0, y: 0 }, TEST_WHITE)
@@ -132,6 +164,31 @@ export function paintRasterGlyph(
       }
 
       writePixel(data, (y + row) * TEST_PAGE_WIDTH + x + column, color)
+    }
+  }
+}
+
+function paintScaledRasterGlyph(
+  data: Uint8ClampedArray,
+  glyph: readonly string[],
+  x: number,
+  y: number,
+  scaleX: number,
+  scaleY: number,
+  color: TestStepCalloutColor,
+): void {
+  for (let row = 0; row < glyph.length; row += 1) {
+    for (let column = 0; column < glyph[row].length; column += 1) {
+      if (glyph[row][column] !== "1") {
+        continue
+      }
+
+      paintRegion(data, {
+        height: scaleY,
+        width: scaleX,
+        x: x + column * scaleX,
+        y: y + row * scaleY,
+      }, color)
     }
   }
 }

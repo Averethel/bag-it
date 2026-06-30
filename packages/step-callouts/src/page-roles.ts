@@ -105,7 +105,7 @@ function isBomLikePage(
   const smallCandidates = pageEvidence.filter((candidateEvidence) =>
     isSmallOrMediumListCandidate(page, candidateEvidence, MAX_BOM_SMALL_CANDIDATE_AREA_RATIO)
   )
-  const quantityBackedCandidates = pageEvidence.filter(hasQuantityBackedEvidence)
+  const quantityBackedCandidates = pageEvidence.filter(hasStepCalloutQuantityEvidence)
 
   return (
     smallCandidates.length / pageEvidence.length >= MIN_BOM_DENSE_SMALL_CANDIDATE_RATIO ||
@@ -137,7 +137,7 @@ function isSmallOrMediumListCandidate(
   return areaRatio <= maxAreaRatio
 }
 
-function hasQuantityBackedEvidence(evidence: StepCalloutCandidateEvidence): boolean {
+export function hasStepCalloutQuantityEvidence(evidence: StepCalloutCandidateEvidence): boolean {
   return readEvidenceValue(evidence.scores, "quantity") > 0 ||
     evidence.scores.some((score) =>
       score.signal === "quantity" &&
