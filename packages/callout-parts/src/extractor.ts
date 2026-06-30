@@ -398,17 +398,10 @@ function recoverSuppressedFragmentTrailingPeerItems(
 
     const label = inferSuppressedFragmentTrailingPeerLabel(callout, anchor)
 
-    const hasSuppressedFragment = label
-      ? Boolean(readTrailingPeerSuppressedFragment(anchor, label))
-      : false
-    const hasSingleItemStrongTrailingForeground = label && items.length === 1
-      ? hasStrongTrailingPeerPartForeground(page, callout, background, label)
-      : false
-
     if (
       !label ||
       items.some((item) => labelsOverlap(item.quantityLabel.region, label.region)) ||
-      (!hasSuppressedFragment && !hasSingleItemStrongTrailingForeground)
+      !hasSuppressedFragmentTrailingPeerRecoveryEvidence(page, callout, background, items, anchor, label)
     ) {
       continue
     }
@@ -433,6 +426,21 @@ function recoverSuppressedFragmentTrailingPeerItems(
   return recoveredItems.length === 0
     ? [...items]
     : [...items, ...recoveredItems].sort((left, right) => compareRegions(left.quantityLabel.region, right.quantityLabel.region))
+}
+
+function hasSuppressedFragmentTrailingPeerRecoveryEvidence(
+  page: CalloutPartPageInput,
+  callout: CalloutPartCalloutInput,
+  background: ReturnType<typeof readCalloutBackground>,
+  items: readonly CalloutPartItem[],
+  anchor: CalloutPartItem,
+  label: CalloutQuantityLabel,
+): boolean {
+  if (readTrailingPeerSuppressedFragment(anchor, label)) {
+    return true
+  }
+
+  return items.length === 1 && hasStrongTrailingPeerPartForeground(page, callout, background, label)
 }
 
 function isSuppressedFragmentTrailingPeerAnchor(
