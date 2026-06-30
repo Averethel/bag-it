@@ -86,8 +86,40 @@ describe("detectStepCallouts", () => {
     })
   })
 
-  it("does not emit page advisories for non-actionable outside labels", () => {
-    const page = createRepeatPanelPage("1x")
+  it("emits page advisories for repeat-only pages inside the build span", () => {
+    const stepPage = createStepPage(1)
+    const repeatPage = createRepeatPanelPage("2x", { includeAccepted: false, pageNumber: 2 })
+    const report = resolveStepCalloutsFromPageEvidence(
+      [stepPage, repeatPage],
+      [
+        createCandidate("accepted", ACCEPTED_REGION, "fill-panel", 1),
+        createCandidate("repeat", REPEAT_PANEL_REGION, "border", 2),
+      ],
+      [
+        createEvidence("accepted", ACCEPTED_REGION, TEST_BLUE_PANEL, {
+          background: { reasons: ["manual-style-background:3"], value: 0.92 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.8 },
+          quantity: { reasons: ["raster-lower-row-quantity-label"], value: 1 },
+        }, { pageNumber: 1 }),
+        createEvidence("repeat", REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND, {
+          background: { reasons: ["off-manual-style-background:3"], value: 0.1 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.82 },
+          quantity: { reasons: ["no-raster-quantity-label"], value: 0 },
+        }, { pageNumber: 2 }),
+      ],
+    )
+
+    expect(report.pageAdvisories).toEqual([
+      expect.objectContaining({
+        pageNumber: 2,
+        text: "2x",
+        value: 2,
+      }),
+    ])
+  })
+
+  it("does not emit page advisories before the build section starts", () => {
+    const page = createRepeatPanelPage("2x", { includeAccepted: false })
     const report = resolveStepCalloutsFromPageEvidence(
       [page],
       [createCandidate("repeat", REPEAT_PANEL_REGION, "border")],
@@ -102,27 +134,168 @@ describe("detectStepCallouts", () => {
 
     expect(report.pageAdvisories).toEqual([])
   })
+
+  it("does not emit page advisories for dense BOM-like table pages", () => {
+    const stepPage = createStepPage(1)
+    const bomPage = createBomTablePage(2)
+    const bomCellRegions = createBomCellRegions()
+    const report = resolveStepCalloutsFromPageEvidence(
+      [stepPage, bomPage],
+      [
+        createCandidate("accepted", ACCEPTED_REGION, "fill-panel", 1),
+        createCandidate("repeat", REPEAT_PANEL_REGION, "border", 2),
+        ...bomCellRegions.map((region, index) =>
+          createCandidate(`bom-cell-${index}`, region, "border", 2),
+        ),
+      ],
+      [
+        createEvidence("accepted", ACCEPTED_REGION, TEST_BLUE_PANEL, {
+          background: { reasons: ["manual-style-background:3"], value: 0.92 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.8 },
+          quantity: { reasons: ["raster-lower-row-quantity-label"], value: 1 },
+        }, { pageNumber: 1 }),
+        createEvidence("repeat", REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND, {
+          background: { reasons: ["off-manual-style-background:3"], value: 0.1 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.82 },
+          quantity: { reasons: ["no-raster-quantity-label"], value: 0 },
+        }, { pageNumber: 2 }),
+        ...bomCellRegions.map((region, index) =>
+          createEvidence(`bom-cell-${index}`, region, TEST_BLUE_PANEL, {
+            background: { reasons: ["manual-style-background:3"], value: 0.05 },
+            border: { reasons: ["weak-cell-border"], value: 0.1 },
+            quantity: { reasons: ["no-raster-quantity-label"], value: 0 },
+          }, { pageNumber: 2 }),
+        ),
+      ],
+    )
+
+    expect(report.pageAdvisories).toEqual([])
+  })
+
+  it("does not emit page advisories for non-actionable outside labels", () => {
+    const page = createRepeatPanelPage("1x")
+    const report = resolveStepCalloutsFromPageEvidence(
+      [page],
+      [
+        createCandidate("accepted", ACCEPTED_REGION, "fill-panel"),
+        createCandidate("repeat", REPEAT_PANEL_REGION, "border"),
+      ],
+      [
+        createEvidence("accepted", ACCEPTED_REGION, TEST_BLUE_PANEL, {
+          background: { reasons: ["manual-style-background:3"], value: 0.92 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.8 },
+          quantity: { reasons: ["raster-lower-row-quantity-label"], value: 1 },
+        }),
+        createEvidence("repeat", REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND, {
+          background: { reasons: ["off-manual-style-background:3"], value: 0.1 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.82 },
+          quantity: { reasons: ["no-raster-quantity-label"], value: 0 },
+        }),
+      ],
+    )
+
+    expect(report.pageAdvisories).toEqual([])
+  })
+
+  it("does not emit page advisories for panels with internal quantity labels", () => {
+    const page = createRepeatPanelPage("2x", { repeatLabelInsidePanel: true })
+    const report = resolveStepCalloutsFromPageEvidence(
+      [page],
+      [
+        createCandidate("accepted", ACCEPTED_REGION, "fill-panel"),
+        createCandidate("repeat", REPEAT_PANEL_REGION, "border"),
+      ],
+      [
+        createEvidence("accepted", ACCEPTED_REGION, TEST_BLUE_PANEL, {
+          background: { reasons: ["manual-style-background:3"], value: 0.92 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.8 },
+          quantity: { reasons: ["raster-lower-row-quantity-label"], value: 1 },
+        }),
+        createEvidence("repeat", REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND, {
+          background: { reasons: ["off-manual-style-background:3"], value: 0.1 },
+          border: { reasons: ["dark-edge-coverage"], value: 0.82 },
+          quantity: { reasons: ["raster-quantity-label-inside-candidate"], value: 1 },
+        }),
+      ],
+    )
+
+    expect(report.pageAdvisories).toEqual([])
+  })
 })
 
-function createRepeatPanelPage(labelText: string) {
-  return createSyntheticStepCalloutPage((data) => {
+function createStepPage(pageNumber: number) {
+  return withPageNumber(createSyntheticStepCalloutPage((data) => {
     paintRegion(data, ACCEPTED_REGION, TEST_BLUE_PANEL)
     paintBorder(data, ACCEPTED_REGION, TEST_BLACK)
     paintRasterQuantityLabel(data, "1x", 22, 24)
+  }), pageNumber)
+}
+
+function createRepeatPanelPage(
+  labelText: string,
+  {
+    includeAccepted = true,
+    pageNumber = 1,
+    repeatLabelInsidePanel = false,
+  }: {
+    includeAccepted?: boolean
+    pageNumber?: number
+    repeatLabelInsidePanel?: boolean
+  } = {},
+) {
+  return withPageNumber(createSyntheticStepCalloutPage((data) => {
+    if (includeAccepted) {
+      paintRegion(data, ACCEPTED_REGION, TEST_BLUE_PANEL)
+      paintBorder(data, ACCEPTED_REGION, TEST_BLACK)
+      paintRasterQuantityLabel(data, "1x", 22, 24)
+    }
+
     paintRegion(data, REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND)
     paintBorder(data, REPEAT_PANEL_REGION, TEST_BLACK)
-    paintRasterQuantityLabel(data, labelText, 58, 45)
-  })
+    paintRasterQuantityLabel(
+      data,
+      labelText,
+      repeatLabelInsidePanel ? REPEAT_PANEL_REGION.x + 6 : 58,
+      repeatLabelInsidePanel ? REPEAT_PANEL_REGION.y + REPEAT_PANEL_REGION.height - 12 : 45,
+    )
+  }), pageNumber)
+}
+
+function createBomTablePage(pageNumber: number) {
+  return withPageNumber(createSyntheticStepCalloutPage((data) => {
+    paintRegion(data, REPEAT_PANEL_REGION, REPEAT_PANEL_BACKGROUND)
+    paintBorder(data, REPEAT_PANEL_REGION, TEST_BLACK)
+    paintRasterQuantityLabel(data, "2x", 58, 45)
+
+    for (const region of createBomCellRegions()) {
+      paintRegion(data, region, TEST_BLUE_PANEL)
+      paintBorder(data, region, TEST_BLACK)
+    }
+  }), pageNumber)
+}
+
+function createBomCellRegions(): StepCalloutRegion[] {
+  return [
+    { height: 12, width: 12, x: 8, y: 58 },
+    { height: 12, width: 12, x: 24, y: 58 },
+    { height: 12, width: 12, x: 40, y: 58 },
+    { height: 12, width: 12, x: 56, y: 58 },
+    { height: 12, width: 12, x: 72, y: 58 },
+    { height: 12, width: 12, x: 88, y: 58 },
+    { height: 12, width: 12, x: 104, y: 58 },
+    { height: 12, width: 12, x: 8, y: 42 },
+  ]
 }
 
 function createCandidate(
   id: string,
   region: StepCalloutRegion,
   source: StepCalloutCandidate["source"],
+  pageNumber = 1,
 ): StepCalloutCandidate {
   return {
     id,
-    pageNumber: 1,
+    pageNumber,
     region,
     source,
   }
@@ -133,10 +306,17 @@ function createEvidence(
   region: StepCalloutRegion,
   background: StepCalloutRgbColor,
   signals: Record<StepCalloutEvidenceScore["signal"], Omit<StepCalloutEvidenceScore, "signal">>,
+  {
+    pageNumber = 1,
+    source = "border",
+  }: {
+    pageNumber?: number
+    source?: StepCalloutCandidate["source"]
+  } = {},
 ): StepCalloutCandidateEvidence {
   return {
     background,
-    candidate: createCandidate(candidateId, region, "border"),
+    candidate: createCandidate(candidateId, region, source, pageNumber),
     scores: (["background", "border", "quantity"] as const).map((signal) => ({
       ...signals[signal],
       signal,
@@ -163,4 +343,11 @@ function createBlankPage(pageNumber: number) {
     pageNumber,
     width,
   })
+}
+
+function withPageNumber<T extends { pageNumber: number }>(page: T, pageNumber: number): T {
+  return {
+    ...page,
+    pageNumber,
+  }
 }

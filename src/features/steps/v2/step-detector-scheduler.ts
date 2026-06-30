@@ -1,4 +1,5 @@
 import {
+  classifyStepCalloutPageRole,
   detectStepCalloutPageCandidates,
   resolveStepCalloutConflicts,
   scoreStepCalloutPageEvidence,
@@ -6,6 +7,7 @@ import {
   type StepCalloutCandidate,
   type StepCalloutCandidateEvidence,
   type StepCalloutManualStyle,
+  type StepCalloutPageRole,
 } from "@bag-it/step-callouts"
 import {
   createBrowserWorkerPool,
@@ -15,6 +17,7 @@ import type { StepDetectorV2PageInput } from "./contracts"
 interface StepDetectorCandidateWorkerResult {
   candidates: StepCalloutCandidate[]
   page: StepDetectorV2PageInput
+  pageRole: StepCalloutPageRole
   progressCalloutCount: number
 }
 
@@ -59,6 +62,7 @@ type StepDetectorWorkerResponse =
       id: number
       kind: "candidates"
       page: StepDetectorV2PageInput
+      pageRole: StepCalloutPageRole
       progressCalloutCount: number
     }
   | {
@@ -109,6 +113,7 @@ export function createStepDetectorScheduler(options: {
       return {
         candidates: response.candidates,
         page: response.page,
+        pageRole: response.pageRole,
         progressCalloutCount: response.progressCalloutCount,
       }
     },
@@ -163,9 +168,7 @@ export function countPageResolvedVisibleCallouts(
   page: StepDetectorV2PageInput,
   evidence: readonly StepCalloutCandidateEvidence[],
 ): number {
-  const report = resolveStepCalloutConflicts(evidence, { pages: [page] })
-
-  return report.resolvedCallouts.filter((callout) => callout.status === "accepted").length
+  return summarizePageCandidateProgress(page, evidence).progressCalloutCount
 }
 
 function createFallbackStepDetectorScheduler(): StepDetectorScheduler {
@@ -174,11 +177,13 @@ function createFallbackStepDetectorScheduler(): StepDetectorScheduler {
     detectCandidates: async (page) => {
       const candidates = detectStepCalloutPageCandidates(page)
       const progressEvidence = scoreStepCalloutPageEvidence(page, candidates, null)
+      const progress = summarizePageCandidateProgress(page, progressEvidence)
 
       return {
         candidates,
         page,
-        progressCalloutCount: countPageResolvedVisibleCallouts(page, progressEvidence),
+        pageRole: progress.pageRole,
+        progressCalloutCount: progress.progressCalloutCount,
       }
     },
     scoreEvidence: async (page, candidates, manualStyle) => ({
@@ -186,6 +191,20 @@ function createFallbackStepDetectorScheduler(): StepDetectorScheduler {
       page,
     }),
     terminate: () => {},
+  }
+}
+
+function summarizePageCandidateProgress(
+  page: StepDetectorV2PageInput,
+  evidence: readonly StepCalloutCandidateEvidence[],
+): { pageRole: StepCalloutPageRole; progressCalloutCount: number } {
+  const report = resolveStepCalloutConflicts(evidence, { pages: [page] })
+
+  return {
+    pageRole: classifyStepCalloutPageRole(page, evidence, report.resolvedCallouts),
+    progressCalloutCount: report.resolvedCallouts
+      .filter((callout) => callout.status === "accepted")
+      .length,
   }
 }
 

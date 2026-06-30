@@ -74,9 +74,16 @@ export interface ReadStepDetectorV2PageInputsResult {
   snapshot: ReturnType<typeof createPageInputStageSnapshot>
 }
 
+export interface VisitStepDetectorV2PageInputContext {
+  pageCount: number
+}
+
+export type VisitStepDetectorV2PageInputResult = boolean | void
+
 export type VisitStepDetectorV2PageInput = (
   pageInput: StepDetectorV2PageInput,
-) => Promise<void> | void
+  context: VisitStepDetectorV2PageInputContext,
+) => Promise<VisitStepDetectorV2PageInputResult> | VisitStepDetectorV2PageInputResult
 
 export interface VisitStepDetectorV2PageInputsOptions {
   allowUpscale?: boolean
@@ -189,8 +196,14 @@ async function visitPageInputs(
     removePageNumbers(pendingPageNumbers, batch)
 
     for (const pageInput of pages) {
-      await visitPageInput(pageInput)
+      const shouldContinue = await visitPageInput(pageInput, {
+        pageCount: loaded.document.numPages,
+      })
       processedPageCount += 1
+
+      if (shouldContinue === false) {
+        return processedPageCount
+      }
     }
   }
 

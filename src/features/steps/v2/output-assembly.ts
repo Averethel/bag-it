@@ -60,6 +60,7 @@ export interface StepDetectorV2OutputAssemblyOptions {
   partColorCalibrationVersion?: string
   partItems?: readonly CalloutPartItem[]
   partExtractorVersion?: string
+  skippedPageNumbers?: readonly number[]
 }
 
 export interface StepDetectorV2BuildStepsResult {
@@ -168,7 +169,7 @@ export function assembleV2BuildStepsResult(
     },
     scannedPageNumbers: pages.map((page) => page.pageNumber),
     sectionBoundaryHints: createSectionBoundaryHints(acceptedCallouts, resolvedCallouts, evidence, pages),
-    skippedPageNumbers: [],
+    skippedPageNumbers: [...(options.skippedPageNumbers ?? [])],
     status: acceptedCallouts.length > 0 ? "detected" : "empty",
   }
 }

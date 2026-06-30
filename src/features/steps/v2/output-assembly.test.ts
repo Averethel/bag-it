@@ -181,6 +181,23 @@ describe("v2 output assembly", () => {
     ])
   })
 
+  it("passes through skipped page numbers from safe scan stop", () => {
+    const result = assembleV2BuildStepsResult(
+      [createSyntheticV2Page()],
+      [createResolvedCallout("accepted", ACCEPTED_REGION, "accepted")],
+      [createEvidence("accepted", ACCEPTED_REGION, 2.7, 0.9)],
+      {
+        detectorVersion: "v2-test",
+        pageCount: 4,
+        pageLimit: null,
+        skippedPageNumbers: [2, 3, 4],
+      },
+    )
+
+    expect(result.scannedPageNumbers).toEqual([1])
+    expect(result.skippedPageNumbers).toEqual([2, 3, 4])
+  })
+
   it("emits section boundary hints for off-style rejected callouts near the first visible callout band", () => {
     const offStyleRegion = { height: 22, width: 36, x: 68, y: 12 }
     const result = assembleV2BuildStepsResult(

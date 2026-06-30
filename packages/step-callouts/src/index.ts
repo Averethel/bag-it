@@ -16,6 +16,13 @@ export {
   resolveStepCalloutConflicts,
   type StepCalloutResolutionStageResult,
 } from "./conflict-resolution"
+export {
+  classifyStepCalloutPageRole,
+  classifyStepCalloutPageRoles,
+  isRepeatPanelLikeEvidence,
+  readStepCalloutEvidenceValue,
+  type StepCalloutPageRole,
+} from "./page-roles"
 export type { StepCalloutManualStyle } from "./manual-style"
 export {
   clampStepCalloutRegionToPage,

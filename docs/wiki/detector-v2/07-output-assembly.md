@@ -22,7 +22,7 @@ Build steps and Bags can stay shared.
 
 - `/` reads detector and part-extractor versions from the v2 adapter
 - legacy sessions restored on `/` become stale when their saved versions differ
-  from detector version `2.0.0-alpha.19` or part extractor version
+  from detector version `2.0.0-alpha.20` or part extractor version
   `2.0.0-alpha.163`
 - completion transfer uses page and crop anchors only after rerun
 
@@ -53,6 +53,9 @@ Build steps and Bags can stay shared.
   overlapping raster-quantity-backed fill-panel source region when that source
   has the measured manual-style background needed by part extraction. This
   keeps app output stable while extracting from the visual panel users see.
+- Output assembly preserves adapter-provided `skippedPageNumbers` for
+  conservative trailing BOM/list safe skips; skipped pages must not appear in
+  `scannedPageNumbers`.
 
 ## Validation
 

@@ -225,6 +225,28 @@ describe("session-file", () => {
     expect(alphaMaskData).toEqual({ 0: 255 })
   })
 
+  it("restores saved raster-only page attention items", async () => {
+    const stepDetectionResult = emptyStepResult(2)
+
+    stepDetectionResult.pageAttentionItems = [
+      {
+        confidence: 0.88,
+        id: "possible-step-multiplier-repeat-2x",
+        kind: "possible-step-multiplier",
+        pageNumber: 2,
+        source: "raster",
+        sourceRegion: { height: 44, width: 52, x: 40, y: 30 },
+        text: "2x",
+        value: 2,
+      },
+    ]
+
+    const session = await createSessionJsonWithStepResult(stepDetectionResult)
+    const restored = await restorePdfIntakeSessionFile(createSessionJsonFile(session))
+
+    expect(restored.stepDetectionResult?.pageAttentionItems).toEqual(stepDetectionResult.pageAttentionItems)
+  })
+
   it.each([
     [
       "page preview",

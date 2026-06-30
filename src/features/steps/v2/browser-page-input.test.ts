@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const pdfJsMockState = vi.hoisted(() => ({
+  numPages: 1,
   renderDevicePixelRatios: [] as Array<number | undefined>,
 }))
 
@@ -29,15 +30,19 @@ vi.mock("pdfjs-dist", () => ({
           }
         }),
       })),
-      numPages: 1,
+      numPages: pdfJsMockState.numPages,
     }),
   })),
 }))
 
-import { readStepDetectorV2PageInputsFromFile } from "./browser-page-input"
+import {
+  readStepDetectorV2PageInputsFromFile,
+  visitStepDetectorV2PageInputsFromFile,
+} from "./browser-page-input"
 
 describe("browser page input", () => {
   beforeEach(() => {
+    pdfJsMockState.numPages = 1
     pdfJsMockState.renderDevicePixelRatios = []
     const createElement = document.createElement.bind(document)
 
@@ -66,6 +71,25 @@ describe("browser page input", () => {
 
     expect(pdfJsMockState.renderDevicePixelRatios).toEqual([1])
     expect(globalThis.devicePixelRatio).toBe(2)
+  })
+
+  it("stops visiting pages when the visitor returns false", async () => {
+    pdfJsMockState.numPages = 3
+    const visitedPageNumbers: number[] = []
+    const result = await visitStepDetectorV2PageInputsFromFile(createPdfFile(), (pageInput, context) => {
+      visitedPageNumbers.push(pageInput.pageNumber)
+      expect(context.pageCount).toBe(3)
+
+      return pageInput.pageNumber < 2
+    }, {
+      renderMaxWidth: 100,
+    })
+
+    expect(result).toEqual({
+      pageCount: 3,
+      processedPageCount: 2,
+    })
+    expect(visitedPageNumbers).toEqual([1, 2])
   })
 })
 

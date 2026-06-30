@@ -27,7 +27,7 @@ import type {
 import { createPageInputStageSnapshot } from "./page-input"
 import { detectStepCalloutPageAdvisories } from "./page-advisories"
 
-export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.19"
+export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.20"
 
 export interface StepCalloutDetection {
   evidence: StepCalloutCandidateEvidence | null

@@ -1,4 +1,5 @@
 import {
+  classifyStepCalloutPageRole,
   detectStepCalloutPageCandidates,
   resolveStepCalloutConflicts,
   scoreStepCalloutPageEvidence,
@@ -6,6 +7,7 @@ import {
   type StepCalloutCandidate,
   type StepCalloutCandidateEvidence,
   type StepCalloutManualStyle,
+  type StepCalloutPageRole,
 } from "@bag-it/step-callouts"
 import type { StepDetectorV2PageInput } from "./contracts"
 
@@ -25,18 +27,19 @@ type StepDetectorWorkerRequest =
 
 type StepDetectorWorkerResponse =
   | {
-    candidates: StepCalloutCandidate[]
-    detectorVersion: string
-    id: number
-    kind: "candidates"
-    page: StepDetectorV2PageInput
+      candidates: StepCalloutCandidate[]
+      detectorVersion: string
+      id: number
+      kind: "candidates"
+      page: StepDetectorV2PageInput
+      pageRole: StepCalloutPageRole
       progressCalloutCount: number
     }
   | {
-    detectorVersion: string
-    evidence: StepCalloutCandidateEvidence[]
-    id: number
-    kind: "evidence"
+      detectorVersion: string
+      evidence: StepCalloutCandidateEvidence[]
+      id: number
+      kind: "evidence"
       page: StepDetectorV2PageInput
     }
   | {
@@ -57,13 +60,15 @@ workerScope.onmessage = (event) => {
     if (request.kind === "candidates") {
       const candidates = detectStepCalloutPageCandidates(request.page)
       const progressEvidence = scoreStepCalloutPageEvidence(request.page, candidates, null)
+      const progress = summarizePageCandidateProgress(request.page, progressEvidence)
       workerScope.postMessage({
         candidates,
         detectorVersion: STEP_CALLOUT_DETECTOR_VERSION,
         id: request.id,
         kind: "candidates",
         page: request.page,
-        progressCalloutCount: countPageResolvedVisibleCallouts(request.page, progressEvidence),
+        pageRole: progress.pageRole,
+        progressCalloutCount: progress.progressCalloutCount,
       }, [request.page.data.buffer as ArrayBuffer])
       return
     }
@@ -88,13 +93,18 @@ workerScope.onmessage = (event) => {
   }
 }
 
-function countPageResolvedVisibleCallouts(
+function summarizePageCandidateProgress(
   page: StepDetectorV2PageInput,
   evidence: readonly StepCalloutCandidateEvidence[],
-): number {
+): { pageRole: StepCalloutPageRole; progressCalloutCount: number } {
   const report = resolveStepCalloutConflicts(evidence, { pages: [page] })
 
-  return report.resolvedCallouts.filter((callout) => callout.status === "accepted").length
+  return {
+    pageRole: classifyStepCalloutPageRole(page, evidence, report.resolvedCallouts),
+    progressCalloutCount: report.resolvedCallouts
+      .filter((callout) => callout.status === "accepted")
+      .length,
+  }
 }
 
 export {}

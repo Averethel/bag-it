@@ -8,6 +8,7 @@ import {
   type StepCalloutCandidate,
   type StepCalloutCandidateEvidence,
   type StepCalloutManualStyle,
+  type StepCalloutPageRole,
 } from "@bag-it/step-callouts"
 import {
   visitStepDetectorV2PageInputsFromFile,
@@ -64,6 +65,8 @@ export {
 }
 
 const DEFAULT_PAGE_PREVIEW_HYDRATION_RENDER_MAX_WIDTH = 520
+const SAFE_TAIL_BOM_PAGE_COUNT = 3
+const SAFE_TAIL_MIN_LAST_STEP_PAGE_RATIO = 0.6
 
 export interface StepDetectorV2ScanOptions {
   eagerPreviewImages?: boolean
@@ -184,6 +187,7 @@ export async function scanPdfStepCalloutsV2FromFile(
       pageCount: scan.pageCount,
       pageLimit: options.maxPages ?? null,
       pageAdvisories: detectionReport.pageAdvisories,
+      skippedPageNumbers: scan.skippedPageNumbers,
     },
   )
   const result = {
@@ -414,6 +418,12 @@ interface V2PageScanResult {
   pageCount: number
   pages: StepDetectorV2PageInput[]
   progressCalloutCount: number
+  skippedPageNumbers: number[]
+}
+
+interface SafeBomTailState {
+  consecutiveBomTailPages: number
+  lastStepLikePageNumber: number | null
 }
 
 async function runV2PageScanWithStaleWorkerRetry(
@@ -442,20 +452,22 @@ async function runV2PageScan(
   const candidatesByPage = new Map<number, StepCalloutCandidate[]>()
   const pagesByNumber = new Map<number, StepDetectorV2PageInput>()
   const progressCalloutCountByPage = new Map<number, number>()
+  const pageRoleByNumber = new Map<number, StepCalloutPageRole>()
   const candidateTasks = new Set<Promise<void>>()
   const maxQueuedPages = resolveMaxQueuedWorkerPages(scheduler.workerCount)
   let scannedPageCount = 0
 
   try {
-    const pagesResult = await visitStepDetectorV2PageInputsFromFile(file, async (pageInput) => {
+    const pagesResult = await visitStepDetectorV2PageInputsFromFile(file, async (pageInput, context) => {
       throwIfAborted(options.signal)
 
       const task = scheduler.detectCandidates(pageInput, options.signal)
-        .then(({ candidates, page, progressCalloutCount }) => {
+        .then(({ candidates, page, pageRole, progressCalloutCount }) => {
           throwIfAborted(options.signal)
           scannedPageCount += 1
           candidatesByPage.set(page.pageNumber, candidates)
           pagesByNumber.set(page.pageNumber, page)
+          pageRoleByNumber.set(page.pageNumber, pageRole)
           progressCalloutCountByPage.set(page.pageNumber, progressCalloutCount)
           options.onPreviewPageInput?.(
             cloneStepDetectorV2PageInput(page),
@@ -482,6 +494,16 @@ async function runV2PageScan(
 
       if (candidateTasks.size >= maxQueuedPages) {
         await Promise.race(candidateTasks)
+
+        if (
+          shouldStopForSafeBomTail(
+            pageRoleByNumber,
+            context?.pageCount ?? options.pageCount ?? Number.POSITIVE_INFINITY,
+            options,
+          )
+        ) {
+          return false
+        }
       }
     }, {
       batchSize: 1,
@@ -509,10 +531,117 @@ async function runV2PageScan(
       pageCount: pagesResult.pageCount,
       pages,
       progressCalloutCount: countResolvedVisibleCallouts(progressCalloutCountByPage),
+      skippedPageNumbers: createSkippedPageNumbers(pagesResult.pageCount, pagesByNumber, options),
     }
   } finally {
     scheduler.terminate()
   }
+}
+
+function shouldStopForSafeBomTail(
+  pageRoleByNumber: ReadonlyMap<number, StepCalloutPageRole>,
+  pageCount: number,
+  options: StepDetectorV2ScanOptions,
+): boolean {
+  return (
+    options.maxPages === undefined &&
+    readSafeBomTailStopPage(pageRoleByNumber, pageCount) !== null
+  )
+}
+
+export function readSafeBomTailStopPage(
+  pageRoleByNumber: ReadonlyMap<number, StepCalloutPageRole>,
+  pageCount: number,
+): number | null {
+  let state = createSafeBomTailState()
+
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    const role = pageRoleByNumber.get(pageNumber)
+
+    if (!role) {
+      return null
+    }
+
+    state = updateSafeBomTailState(state, pageNumber, role)
+
+    if (isSafeBomTailStop(state, pageCount)) {
+      return pageNumber
+    }
+  }
+
+  return null
+}
+
+function createSafeBomTailState(): SafeBomTailState {
+  return {
+    consecutiveBomTailPages: 0,
+    lastStepLikePageNumber: null,
+  }
+}
+
+function updateSafeBomTailState(
+  state: SafeBomTailState,
+  pageNumber: number,
+  role: StepCalloutPageRole,
+): SafeBomTailState {
+  if (role === "step-like") {
+    return {
+      consecutiveBomTailPages: 0,
+      lastStepLikePageNumber: pageNumber,
+    }
+  }
+
+  if (role === "bom-like" && state.lastStepLikePageNumber !== null) {
+    return {
+      ...state,
+      consecutiveBomTailPages: state.consecutiveBomTailPages + 1,
+    }
+  }
+
+  return {
+    ...state,
+    consecutiveBomTailPages: 0,
+  }
+}
+
+function isSafeBomTailStop(
+  state: SafeBomTailState,
+  pageCount: number,
+): boolean {
+  return (
+    state.consecutiveBomTailPages >= SAFE_TAIL_BOM_PAGE_COUNT &&
+    isLateManualStepPage(state.lastStepLikePageNumber, pageCount)
+  )
+}
+
+function isLateManualStepPage(
+  pageNumber: number | null,
+  pageCount: number,
+): boolean {
+  return (
+    pageNumber !== null &&
+    pageNumber / Math.max(1, pageCount) >= SAFE_TAIL_MIN_LAST_STEP_PAGE_RATIO
+  )
+}
+
+function createSkippedPageNumbers(
+  pageCount: number,
+  pagesByNumber: ReadonlyMap<number, StepDetectorV2PageInput>,
+  options: StepDetectorV2ScanOptions,
+): number[] {
+  if (options.maxPages !== undefined) {
+    return []
+  }
+
+  const skippedPageNumbers: number[] = []
+
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    if (!pagesByNumber.has(pageNumber)) {
+      skippedPageNumbers.push(pageNumber)
+    }
+  }
+
+  return skippedPageNumbers
 }
 
 async function scoreEvidenceWithScheduler(

@@ -5,17 +5,23 @@ import {
 import { readStepCalloutCandidateBackground } from "./candidate-background"
 import type {
   StepCalloutCandidateEvidence,
-  StepCalloutEvidenceScore,
   StepCalloutPageAdvisory,
   StepCalloutPageInput,
   StepCalloutRegion,
   StepCalloutResolvedCallout,
 } from "./contracts"
-import { hasStepCalloutOffManualStyleBackgroundEvidence } from "./evidence-reasons"
+import {
+  classifyStepCalloutPageRoles,
+  isRepeatPanelLikeEvidence,
+  readStepCalloutEvidenceValue,
+  type StepCalloutPageRole,
+} from "./page-roles"
+import { estimateStepCalloutPageBackground } from "./pixels"
 import {
   compareStepCalloutRegions,
   stepCalloutRegionCenter,
   stepCalloutRegionContainsPoint,
+  stepCalloutRegionContainsRegion,
   stepCalloutRegionSmallerOverlapRatio,
 } from "./regions"
 
@@ -24,13 +30,15 @@ const ACTIONABLE_MULTIPLIER_MAX = 99
 const LABEL_SEARCH_BAND_RATIO = 0.35
 const LABEL_SEARCH_BAND_MIN = 18
 const LABEL_SEARCH_BAND_MAX = 80
-const MAX_INTERNAL_QUANTITY_SCORE = 0
-const MIN_BORDER_SCORE = 0.45
 const MIN_LABEL_CONFIDENCE = 0.55
 const PANEL_LABEL_LOWER_Y_RATIO = 0.6
-const PANEL_LABEL_LEFT_X_RATIO = 0.4
+const PANEL_LABEL_LEFT_X_RATIO = 0.45
+const PANEL_LABEL_INSIDE_LEFT_X_RATIO = 0.3
 const VISIBLE_CALLOUT_OVERLAP_MAX = 0.2
 const DEDUPE_OVERLAP_MIN = 0.7
+const DENSE_NEIGHBOR_MIN = 4
+const DENSE_NEIGHBOR_SMALL_AREA_RATIO_MAX = 0.035
+const DENSE_NEIGHBOR_REGION_RATIO = 1.35
 
 interface PageAdvisoryCandidate {
   candidateEvidence: StepCalloutCandidateEvidence
@@ -48,12 +56,19 @@ export function detectStepCalloutPageAdvisories(
     evidence.map((candidateEvidence) => [candidateEvidence.candidate.id, candidateEvidence]),
   )
   const visibleRegionsByPage = createVisibleRegionsByPage(resolvedCallouts)
+  const pageRoles = classifyStepCalloutPageRoles(pages, resolvedCallouts, evidence)
+  const firstBuildPageNumber = readFirstBuildPageNumber(pageRoles)
 
   const candidates = resolvedCallouts.flatMap((callout) => {
     const candidateEvidence = evidenceByCandidateId.get(callout.candidateId)
     const page = pageByNumber.get(callout.pageNumber)
 
-    if (!candidateEvidence || !page || !isAdvisoryPanelCandidate(callout, candidateEvidence)) {
+    if (
+      !candidateEvidence ||
+      !page ||
+      !isAdvisoryPage(firstBuildPageNumber, callout.pageNumber, pageRoles.get(callout.pageNumber)) ||
+      !isAdvisoryPanelCandidate(callout, page, candidateEvidence, evidence)
+    ) {
       return []
     }
 
@@ -83,15 +98,39 @@ function createVisibleRegionsByPage(
   return regionsByPage
 }
 
+function readFirstBuildPageNumber(
+  pageRoles: ReadonlyMap<number, StepCalloutPageRole>,
+): number | null {
+  const firstBuildPage = [...pageRoles.entries()]
+    .filter(([, role]) => role === "step-like")
+    .map(([pageNumber]) => pageNumber)
+    .sort((left, right) => left - right)[0]
+
+  return firstBuildPage ?? null
+}
+
+function isAdvisoryPage(
+  firstBuildPageNumber: number | null,
+  pageNumber: number,
+  role: StepCalloutPageRole | undefined,
+): boolean {
+  return (
+    firstBuildPageNumber !== null &&
+    pageNumber >= firstBuildPageNumber &&
+    (role === "step-like" || role === "repeat-panel-like")
+  )
+}
+
 function isAdvisoryPanelCandidate(
   callout: StepCalloutResolvedCallout,
+  page: StepCalloutPageInput,
   evidence: StepCalloutCandidateEvidence,
+  allEvidence: readonly StepCalloutCandidateEvidence[],
 ): boolean {
   return (
     callout.status !== "accepted" &&
-    hasStepCalloutOffManualStyleBackgroundEvidence(evidence.scores) &&
-    readEvidenceValue(evidence.scores, "border") >= MIN_BORDER_SCORE &&
-    readEvidenceValue(evidence.scores, "quantity") <= MAX_INTERNAL_QUANTITY_SCORE
+    isRepeatPanelLikeEvidence(page, evidence) &&
+    !hasDenseNeighboringCandidateLayout(page, evidence, allEvidence)
   )
 }
 
@@ -102,10 +141,14 @@ function findOutsideMultiplierLabels(
 ): RasterQuantityLabel[] {
   const labelSearchRegion = createLabelSearchRegion(page, evidence.candidate.region)
   const searchBackground = readStepCalloutCandidateBackground(page, labelSearchRegion)
+  const pageBackground = estimateStepCalloutPageBackground(page)
 
-  return findRasterQuantityLabels(page, labelSearchRegion, searchBackground)
+  return dedupeMultiplierLabels([
+    ...findRasterQuantityLabels(page, labelSearchRegion, searchBackground),
+    ...findRasterQuantityLabels(page, labelSearchRegion, pageBackground),
+  ])
     .filter((label) => isActionableMultiplierLabel(label))
-    .filter((label) => isOutsidePanelLowerLeftLabel(evidence.candidate.region, label))
+    .filter((label) => isPhysicallyAttachedLowerLeftLabel(evidence.candidate.region, label))
     .filter((label) => !overlapsVisibleCallout(label.region, visibleRegions))
 }
 
@@ -115,8 +158,8 @@ function createLabelSearchRegion(
 ): StepCalloutRegion {
   const band = readLabelSearchBand(panelRegion)
   const x = Math.max(0, panelRegion.x - band)
-  const y = panelRegion.y
-  const right = Math.min(page.width, panelRegion.x + panelRegion.width + band)
+  const y = Math.max(0, panelRegion.y + panelRegion.height * 0.45)
+  const right = Math.min(page.width, panelRegion.x + panelRegion.width * PANEL_LABEL_LEFT_X_RATIO)
   const bottom = Math.min(page.height, panelRegion.y + panelRegion.height + band)
 
   return {
@@ -142,17 +185,71 @@ function isActionableMultiplierLabel(label: RasterQuantityLabel): boolean {
   )
 }
 
-function isOutsidePanelLowerLeftLabel(
+function isPhysicallyAttachedLowerLeftLabel(
   panelRegion: StepCalloutRegion,
   label: RasterQuantityLabel,
 ): boolean {
   const center = stepCalloutRegionCenter(label.region)
+  const labelRight = label.region.x + label.region.width
+  const labelBottom = label.region.y + label.region.height
+  const panelBottom = panelRegion.y + panelRegion.height
+  const band = readLabelSearchBand(panelRegion)
 
   return (
     !stepCalloutRegionContainsPoint(panelRegion, center) &&
     center.y >= panelRegion.y + panelRegion.height * PANEL_LABEL_LOWER_Y_RATIO &&
-    center.x <= panelRegion.x + panelRegion.width * PANEL_LABEL_LEFT_X_RATIO
+    center.x <= panelRegion.x + panelRegion.width * PANEL_LABEL_LEFT_X_RATIO &&
+    labelRight >= panelRegion.x - band &&
+    labelRight <= panelRegion.x + panelRegion.width * PANEL_LABEL_INSIDE_LEFT_X_RATIO &&
+    label.region.y <= panelBottom + band &&
+    labelBottom >= panelRegion.y + panelRegion.height * PANEL_LABEL_LOWER_Y_RATIO
   )
+}
+
+function hasDenseNeighboringCandidateLayout(
+  page: StepCalloutPageInput,
+  panelEvidence: StepCalloutCandidateEvidence,
+  allEvidence: readonly StepCalloutCandidateEvidence[],
+): boolean {
+  const neighborhood = expandPanelNeighborhood(page, panelEvidence.candidate.region)
+  const neighbors = allEvidence.filter((candidateEvidence) =>
+    candidateEvidence.candidate.id !== panelEvidence.candidate.id &&
+    candidateEvidence.candidate.pageNumber === panelEvidence.candidate.pageNumber &&
+    stepCalloutRegionContainsRegion(neighborhood, candidateEvidence.candidate.region)
+  )
+  const smallNeighbors = neighbors.filter((candidateEvidence) =>
+    stepCalloutRegionAreaRatio(page, candidateEvidence.candidate.region) <=
+      DENSE_NEIGHBOR_SMALL_AREA_RATIO_MAX ||
+    readStepCalloutEvidenceValue(candidateEvidence.scores, "quantity") > 0
+  )
+
+  return smallNeighbors.length >= DENSE_NEIGHBOR_MIN
+}
+
+function expandPanelNeighborhood(
+  page: StepCalloutPageInput,
+  panelRegion: StepCalloutRegion,
+): StepCalloutRegion {
+  const xPadding = panelRegion.width * DENSE_NEIGHBOR_REGION_RATIO
+  const yPadding = panelRegion.height * DENSE_NEIGHBOR_REGION_RATIO
+  const x = Math.max(0, panelRegion.x - xPadding)
+  const y = Math.max(0, panelRegion.y - yPadding)
+  const right = Math.min(page.width, panelRegion.x + panelRegion.width + xPadding)
+  const bottom = Math.min(page.height, panelRegion.y + panelRegion.height + yPadding)
+
+  return {
+    height: bottom - y,
+    width: right - x,
+    x,
+    y,
+  }
+}
+
+function stepCalloutRegionAreaRatio(
+  page: StepCalloutPageInput,
+  region: StepCalloutRegion,
+): number {
+  return (region.width * region.height) / Math.max(1, page.width * page.height)
 }
 
 function overlapsVisibleCallout(
@@ -163,6 +260,22 @@ function overlapsVisibleCallout(
     stepCalloutRegionContainsPoint(region, stepCalloutRegionCenter(labelRegion)) ||
     stepCalloutRegionSmallerOverlapRatio(labelRegion, region) > VISIBLE_CALLOUT_OVERLAP_MAX
   )
+}
+
+function dedupeMultiplierLabels(labels: readonly RasterQuantityLabel[]): RasterQuantityLabel[] {
+  const selected: RasterQuantityLabel[] = []
+
+  for (const label of [...labels].sort((left, right) => right.confidence - left.confidence)) {
+    if (selected.some((item) =>
+      stepCalloutRegionSmallerOverlapRatio(item.region, label.region) >= DEDUPE_OVERLAP_MIN
+    )) {
+      continue
+    }
+
+    selected.push(label)
+  }
+
+  return selected
 }
 
 function dedupeAdvisoryCandidates(
@@ -230,7 +343,7 @@ function readAdvisoryConfidence(candidate: PageAdvisoryCandidate): number {
   return Math.min(
     1,
     0.45 +
-      readEvidenceValue(candidate.candidateEvidence.scores, "border") * 0.3 +
+      readStepCalloutEvidenceValue(candidate.candidateEvidence.scores, "border") * 0.3 +
       candidate.label.confidence * 0.25,
   )
 }
@@ -250,11 +363,4 @@ function unionRegions(
     x,
     y,
   }
-}
-
-function readEvidenceValue(
-  scores: readonly StepCalloutEvidenceScore[],
-  signal: StepCalloutEvidenceScore["signal"],
-): number {
-  return scores.find((score) => score.signal === signal)?.value ?? 0
 }

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { createStepCalloutPageInput } from "@bag-it/step-callouts"
+import {
+  createStepCalloutPageInput,
+  type StepCalloutPageRole,
+} from "@bag-it/step-callouts"
 import type { StepDetectorV2BuildStepsResult } from "./output-assembly"
 import { createSyntheticV2Page } from "./synthetic-page-test-helper"
 
@@ -12,6 +15,7 @@ vi.mock("./browser-page-input", () => browserPageInputMock)
 
 import {
   hydratePdfStepPreviewImagesV2FromFile,
+  readSafeBomTailStopPage,
   scanPdfStepCalloutsV2FromFile,
   scanPdfStepPartsV2FromFile,
   STEP_PART_COLOR_CALIBRATION_V2_VERSION,
@@ -236,6 +240,66 @@ describe("v2 browser detector adapter", () => {
     })
 
     expect(result.scannedPageNumbers).toEqual([1, 2])
+  })
+
+  it("resolves safe BOM tail stop only after late build pages", () => {
+    expect(readSafeBomTailStopPage(createPageRoleMap([
+      [1, "unknown"],
+      [2, "unknown"],
+      [3, "unknown"],
+      [4, "unknown"],
+      [5, "unknown"],
+      [6, "unknown"],
+      [7, "unknown"],
+      [8, "unknown"],
+      [9, "step-like"],
+      [10, "bom-like"],
+      [11, "bom-like"],
+      [12, "bom-like"],
+    ]), 15)).toBe(12)
+  })
+
+  it("does not resolve safe BOM tail stop before build start or through uncertain pages", () => {
+    expect(readSafeBomTailStopPage(createPageRoleMap([
+      [1, "bom-like"],
+      [2, "bom-like"],
+      [3, "bom-like"],
+    ]), 10)).toBeNull()
+
+    expect(readSafeBomTailStopPage(createPageRoleMap([
+      [1, "unknown"],
+      [2, "unknown"],
+      [3, "unknown"],
+      [4, "unknown"],
+      [5, "unknown"],
+      [6, "unknown"],
+      [7, "unknown"],
+      [8, "unknown"],
+      [9, "step-like"],
+      [10, "bom-like"],
+      [11, "unknown"],
+      [12, "bom-like"],
+      [13, "bom-like"],
+    ]), 15)).toBeNull()
+  })
+
+  it("does not resolve safe BOM tail stop when later step-like pages reset the tail", () => {
+    expect(readSafeBomTailStopPage(createPageRoleMap([
+      [1, "unknown"],
+      [2, "unknown"],
+      [3, "unknown"],
+      [4, "unknown"],
+      [5, "unknown"],
+      [6, "unknown"],
+      [7, "unknown"],
+      [8, "unknown"],
+      [9, "step-like"],
+      [10, "bom-like"],
+      [11, "bom-like"],
+      [12, "step-like"],
+      [13, "bom-like"],
+      [14, "bom-like"],
+    ]), 15)).toBeNull()
   })
 
   it("rejects scan work when cancelled before page detection", async () => {
@@ -540,6 +604,12 @@ function createThreePageResultWithoutPreviewImages(): StepDetectorV2BuildStepsRe
 
 function createPdfFile(): File {
   return new File(["%PDF-1.7"], "manual.pdf", { type: "application/pdf" })
+}
+
+function createPageRoleMap(
+  entries: readonly (readonly [number, StepCalloutPageRole])[],
+): Map<number, StepCalloutPageRole> {
+  return new Map(entries)
 }
 
 function createSyntheticV2PageNumber(pageNumber: number): ReturnType<typeof createSyntheticV2Page> {
