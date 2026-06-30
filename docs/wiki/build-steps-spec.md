@@ -25,7 +25,7 @@ Keep explicit detector versioning. The current detector version is:
 Part image and quantity-label extraction has its own version:
 
 ```ts
-2.0.0-alpha.167
+2.0.0-alpha.168
 ```
 
 Part color calibration has its own version:
@@ -94,7 +94,7 @@ rendered.
 The production route currently emits detector version `2.0.0-alpha.20` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
-part extractor version `2.0.0-alpha.167` from package
+part extractor version `2.0.0-alpha.168` from package
 `@bag-it/callout-parts` and part color calibration version `2.0.0-alpha.65`
 from `@bag-it/part-colors`. Callout evidence and part extraction both use
 visible raster `/^\d+x$/i` quantity labels from
@@ -231,6 +231,10 @@ emit that inferred `1x` only when strong broad part foreground exists above the
 inferred label region. This restores Chrome 149 renders where the right-hand
 label ink disappears into a low-contrast part while keeping the rule gated by
 callout size, anchor position, and measured part foreground.
+Alpha 168 narrows that broad fallback by requiring the inferred trailing label
+to sit at the anchor part's right edge and requiring continuous foreground
+width to the right of the inferred label. Existing anchor-part bodies and
+narrow right-edge slivers cannot create fake trailing `1x` rows.
 Detector alpha 20 adds a narrow Linux Chrome 149 compact-top strong-border
 acceptance path for border or line-rectangle candidates with real lower-row
 raster quantity labels. It restores small blue top-row callouts whose fill

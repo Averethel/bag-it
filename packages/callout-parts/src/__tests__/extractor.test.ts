@@ -1568,6 +1568,35 @@ describe("callout part extractor", () => {
     expect(readOpaquePixelsInRegion(items[1], trailingPart)).toBeGreaterThan(0)
   })
 
+  it("does not infer a trailing compact peer from a narrow foreground sliver", () => {
+    const page = createSyntheticPage((data) => {
+      paintCallout(data)
+      paintRegion(data, { height: 28, width: 44, x: 34, y: 14 }, TEST_GRAY_PART)
+      paintRegion(data, { height: 28, width: 10, x: 104, y: 14 }, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "5x", 34, 52)
+    })
+    const items = extractCalloutPartsForPage({
+      callouts: [{ background: TEST_BLUE_PANEL, id: "compact-trailing-sliver", pageNumber: 1, region: CALLOUT_REGION }],
+      page,
+    }).items
+
+    expect(items.map((item) => item.quantityLabel.text)).toEqual(["5x"])
+  })
+
+  it("does not infer a trailing compact peer from the anchor part body", () => {
+    const page = createSyntheticPage((data) => {
+      paintCallout(data)
+      paintRegion(data, { height: 28, width: 84, x: 34, y: 14 }, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "5x", 34, 52)
+    })
+    const items = extractCalloutPartsForPage({
+      callouts: [{ background: TEST_BLUE_PANEL, id: "compact-trailing-anchor-body", pageNumber: 1, region: CALLOUT_REGION }],
+      page,
+    }).items
+
+    expect(items.map((item) => item.quantityLabel.text)).toEqual(["5x"])
+  })
+
   it("does not infer a trailing compact peer from broad foreground in multi-row callouts", () => {
     const page = createSyntheticPage((data) => {
       paintCallout(data)

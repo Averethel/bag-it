@@ -440,7 +440,9 @@ function hasSuppressedFragmentTrailingPeerRecoveryEvidence(
     return true
   }
 
-  return items.length === 1 && hasStrongTrailingPeerPartForeground(page, callout, background, label)
+  return items.length === 1 &&
+    inferredTrailingPeerTouchesAnchorPartEdge(anchor, label) &&
+    hasStrongTrailingPeerPartForeground(page, callout, background, label)
 }
 
 function isSuppressedFragmentTrailingPeerAnchor(
@@ -512,13 +514,27 @@ function readTrailingPeerSuppressedFragment(
     )[0]
 }
 
+function inferredTrailingPeerTouchesAnchorPartEdge(
+  anchor: CalloutPartItem,
+  label: CalloutQuantityLabel,
+): boolean {
+  const anchorRight = anchor.partImage.region.x + anchor.partImage.region.width
+  const labelCenterX = regionCenter(label.region).x
+
+  return labelCenterX >= anchorRight - Math.max(16, Math.round(label.region.height * 2.5))
+}
+
 function hasStrongTrailingPeerPartForeground(
   page: CalloutPartPageInput,
   callout: CalloutPartCalloutInput,
   background: ReturnType<typeof readCalloutBackground>,
   label: CalloutQuantityLabel,
 ): boolean {
-  const left = Math.max(callout.region.x, label.region.x - Math.max(10, Math.round(label.region.width * 1.1)))
+  const left = Math.max(
+    callout.region.x,
+    label.region.x + label.region.width,
+    label.region.x - Math.max(10, Math.round(label.region.width * 1.1)),
+  )
   const right = Math.min(
     page.width,
     callout.region.x + callout.region.width - 2,
@@ -529,24 +545,50 @@ function hasStrongTrailingPeerPartForeground(
     label.region.y - Math.max(42, Math.round(label.region.height * 4.8)),
   )
   const bottom = label.region.y
-  let foregroundPixels = 0
-  const foregroundRows = new Set<number>()
 
   if (right <= left || bottom <= top) {
     return false
   }
 
-  for (let y = top; y < bottom; y += 1) {
-    for (let x = left; x < right; x += 1) {
+  const foregroundStats = readTrailingPeerForegroundStats(
+    page,
+    background,
+    label,
+    { height: bottom - top, width: right - left, x: left, y: top },
+  )
+
+  return foregroundStats.pixels >= Math.max(120, Math.round(label.region.width * label.region.height * 0.7)) &&
+    foregroundStats.strongColumns >= Math.max(28, Math.round(label.region.width * 2.5)) &&
+    foregroundStats.rows >= Math.max(12, Math.round(label.region.height * 0.9))
+}
+
+function readTrailingPeerForegroundStats(
+  page: CalloutPartPageInput,
+  background: ReturnType<typeof readCalloutBackground>,
+  label: CalloutQuantityLabel,
+  region: Region,
+): { pixels: number; rows: number; strongColumns: number } {
+  let pixels = 0
+  const columnPixels = new Map<number, number>()
+  const rows = new Set<number>()
+
+  for (let y = region.y; y < region.y + region.height; y += 1) {
+    for (let x = region.x; x < region.x + region.width; x += 1) {
       if (readAlpha(page, x, y) >= 32 && colorDistance(readPixel(page, x, y), background) >= 18) {
-        foregroundPixels += 1
-        foregroundRows.add(y)
+        pixels += 1
+        columnPixels.set(x, (columnPixels.get(x) ?? 0) + 1)
+        rows.add(y)
       }
     }
   }
 
-  return foregroundPixels >= Math.max(120, Math.round(label.region.width * label.region.height * 0.7)) &&
-    foregroundRows.size >= Math.max(12, Math.round(label.region.height * 0.9))
+  return {
+    pixels,
+    rows: rows.size,
+    strongColumns: [...columnPixels.values()]
+      .filter((pixelCount) => pixelCount >= Math.max(8, Math.round(label.region.height * 0.8)))
+      .length,
+  }
 }
 
 function readRegionCenterDistance(region: Region, point: { x: number; y: number }): number {
