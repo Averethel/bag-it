@@ -398,13 +398,17 @@ function recoverSuppressedFragmentTrailingPeerItems(
 
     const label = inferSuppressedFragmentTrailingPeerLabel(callout, anchor)
 
+    const hasSuppressedFragment = label
+      ? Boolean(readTrailingPeerSuppressedFragment(anchor, label))
+      : false
+    const hasSingleItemStrongTrailingForeground = label && items.length === 1
+      ? hasStrongTrailingPeerPartForeground(page, callout, background, label)
+      : false
+
     if (
       !label ||
       items.some((item) => labelsOverlap(item.quantityLabel.region, label.region)) ||
-      (
-        !readTrailingPeerSuppressedFragment(anchor, label) &&
-        !hasStrongTrailingPeerPartForeground(page, callout, background, label)
-      )
+      (!hasSuppressedFragment && !hasSingleItemStrongTrailingForeground)
     ) {
       continue
     }

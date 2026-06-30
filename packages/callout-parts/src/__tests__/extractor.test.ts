@@ -1568,6 +1568,22 @@ describe("callout part extractor", () => {
     expect(readOpaquePixelsInRegion(items[1], trailingPart)).toBeGreaterThan(0)
   })
 
+  it("does not infer a trailing compact peer from broad foreground in multi-row callouts", () => {
+    const page = createSyntheticPage((data) => {
+      paintCallout(data)
+      paintRegion(data, { height: 14, width: 20, x: 20, y: 20 }, TEST_GRAY_PART)
+      paintRegion(data, { height: 28, width: 44, x: 68, y: 14 }, TEST_GRAY_PART)
+      paintRasterQuantityLabel(data, "1x", 22, 36)
+      paintRasterQuantityLabel(data, "3x", 34, 52)
+    })
+    const items = extractCalloutPartsForPage({
+      callouts: [{ background: TEST_BLUE_PANEL, id: "compact-dense-callout", pageNumber: 1, region: CALLOUT_REGION }],
+      page,
+    }).items
+
+    expect(items.map((item) => item.quantityLabel.text)).toEqual(["1x", "3x"])
+  })
+
   it("keeps quantity labels transparent in part image masks and stays inside callout borders", () => {
     const page = createSyntheticPage((data) => {
       paintCallout(data)
