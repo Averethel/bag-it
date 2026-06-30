@@ -115,6 +115,39 @@ export function paintConnectedScaledRasterQuantityLabel(
   }
 }
 
+export function paintSeparatedScaledRasterQuantityLabel(
+  data: Uint8ClampedArray,
+  text: string,
+  x: number,
+  y: number,
+  scaleX: number,
+  scaleY = scaleX,
+  color: TestStepCalloutColor = TEST_BLACK,
+): StepCalloutRegion {
+  let cursorX = x
+  let bottom = y
+  const gap = Math.max(2, scaleX * 2)
+
+  for (const character of text.toLowerCase()) {
+    const glyph = TEST_RASTER_GLYPHS[character]
+
+    if (!glyph) {
+      continue
+    }
+
+    paintScaledRasterGlyph(data, glyph, cursorX, y, scaleX, scaleY, color)
+    cursorX += glyph[0].length * scaleX + gap
+    bottom = Math.max(bottom, y + glyph.length * scaleY)
+  }
+
+  return {
+    height: bottom - y,
+    width: Math.max(1, cursorX - x - gap),
+    x,
+    y,
+  }
+}
+
 function createBlankPixels(): Uint8ClampedArray {
   const data = new Uint8ClampedArray(TEST_PAGE_WIDTH * TEST_PAGE_HEIGHT * RGBA_CHANNEL_COUNT)
   paintRegion(data, { height: TEST_PAGE_HEIGHT, width: TEST_PAGE_WIDTH, x: 0, y: 0 }, TEST_WHITE)
@@ -239,6 +272,33 @@ const TEST_RASTER_GLYPHS: Record<string, readonly string[]> = {
     "00010",
     "00010",
   ],
+  "5": [
+    "11111",
+    "10000",
+    "10000",
+    "11110",
+    "00001",
+    "00001",
+    "11110",
+  ],
+  "6": [
+    "01111",
+    "10000",
+    "10000",
+    "11110",
+    "10001",
+    "10001",
+    "01110",
+  ],
+  "7": [
+    "11111",
+    "00001",
+    "00010",
+    "00100",
+    "01000",
+    "01000",
+    "01000",
+  ],
   "8": [
     "01110",
     "10001",
@@ -247,6 +307,15 @@ const TEST_RASTER_GLYPHS: Record<string, readonly string[]> = {
     "10001",
     "10001",
     "01110",
+  ],
+  "9": [
+    "01110",
+    "10001",
+    "10001",
+    "01111",
+    "00001",
+    "00001",
+    "11110",
   ],
   "x": [
     "10001",

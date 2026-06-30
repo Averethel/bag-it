@@ -19,7 +19,7 @@ local callout background color from interior pixels.
 Keep explicit detector versioning. The current detector version is:
 
 ```ts
-2.0.0-alpha.21
+2.0.0-alpha.22
 ```
 
 Part image and quantity-label extraction has its own version:
@@ -91,7 +91,7 @@ probe or the extraction response, the app terminates the worker pool and
 retries the whole part-extraction pass once so partial stale output is not
 rendered.
 
-The production route currently emits detector version `2.0.0-alpha.21` from
+The production route currently emits detector version `2.0.0-alpha.22` from
 the v2 page-input, candidate, evidence, resolver, and output assembly path. It
 emits
 part extractor version `2.0.0-alpha.163` from package
@@ -104,30 +104,33 @@ labels after glyph assembly are rejected by raster glyph spacing plus
 page-relative area and position checks, not by reading source text or manual
 ids; strong border/background/quantity evidence can still accept a genuinely
 wide callout panel without a predefined callout aspect-ratio contract.
-Detector `2.0.0-alpha.21` preserves the alpha18 accepted-callout contract and
+Detector `2.0.0-alpha.22` preserves the alpha18 accepted-callout contract and
 improves review-only page advisories for possible repeat-subassembly
 multiplication panels. Advisory detection is raster-only and gated by internal
 page roles: pages before the first build-step page never emit advisories, dense
 BOM/parts-list/table-like pages are suppressed, and repeat-panel-only pages
 inside the build span may still emit review markers. A rejected or diagnostic
-bordered panel with no internal raster quantity-label evidence may emit a
+off-manual-style pale panel with no strong internal raster quantity-label
+evidence may emit a
 `possible-step-multiplier` `pageAttentionItems` entry only when a nearby
-outside raster `2x` label is found in bounded lower-left panel edge or corner
-bands. The OCR pass tries both panel/search background and page background,
-dedupes label hits, and requires the label to be physically attached to the
-panel corner and outside accepted callout regions. Alpha21 adds internal-only
-advisory diagnostics for page role, candidate source/status, repeat-panel
-evidence, dense-layout rejection, OCR search regions, raw labels, and final
-accept/reject reason. It also has a narrow connected-corner recovery for
-Hall-style bold `2x` labels that collide with nearby panel/model ink; this path
-is scoped to eligible repeat panels and remains review-only. These advisories
-mark pages for user review only; they do not promote the panel to an accepted
-callout, do not trigger part extraction, and do not change bag or row
-quantities unless the user edits step multipliers. The browser adapter may stop
-before trailing BOM/list pages only after build has started, three consecutive
-late BOM-like/no-step pages have been scanned, no `maxPages` limit is active,
-and no uncertain page role interrupts the tail. Unscanned pages are recorded in
-`skippedPageNumbers`; they are not presented as scanned.
+outside raster `Nx` label is found in bounded panel edge or corner bands. The
+OCR pass tries both panel/search background and page background, dedupes label
+hits, and requires the label to be physically attached to the panel corner and
+outside accepted callout regions. Alpha22 keeps internal diagnostics and expands
+the advisory candidate pool to eligible line-rectangle and fill-panel evidence,
+but blocks manual-style callout panels, gray model-art rectangles, pure page
+white fragments, noisy label neighborhoods, dense layouts, strong internal
+quantity labels, and labels overlapping accepted callouts. It also keeps narrow
+connected-corner and bottom-right fallback recovery for labels that collide with
+nearby panel/model ink; these paths are scoped to eligible repeat panels and
+remain review-only. These advisories mark pages for user review only; they do
+not promote the panel to an accepted callout, do not trigger part extraction,
+and do not change bag or row quantities unless the user edits step multipliers.
+The browser adapter may stop before trailing BOM/list pages only after build has
+started, three consecutive late BOM-like/no-step pages have been scanned, no
+`maxPages` limit is active, and no uncertain page role interrupts the tail.
+Unscanned pages are recorded in `skippedPageNumbers`; they are not presented as
+scanned.
 
 Detector `2.0.0-alpha.18` scores non-dark raster edge
 contrast against the inferred fill-panel background, capped as weak border

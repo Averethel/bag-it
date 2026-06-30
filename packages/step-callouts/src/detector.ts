@@ -31,7 +31,7 @@ import {
   type StepCalloutPageAdvisoryDiagnostic,
 } from "./page-advisories"
 
-export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.21"
+export const STEP_CALLOUT_DETECTOR_VERSION = "2.0.0-alpha.22"
 
 export interface StepCalloutDetection {
   evidence: StepCalloutCandidateEvidence | null

@@ -3,12 +3,14 @@
 ## Status
 
 Active. This branch implements raster-only page advisories for possible repeated
-subassembly panels. Alpha21 improves advisory accuracy with internal page-role
-gating, lower-left attached-label OCR, BOM/table-like false-positive rejection,
-internal-only diagnostics, Hall-style connected-corner `2x` recovery, and a
-conservative trailing-BOM safe skip. The increment remains active until
-integration review accepts the Lower Courtyard and Hall Tower examples in the
-PR branch.
+subassembly panels. Alpha22 improves advisory recall for the known manual set by
+searching eligible border, line-rectangle, and fill-panel evidence while keeping
+review-only output. It keeps internal page-role gating, off-style pale-panel
+gating, attached-label OCR, BOM/table-like rejection, accepted-callout label
+overlap rejection, noisy-neighborhood rejection, internal-only diagnostics,
+connected/bottom-edge label recovery, and conservative trailing-BOM safe skip.
+The increment remains active until integration review accepts the private manual
+examples in the PR branch.
 
 ## Scope
 
@@ -21,8 +23,9 @@ Deliver:
   attention kind
 - no automatic multiplier, bag quantity, part row, or completion-anchor changes
 - synthetic unit coverage for positive and negative advisory cases
-- private browser validation for Lower Courtyard page 31 and Hall Tower pages
-  296/298
+- private browser validation for the current repeat-callout page set across
+  Lower Courtyard, Upper Courtyard, Hall Tower, mmannual, farm-house, and
+  Animals manuals
 - conservative trailing BOM/list scan skip that records unscanned pages in
   `skippedPageNumbers`
 
@@ -52,8 +55,11 @@ Deliver:
 
 - Private acceptance must use real browser upload through `/`, not package-level
   manual replay.
-- Lower Courtyard page 31 and Hall Tower pages 296 and 298 are the current
-  private examples to inspect before closing this increment.
-- Alpha21 private replay requires value-2 `possible-step-multiplier` advisories
-  on Lower Courtyard page 31 and Hall Tower pages 296 and 298, and no advisories
-  on observed Hall Tower BOM/tail pages.
+- Alpha22 private replay requires `possible-step-multiplier` advisories on the
+  current expected pages: Lower Courtyard pages 31, 164, and 183; Upper
+  Courtyard page 59; Hall Tower pages 6, 9, 104, 172, 224, 263, 282, 285, 296,
+  and 298; mmannual page 34; farm-house pages 24 and 48; and Animals pages 61
+  and 63.
+- Known false-positive pages Upper Courtyard 105, 4th-stage 5, Animals 68, and
+  Hall Tower BOM/tail pages must stay unmarked. The private replay also records
+  conservative Hall Tower tail skips in `skippedPageNumbers`.

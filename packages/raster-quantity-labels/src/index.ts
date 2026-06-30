@@ -40,6 +40,12 @@ export {
   type QuantityOcrRead,
 } from "./quantity-ocr"
 export {
+  readDigit as readRasterQuantityDigit,
+} from "./quantity-ocr-read"
+export type {
+  DigitRead as RasterQuantityDigitRead,
+} from "./quantity-ocr-types"
+export {
   createGlyphFromPixels,
   createGlyphMask,
   findGlyphComponents,
