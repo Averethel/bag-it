@@ -1,40 +1,32 @@
 node_modules/
-
-# Next.js
 .next/
 out/
-
-# Production
 dist/
-build/
+coverage/
+.vitest/
+*.tsbuildinfo
+next-env.d.ts
+.npm-cache/
+.pnpm-store/
+.DS_Store
 
-# Env files
 .env
 .env.*
 !.env.example
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Local caches
-.turbo/
-.cache/
-
-# OS/editor
-.DS_Store
-.idea/
-.vscode/
-
-# Analysis artifacts
-tmp/
-artifacts/
-coverage/
-*.tsbuildinfo
 .bag-it/private/
-*.traineddata
+manuals/
+*.bagit-session.json
+!tests/e2e/fixtures/bag-analysis/**/input.bagit-session.json
+*.bagit-session
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+!tests/fixtures/steps/generated/*.pdf
+!docs/wiki/assets/.gitkeep
 
-# Private local manuals and expected outputs for development only
-examples/
+webwright-artifacts/
+test-results/
+playwright-report/

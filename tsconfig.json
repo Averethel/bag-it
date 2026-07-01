@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2017",
     "lib": [
       "dom",
       "dom.iterable",
-      "es2022"
+      "esnext"
     ],
     "allowJs": false,
     "skipLibCheck": true,
@@ -23,6 +23,24 @@
       }
     ],
     "paths": {
+      "@bag-it/callout-parts": [
+        "./packages/callout-parts/src/index.ts"
+      ],
+      "@bag-it/part-colors": [
+        "./packages/part-colors/src/index.ts"
+      ],
+      "@bag-it/part-matching": [
+        "./packages/part-matching/src/index.ts"
+      ],
+      "@bag-it/raster-quantity-labels": [
+        "./packages/raster-quantity-labels/src/index.ts"
+      ],
+      "@bag-it/step-callouts": [
+        "./packages/step-callouts/src/index.ts"
+      ],
+      "@bag-it/test-support": [
+        "./packages/test-support/src/index.ts"
+      ],
       "@/*": [
         "./src/*"
       ]
@@ -33,9 +51,14 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
+    ".bag-it",
+    ".npm-cache",
+    ".pnpm-store",
     "node_modules"
   ]
 }

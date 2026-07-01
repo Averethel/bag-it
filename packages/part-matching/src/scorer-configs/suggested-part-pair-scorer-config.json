@@ -1,0 +1,45 @@
+{
+  "evidenceRules": [
+    {
+      "conditions": [
+        {
+          "featureName": "cachedPairScore",
+          "operator": "gt",
+          "threshold": 0.9961420893659129
+        }
+      ]
+    }
+  ],
+  "featureNames": [
+    "cachedPairScore"
+  ],
+  "groupingStrategy": "connected-components",
+  "intercept": 0,
+  "kind": "linear",
+  "metadata": {
+    "artifactPath": "public/models/part-matching/manual-crop-cnn-hardneg-v4-closure-fixed-v1",
+    "cachedScoreFloor": 0.9961420893669128,
+    "calibrationReplay": "cached-cnn-hardneg-v4-closure-fixed-threshold099614-v1",
+    "correctionBurden": 0,
+    "falseGroups": 0,
+    "falsePositivePairs": 0,
+    "groupedRows": 1304,
+    "lane": "suggested",
+    "matcherVersion": "0.1.0-alpha.16",
+    "matchedPositivePairs": 1306,
+    "model": "manual-crop-cnn-hardneg-v4-closure-fixed-v1",
+    "positivePairs": 1354,
+    "recall": 0.9645494830132939,
+    "runtimeGroupReplay": "1306/1354 reviewed real pairs, 0 false groups, 0 false-pair diagnostics, 0/1304 wrong grouped rows",
+    "scoreFeatureName": "cachedPairScore",
+    "sourceScoreRun": "gpu-manual-pair-head-focused-decisions-metric2-fresh1024-hardneg-v4-min09-repeat5",
+    "truthSource": "pair-targets",
+    "wrongRowMemberships": 0
+  },
+  "normalization": {},
+  "threshold": 0.5,
+  "version": "0.1.0-alpha.10",
+  "weights": {
+    "cachedPairScore": 0
+  }
+}

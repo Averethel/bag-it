@@ -1,330 +1,446 @@
 import { describe, expect, it } from "vitest"
 import {
-  createBaggingSessionFile,
-  getBaggingSessionDownloadName,
-  isRestoredAnalysisCurrent,
-  isRestoredStepAnalysisCurrent,
-  restoreBaggingSessionFile,
+  createPdfIntakeSessionFile,
+  getSessionDownloadName,
+  restorePdfIntakeSessionFile,
 } from "./session-file"
-import type { PartsListPdfExtractionResult } from "./parts-list-pdf-extraction"
-import type { PdfIntakeJobSnapshot, PdfIntakeMetadata } from "./pdf-intake"
-import { getStepCalloutBagChecklistRowIds } from "./step-callout-bagging"
-import { stepCalloutDetectorVersion, type StepCalloutDetectionResult } from "./step-callout-detection"
+import type { PdfMetadata } from "@/features/pdf/pdf-intake"
+import {
+  STEP_CALLOUT_DETECTOR_V2_VERSION as STEP_CALLOUT_DETECTOR_VERSION,
+  STEP_PART_COLOR_CALIBRATION_V2_VERSION as STEP_PART_COLOR_CALIBRATION_VERSION,
+  STEP_PART_EXTRACTOR_V2_VERSION as STEP_PART_EXTRACTOR_VERSION,
+} from "@/features/steps/v2/browser-step-detector-adapter"
+import type { StepCalloutDetectionResult } from "@/features/steps/step-detection-contracts"
 
-describe("Bag It session files", () => {
-  it("round-trips manual bytes, analysis data, preview cache, and checked rows", async () => {
-    const manualFile = new File(["%PDF-1.7 session"], "Castle Manual.pdf", { type: "application/pdf" })
-    const metadata = createMetadata(manualFile)
-    const jobSnapshot = createJobSnapshot(metadata)
-    const partsListResult = createPartsListResult("parts-list-extraction-v26")
-    const stepCalloutResult = createStepCalloutResult()
-    const stepCalloutMultipliers = {
-      "missing-callout": 4,
-      "step-callout:p1:r1": 3.8,
-    }
-    const checkedStepBagRowIds = getStepCalloutBagChecklistRowIds(stepCalloutResult, {
-      calloutMultipliers: { "step-callout:p1:r1": 3 },
-      inventoryPartCount: 14,
+describe("session-file", () => {
+  it("round-trips a PDF intake session", async () => {
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+      lastModified: 123,
     })
-    const sessionFile = await createBaggingSessionFile({
-      attemptedPartPreviewKeys: new Set(["3005:0"]),
-      checkedRowIds: new Set(["2-0-14-3005-0"]),
-      checkedStepBagRowIds: new Set([...checkedStepBagRowIds, "stale-step-bag-row"]),
-      currentExtractorVersion: "parts-list-extraction-v26",
-      jobSnapshot,
-      manualFile,
+    const metadata: PdfMetadata = {
+      fileName: "manual.pdf",
+      sizeBytes: manual.size,
+      pageCount: 4,
+      title: null,
+      author: null,
+    }
+
+    const sessionBlob = await createPdfIntakeSessionFile({
+      manualFile: manual,
       metadata,
-      partPreviewByKey: new Map([
-        [
-          "3005:0",
-          {
-            colorId: "0",
-            imageUrl: "https://cdn.rebrickable.com/media/parts/elements/3005.jpg",
-            key: "3005:0",
-            name: "Brick 1 x 1",
-            partNumber: "3005",
-          },
-        ],
-      ]),
-      partsListResult,
-      stepCalloutMultipliers,
-      stepCalloutResult,
     })
+    const sessionFile = new File([sessionBlob], "manual.bagit-session.json", {
+      type: "application/json",
+    })
+    const restored = await restorePdfIntakeSessionFile(sessionFile)
 
-    const restored = await restoreBaggingSessionFile(
-      new File([JSON.stringify(sessionFile)], "Castle-Manual.bagit.json", { type: "application/json" }),
-    )
-
-    await expect(restored.manualFile.text()).resolves.toBe("%PDF-1.7 session")
-    expect(restored.manualFile.name).toBe("Castle Manual.pdf")
+    expect(restored.manualFile.name).toBe("manual.pdf")
+    expect(restored.manualFile.type).toBe("application/pdf")
     expect(restored.metadata).toEqual(metadata)
-    expect(restored.jobSnapshot).toEqual(jobSnapshot)
-    expect(restored.partsListResult).toEqual(partsListResult)
-    expect(restored.stepCalloutResult).toEqual(createStepCalloutResult())
-    expect(restored.stepCalloutMultipliers).toEqual({ "step-callout:p1:r1": 3 })
-    expect(restored.checkedStepBagRowIds).toEqual(checkedStepBagRowIds)
-    expect(restored.partPreviewByKey.get("3005:0")?.name).toBe("Brick 1 x 1")
-    expect(restored.attemptedPartPreviewKeys.has("3005:0")).toBe(true)
-    expect(restored.checkedRowIds.has("2-0-14-3005-0")).toBe(true)
-    expect(isRestoredAnalysisCurrent(restored, "parts-list-extraction-v26")).toBe(true)
-    expect(isRestoredStepAnalysisCurrent(restored, stepCalloutDetectorVersion)).toBe(true)
+    expect(restored.manualFile.size).toBe(manual.size)
+    expect(restored.stepDetectionResult).toBeNull()
+    expect(restored.calloutMultipliers).toEqual({})
   })
 
-  it("detects restored analysis from an older extractor version", async () => {
-    const restored = {
-      partsListResult: createPartsListResult("parts-list-extraction-v25"),
-      savedExtractorVersion: "parts-list-extraction-v25",
-    }
-
-    expect(isRestoredAnalysisCurrent(restored, "parts-list-extraction-v26")).toBe(false)
-  })
-
-  it("detects restored current-version analysis without normalization data", async () => {
-    const restored = {
-      partsListResult: {
-        ...createPartsListResult("parts-list-extraction-v26"),
-        normalization: undefined,
-      },
-      savedExtractorVersion: "parts-list-extraction-v26",
-    }
-
-    expect(isRestoredAnalysisCurrent(restored, "parts-list-extraction-v26")).toBe(false)
-  })
-
-  it("quarantines structurally stale step analysis while preserving the saved detector version", async () => {
-    const manualFile = new File(["%PDF-1.7 session"], "Castle Manual.pdf", { type: "application/pdf" })
-    const sessionFile = await createBaggingSessionFile({
-      attemptedPartPreviewKeys: new Set(),
-      checkedRowIds: new Set(),
-      currentExtractorVersion: "parts-list-extraction-v26",
-      jobSnapshot: createJobSnapshot(createMetadata(manualFile)),
-      manualFile,
-      metadata: createMetadata(manualFile),
-      partPreviewByKey: new Map(),
-      partsListResult: createPartsListResult("parts-list-extraction-v26"),
-      stepCalloutResult: createStepCalloutResult(),
+  it("round-trips current step analysis when the session includes it", async () => {
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+      lastModified: 123,
     })
-    const legacySessionFile = structuredClone(sessionFile)
-    delete (legacySessionFile.analysis.stepCalloutResult?.callouts[0] as Partial<{
-      stepIndex: number
-    }>).stepIndex
+    const metadata: PdfMetadata = {
+      fileName: "manual.pdf",
+      sizeBytes: manual.size,
+      pageCount: 4,
+      title: null,
+      author: null,
+    }
+    const stepDetectionResult = emptyStepResult(4)
 
-    const restored = await restoreBaggingSessionFile(
-      new File([JSON.stringify(legacySessionFile)], "Castle-Manual.bagit.json", { type: "application/json" }),
-    )
+    const sessionBlob = await createPdfIntakeSessionFile({
+      manualFile: manual,
+      metadata,
+      stepDetectionResult,
+    })
+    const sessionFile = new File([sessionBlob], "manual.bagit-session.json", {
+      type: "application/json",
+    })
+    const restored = await restorePdfIntakeSessionFile(sessionFile)
 
-    expect(restored.savedStepCalloutDetectorVersion).toBe(stepCalloutDetectorVersion)
-    expect(restored.stepCalloutResult).toBeNull()
-    expect(restored.stepCalloutMultipliers).toEqual({})
-    expect(isRestoredStepAnalysisCurrent(restored, stepCalloutDetectorVersion)).toBe(false)
-    expect(isRestoredAnalysisCurrent(restored, "parts-list-extraction-v26")).toBe(true)
+    expect(restored.stepDetectionResult).toEqual(stepDetectionResult)
   })
 
-  it("creates filesystem-safe session download names", () => {
-    expect(getBaggingSessionDownloadName("Castle Ramp Instructions.pdf")).toBe("Castle-Ramp-Instructions.bagit.json")
-    expect(getBaggingSessionDownloadName("")).toBe("bag-it-session.bagit.json")
+  it("round-trips callout multipliers", async () => {
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+      lastModified: 123,
+    })
+    const metadata: PdfMetadata = {
+      fileName: "manual.pdf",
+      sizeBytes: manual.size,
+      pageCount: 4,
+      title: null,
+      author: null,
+    }
+
+    const sessionBlob = await createPdfIntakeSessionFile({
+      manualFile: manual,
+      metadata,
+      stepDetectionResult: emptyStepResult(4),
+      calloutMultipliers: {
+        "callout-1": 3,
+        "callout-default": 1,
+      },
+    })
+    const sessionFile = new File([sessionBlob], "manual.bagit-session.json", {
+      type: "application/json",
+    })
+    const restored = await restorePdfIntakeSessionFile(sessionFile)
+
+    expect(restored.calloutMultipliers).toEqual({
+      "callout-1": 3,
+    })
+  })
+
+  it("round-trips checked bag completion state", async () => {
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+      lastModified: 123,
+    })
+    const metadata: PdfMetadata = {
+      fileName: "manual.pdf",
+      sizeBytes: manual.size,
+      pageCount: 4,
+      title: null,
+      author: null,
+    }
+    const anchor = {
+      manualFingerprint: "manual.pdf:8:123",
+      pageNumber: 1,
+      pageRenderWidth: 100,
+      pageRenderHeight: 140,
+      calloutRegion: { x: 10, y: 20, width: 80, height: 40 },
+      partRegion: { x: 20, y: 24, width: 24, height: 14 },
+      quantityLabelRegion: { x: 12, y: 34, width: 8, height: 8 },
+      itemIndexOnCallout: 0,
+    }
+
+    const sessionBlob = await createPdfIntakeSessionFile({
+      manualFile: manual,
+      metadata,
+      stepDetectionResult: emptyStepResult(4),
+      checkedBagRowIds: ["bag-1:callout-1:part-1:x1", "bag-1:callout-1:part-1:x1"],
+      checkedBagCompletionAnchors: [anchor],
+    })
+    const sessionFile = new File([sessionBlob], "manual.bagit-session.json", {
+      type: "application/json",
+    })
+    const restored = await restorePdfIntakeSessionFile(sessionFile)
+
+    expect(restored.checkedBagRowIds).toEqual(["bag-1:callout-1:part-1:x1"])
+    expect(restored.checkedBagCompletionAnchors).toEqual([anchor])
+  })
+
+  it("strips runtime preview object urls from session exports", async () => {
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+      lastModified: 123,
+    })
+    const metadata: PdfMetadata = {
+      fileName: "manual.pdf",
+      sizeBytes: manual.size,
+      pageCount: 1,
+      title: null,
+      author: null,
+    }
+
+    const sessionBlob = await createPdfIntakeSessionFile({
+      manualFile: manual,
+      metadata,
+      stepDetectionResult: resultWithRuntimePreviewUrls(),
+    })
+    const session = JSON.parse(await readBlobAsText(sessionBlob)) as {
+      stepDetectionResult: StepCalloutDetectionResult
+    }
+    const result = session.stepDetectionResult
+    const partItem = result.callouts[0].partItems[0]
+
+    expect(result.pagePreviews[0].imageDataUrl).toBeUndefined()
+    expect(result.callouts[0].crop.imageDataUrl).toBeUndefined()
+    expect(partItem.partCrop?.imageDataUrl).toBeUndefined()
+    expect(partItem.partImage?.imageDataUrl).toBeUndefined()
+    expect(partItem.quantityLabel.crop?.imageDataUrl).toBeUndefined()
+    expect(partItem.quantityLabel.imageDataUrl).toBe("data:image/png;base64,quantity")
+  })
+
+  it("rejects malformed session files", async () => {
+    const malformed = new File(["{}"], "manual.bagit-session.json", {
+      type: "application/json",
+    })
+
+    await expect(restorePdfIntakeSessionFile(malformed)).rejects.toMatchObject({
+      message: "Session file could not be read. Choose a Bag It session file.",
+    })
+  })
+
+  it("rejects sessions with malformed saved step analysis", async () => {
+    const manual = new File(["%PDF-1.7"], "manual.pdf", {
+      type: "application/pdf",
+      lastModified: 123,
+    })
+    const metadata: PdfMetadata = {
+      fileName: "manual.pdf",
+      sizeBytes: manual.size,
+      pageCount: 4,
+      title: null,
+      author: null,
+    }
+    const sessionBlob = await createPdfIntakeSessionFile({
+      manualFile: manual,
+      metadata,
+      stepDetectionResult: emptyStepResult(4),
+    })
+    const session = JSON.parse(await readBlobAsText(sessionBlob)) as {
+      stepDetectionResult: unknown
+    }
+    session.stepDetectionResult = {
+      detectorVersion: STEP_CALLOUT_DETECTOR_VERSION,
+      status: "detected",
+    }
+    const sessionFile = new File([JSON.stringify(session)], "manual.bagit-session.json", {
+      type: "application/json",
+    })
+
+    await expect(restorePdfIntakeSessionFile(sessionFile)).rejects.toMatchObject({
+      message: "Session file could not be read. Choose a Bag It session file.",
+    })
+  })
+
+  it("restores saved step analysis with serialized part mask data", async () => {
+    const session = await createSessionJsonWithStepResult(resultWithRuntimePreviewUrls())
+    const restored = await restorePdfIntakeSessionFile(createSessionJsonFile(session))
+    const alphaMaskData =
+      restored.stepDetectionResult?.callouts[0]?.partItems[0]?.partImage?.alphaMask?.data
+
+    expect(alphaMaskData).toEqual({ 0: 255 })
+  })
+
+  it.each([
+    [
+      "page preview",
+      (result: MutableJsonRecord) => {
+        firstRecord(result.pagePreviews).pageNumber = "1"
+      },
+    ],
+    [
+      "callout region",
+      (result: MutableJsonRecord) => {
+        childRecord(firstRecord(result.callouts), "sourceRegion").width = "wide"
+      },
+    ],
+    [
+      "part item quantity",
+      (result: MutableJsonRecord) => {
+        childRecord(firstPartItem(result), "quantity").value = "2"
+      },
+    ],
+    [
+      "part image alpha mask",
+      (result: MutableJsonRecord) => {
+        childRecord(childRecord(firstPartItem(result), "partImage"), "alphaMask").data = {
+          0: 255,
+          1: "bad",
+        }
+      },
+    ],
+    [
+      "page attention item",
+      (result: MutableJsonRecord) => {
+        result.pageAttentionItems = [
+          {
+            confidence: 0.8,
+            id: "attention-1",
+            kind: "possible-step-multiplier",
+            pageNumber: 1,
+            source: "text",
+            sourceRegion: { height: "bad", width: 12, x: 2, y: 3 },
+            text: "2x",
+            value: 2,
+          },
+        ]
+      },
+    ],
+  ])("rejects saved step analysis with malformed nested %s", async (_label, mutate) => {
+    const session = await createSessionJsonWithStepResult(resultWithRuntimePreviewUrls())
+    mutate(childRecord(session, "stepDetectionResult"))
+
+    await expect(restorePdfIntakeSessionFile(createSessionJsonFile(session))).rejects.toMatchObject({
+      message: "Session file could not be read. Choose a Bag It session file.",
+    })
+  })
+
+  it("creates stable download names", () => {
+    expect(getSessionDownloadName("5. Hall Tower Instructions.pdf")).toBe(
+      "5.-Hall-Tower-Instructions.bagit-session.json",
+    )
   })
 })
 
-function createMetadata(file: File): PdfIntakeMetadata {
-  return {
-    fileName: file.name,
-    fingerprint: "test-fingerprint",
-    pageCount: 2,
-    readMode: "parser",
-    sizeBytes: file.size,
-  }
-}
-
-function createJobSnapshot(metadata: PdfIntakeMetadata): PdfIntakeJobSnapshot {
-  return {
-    errorMessage: null,
-    id: "test-job",
-    metadata,
-    pageRenderProgress: 100,
-    pageRenders: [
-      {
-        dataUrl: "data:image/png;base64,test",
-        height: 426,
-        pageNumber: 2,
-        renderKind: "canvas",
-        width: 320,
-      },
-    ],
-    progress: 100,
-    sourceBytesPurged: true,
-    startedAt: 1,
-    state: "complete",
-    updatedAt: 2,
-  }
-}
-
-function createPartsListResult(extractorVersion: string): PartsListPdfExtractionResult {
-  const row: PartsListPdfExtractionResult["rows"][number] = {
-    color: { id: "0", matchedText: "Black", name: "Black" },
-    confidence: 1,
-    parserVersion: "parts-list-v1",
-    part: { cataloguePartNumber: "3005", matchKind: "exact" },
-    partNumber: "3005",
-    partNumberKind: "numeric",
-    quantity: 14,
-    rawText: "14 x 3005 Black",
-    sourceKind: "ocr",
-    sourcePage: 2,
-    sourceTextRange: { end: 16, start: 0 },
-  }
+function emptyStepResult(pageCount: number): StepCalloutDetectionResult {
+  const scannedPageNumbers = Array.from({ length: pageCount }, (_value, index) => index + 1)
 
   return {
-    candidates: [
-      {
-        anchorCount: 1,
-        highConfidenceRowCount: 1,
-        pageNumber: 2,
-        rowCount: 1,
-        score: 1,
-        searchTier: "tail",
-      },
-    ],
-    confidence: 1,
-    debugPageTexts: [
-      {
-        pageNumber: 2,
-        rawText: "14 x 3005 Black",
-        rowSourceCount: 1,
-        sourceKind: "ocr",
-        text: "14 x 3005 Black",
-      },
-    ],
-    extractionMethod: "ocr",
-    extractorVersion: extractorVersion as PartsListPdfExtractionResult["extractorVersion"],
-    lowConfidenceRows: [],
-    nativeTextPageCount: 2,
-    ocrPageCount: 1,
-    reason: null,
-    rows: [row],
-    normalization: {
-      ambiguousQuantity: 0,
-      attentionRows: [],
-      catalogueSnapshotId: "snapshot-id",
-      coverageThreshold: 0.9,
-      resolvedQuantity: 14,
-      rows: [
-        {
-          color: row.color,
-          issues: [],
-          part: row.part,
-          partCandidates: [
-            {
-              matchKind: "exact",
-              partNumber: "3005",
-              rank: 100,
-              selected: true,
-            },
-          ],
-          partNumber: "3005",
-          quantity: 14,
-          rowId: "2-0-14-3005-0",
-          sourcePage: 2,
-          status: "resolved",
-        },
-      ],
-      status: "ready",
-      totalQuantity: 14,
-      unresolvedQuantity: 0,
+    detectorVersion: STEP_CALLOUT_DETECTOR_VERSION,
+    partColorCalibrationVersion: STEP_PART_COLOR_CALIBRATION_VERSION,
+    partExtractorVersion: STEP_PART_EXTRACTOR_VERSION,
+    pageCount,
+    pageLimit: null,
+    scannedPageNumbers,
+    skippedPageNumbers: [],
+    status: "empty",
+    pagePreviews: scannedPageNumbers.map((pageNumber) => ({
+      pageNumber,
+      width: 100,
+      height: 140,
+    })),
+    pageAttentionItems: [],
+    callouts: [],
+    qualitySummary: {
+      firstBuildStepPageNumber: null,
+      inferredCalloutBackgrounds: [],
     },
-    status: "supported",
   }
 }
 
-function createStepCalloutResult(): StepCalloutDetectionResult {
+function resultWithRuntimePreviewUrls(): StepCalloutDetectionResult {
   return {
+    ...emptyStepResult(1),
+    status: "detected",
+    pagePreviews: [
+      {
+        height: 140,
+        imageDataUrl: "blob:page-preview",
+        pageNumber: 1,
+        width: 100,
+      },
+    ],
     callouts: [
       {
-        confidence: 0.82,
+        confidence: 0.9,
         crop: {
-          dataUrl: "data:image/png;base64,step-callout",
-          height: 120,
-          width: 180,
+          imageDataUrl: "blob:callout-crop",
+          region: { height: 44, width: 84, x: 8, y: 18 },
         },
-        id: "step-callout:p1:r1",
-        indexOnPage: 1,
+        id: "callout-1",
+        inferredBackground: {
+          confidence: 0.8,
+          hex: "#f7edcf",
+          rgb: { b: 207, g: 237, r: 247 },
+        },
+        indexOnPage: 0,
         pageNumber: 1,
         partItems: [
           {
-            confidence: 0.73,
-            detectedColor: {
-              confidence: 0.82,
-              hex: "#237823",
-              name: "Green",
-              rgb: {
-                b: 35,
-                g: 120,
-                r: 35,
-              },
-            },
-            id: "step-callout:p1:r1:item1",
-            indexOnCallout: 1,
-            localImageMatch: null,
+            confidence: 0.8,
+            id: "part-1",
+            indexOnCallout: 0,
             partCrop: {
-              dataUrl: "data:image/png;base64,step-part",
-              height: 56,
-              width: 64,
+              imageDataUrl: "blob:part-crop",
+              region: { height: 14, width: 24, x: 20, y: 24 },
             },
-            partRegion: {
-              height: 56,
-              unit: "step_pixel",
-              width: 64,
-              x: 30,
-              y: 42,
+            partImage: {
+              alphaMask: {
+                data: new Uint8ClampedArray([255]),
+                height: 1,
+                width: 1,
+              },
+              imageDataUrl: "blob:part-image",
+              region: { height: 14, width: 24, x: 20, y: 24 },
+            },
+            partRegion: { height: 14, width: 24, x: 20, y: 24 },
+            quantity: {
+              confidence: 0.9,
+              text: "2x",
+              value: 2,
             },
             quantityLabel: {
               crop: {
-                dataUrl: "data:image/png;base64,step-quantity",
-                height: 14,
-                width: 28,
+                imageDataUrl: "blob:quantity-crop",
+                region: { height: 8, width: 8, x: 12, y: 34 },
               },
-              region: {
-                height: 14,
-                unit: "step_pixel",
-                width: 28,
-                x: 48,
-                y: 104,
-              },
+              imageDataUrl: "data:image/png;base64,quantity",
+              region: { height: 8, width: 8, x: 12, y: 34 },
             },
-            quantity: {
-              confidence: 0.86,
-              text: "1",
-              value: 1,
-            },
-            sourceRegion: {
-              height: 88,
-              unit: "step_pixel",
-              width: 80,
-              x: 24,
-              y: 36,
-            },
+            sourceRegion: { height: 16, width: 40, x: 12, y: 24 },
           },
         ],
-        sourceImage: {
-          height: 900,
-          unit: "step_pixel",
-          width: 700,
-        },
-        sourceRegion: {
-          height: 120,
-          unit: "step_pixel",
-          width: 180,
-          x: 20,
-          y: 30,
-        },
+        sourceRegion: { height: 40, width: 80, x: 10, y: 20 },
         stepIndex: 1,
       },
     ],
-    detectorVersion: stepCalloutDetectorVersion,
-    pageCount: 2,
-    pageLimit: null,
-    scannedPageNumbers: [1],
-    skippedBomPageNumbers: [2],
-    status: "detected",
   }
+}
+
+type MutableJsonRecord = Record<string, unknown>
+
+async function createSessionJsonWithStepResult(
+  stepDetectionResult: StepCalloutDetectionResult,
+): Promise<MutableJsonRecord> {
+  const manual = new File(["%PDF-1.7"], "manual.pdf", {
+    type: "application/pdf",
+    lastModified: 123,
+  })
+  const metadata: PdfMetadata = {
+    fileName: "manual.pdf",
+    sizeBytes: manual.size,
+    pageCount: stepDetectionResult.pageCount,
+    title: null,
+    author: null,
+  }
+  const sessionBlob = await createPdfIntakeSessionFile({
+    manualFile: manual,
+    metadata,
+    stepDetectionResult,
+  })
+
+  return JSON.parse(await readBlobAsText(sessionBlob)) as MutableJsonRecord
+}
+
+function createSessionJsonFile(session: MutableJsonRecord): File {
+  return new File([JSON.stringify(session)], "manual.bagit-session.json", {
+    type: "application/json",
+  })
+}
+
+function firstPartItem(result: MutableJsonRecord): MutableJsonRecord {
+  return firstRecord(firstRecord(result.callouts).partItems)
+}
+
+function firstRecord(value: unknown): MutableJsonRecord {
+  return (value as MutableJsonRecord[])[0] ?? {}
+}
+
+function childRecord(parent: MutableJsonRecord, key: string): MutableJsonRecord {
+  return parent[key] as MutableJsonRecord
+}
+
+function readBlobAsText(blob: Blob): Promise<string> {
+  if (typeof blob.text === "function") {
+    return blob.text()
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result)
+        return
+      }
+
+      reject(new Error("Expected text blob result."))
+    })
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Blob read failed.")))
+    reader.readAsText(blob)
+  })
 }

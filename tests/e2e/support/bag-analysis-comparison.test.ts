@@ -1,0 +1,604 @@
+import { describe, expect, it } from "vitest"
+import {
+  ALPHA_MASK_PASS_CRITERIA,
+  CALLOUT_REGION_TOLERANCE_PX,
+  compareAlphaMaskPixels,
+  alphaMaskComparisonPasses,
+  compareAlphaMasks,
+  matchBagAnalysisStructure,
+  PART_REGION_TOLERANCE_PX,
+  regionsMutuallyWithinTolerance,
+  type DecodedAlphaMask,
+} from "./bag-analysis-comparison"
+
+describe("bag-analysis comparator primitives", () => {
+  it("fails a missing callout edge beyond the 2px tolerance", () => {
+    expect(
+      regionsMutuallyWithinTolerance(
+        { x: 10, y: 10, width: 100, height: 80 },
+        { x: 13, y: 10, width: 97, height: 80 },
+        2,
+      ),
+    ).toBe(false)
+  })
+
+  it("fails neighboring-content crop growth beyond the 2px tolerance", () => {
+    expect(
+      regionsMutuallyWithinTolerance(
+        { x: 10, y: 10, width: 100, height: 80 },
+        { x: 6, y: 10, width: 104, height: 80 },
+        2,
+      ),
+    ).toBe(false)
+  })
+
+  it("passes configured callout region drift", () => {
+    expect(
+      regionsMutuallyWithinTolerance(
+        { x: 10, y: 10, width: 100, height: 80 },
+        { x: 2, y: 18, width: 116, height: 64 },
+        CALLOUT_REGION_TOLERANCE_PX,
+      ),
+    ).toBe(true)
+  })
+
+  it("detects wrong quantity multisets", () => {
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+              actualPart("3x", 3, { x: 35, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 1,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 1,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [
+              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+              expectedPart(1, "2x", 2, { x: 35, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toContain("callout 0: quantity multiset mismatch: expected 1x::1 x1, 2x::2 x1, got 1x::1 x1, 3x::3 x1")
+  })
+
+  it("detects color drift on matched part rows", () => {
+    const expected = expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 })
+    expected.color.manualClassTrusted = true
+
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
+                name: "Dark Bluish Gray",
+                family: "gray",
+                status: "review",
+                swatchHex: "#676963",
+                manualClassId: "manual-color-002",
+                manualClassTrusted: true,
+                rawManualClassId: "manual-color-002",
+              }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [expected],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toContain(
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/trusted/manual-color-001, got Dark Bluish Gray/gray/review/manual-color-002/trusted/manual-color-002",
+    )
+  })
+
+  it("tolerates untrusted manual color class renumbering", () => {
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
+                name: "Green",
+                family: "green",
+                status: "review",
+                swatchHex: "#165025",
+                manualClassId: "manual-color-014",
+                manualClassTrusted: false,
+                rawManualClassId: "manual-color-014",
+              }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [
+              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toEqual([])
+  })
+
+  it("ignores swatch and advisory-name drift for untrusted manual color classes", () => {
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
+                name: "Dark Azure",
+                family: "blue",
+                status: "review",
+                swatchHex: "#195328",
+                manualClassId: "manual-color-018",
+                manualClassTrusted: false,
+                rawManualClassId: "manual-color-018",
+              }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [
+              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toEqual([])
+  })
+
+  it("fails when the current output has no detected color class", () => {
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              {
+                quantity: { text: "1x", value: 1 },
+                partImage: {
+                  region: { x: 20, y: 20, width: 8, height: 8 },
+                  alphaMask: {
+                    width: 1,
+                    height: 1,
+                    data: { 0: 255 } as Record<string, number>,
+                  },
+                },
+                quantityLabel: {
+                  region: { x: 1, y: 1, width: 3, height: 2 },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [
+              expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 }),
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toContain(
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/untrusted/manual-color-001, got missing/missing/missing/no-manual-class/untrusted/no-raw-class",
+    )
+  })
+
+  it("requires trusted manual color class identity", () => {
+    const expected = expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 })
+    expected.color.manualClassTrusted = true
+
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [
+              actualPart("1x", 1, { x: 20, y: 20, width: 8, height: 8 }, {
+                name: "Green",
+                family: "green",
+                status: "review",
+                swatchHex: "#165025",
+                manualClassId: "manual-color-002",
+                manualClassTrusted: true,
+                rawManualClassId: "manual-color-002",
+              }),
+            ],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [expected],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toContain(
+      "callout 0 row 0: color class mismatch: expected Green/green/review/manual-color-001/trusted/manual-color-001, got Green/green/review/manual-color-002/trusted/manual-color-002",
+    )
+  })
+
+  it("fails a wrong part crop with the same quantity", () => {
+    const expectedMask = squareMask(8, 8, 1, 1, 5, 5)
+    const actualMask = squareMask(8, 8, 1, 1, 5, 5)
+    const comparison = compareAlphaMasks({
+      expectedMask,
+      actualMask,
+      expectedRegion: { x: 20, y: 20, width: 8, height: 8 },
+      actualRegion: { x: 40, y: 40, width: 8, height: 8 },
+      tolerance: 4,
+    })
+
+    expect(comparison.passed).toBe(false)
+    expect(comparison.expectedCoverage).toBe(0)
+  })
+
+  it("tolerates part crop region drift when alpha masks remain equivalent", () => {
+    const expected = expectedPart(0, "1x", 1, { x: 20, y: 20, width: 8, height: 8 })
+    const actual = actualPart("1x", 1, { x: 20, y: 26, width: 8, height: 8 })
+
+    expected.alphaMask = encodeMask(squareMask(8, 8, 1, 6, 5, 1))
+    actual.partImage.alphaMask = {
+      data: Object.fromEntries([...squareMask(8, 8, 1, 0, 5, 1).data].map((value, index) => [index, value])),
+      height: 8,
+      width: 8,
+    }
+
+    const match = matchBagAnalysisStructure({
+      actualResult: {
+        callouts: [
+          {
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+            partItems: [actual],
+          },
+        ],
+      },
+      expectedCallouts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            crop: { region: { x: 10, y: 10, width: 50, height: 40 } },
+          },
+        ],
+      },
+      expectedParts: {
+        schemaVersion: 2,
+        caseId: "test",
+        callouts: [
+          {
+            ordinal: 0,
+            pageNumber: 1,
+            parts: [expected],
+          },
+        ],
+      },
+    })
+
+    expect(match.failures).toEqual([])
+  })
+
+  it("passes small part crop and alpha drift when masked content remains equivalent", () => {
+    const expectedMask = squareMask(8, 8, 1, 1, 5, 5)
+    const actualMask = squareMask(8, 8, 1, 1, 5, 5)
+    const comparison = compareAlphaMasks({
+      expectedMask,
+      actualMask,
+      expectedRegion: { x: 20, y: 20, width: 8, height: 8 },
+      actualRegion: { x: 22, y: 21, width: 8, height: 8 },
+      tolerance: PART_REGION_TOLERANCE_PX,
+    })
+
+    expect(comparison.passed).toBe(true)
+    expect(comparison.expectedCoverage).toBe(1)
+  })
+
+  it("uses centralized alpha mask pass criteria at threshold edges", () => {
+    expect(ALPHA_MASK_PASS_CRITERIA).toEqual({
+      maxActualExtraOpaquePixels: 12,
+      maxActualExtraOpaquePixelsAtNearFullCoverage: 96,
+      maxActualExtraOpaqueRatioAtFullCoverage: 0.035,
+      maxActualExtraOpaqueRatioAtNearFullCoverage: 0.08,
+      minExpectedCoverage: 0.95,
+      minExpectedCoverageForExtraRatio: 0.995,
+      minExpectedCoverageForNearFullExtraRatio: 0.99,
+    })
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 12,
+      actualExtraRatio: 0.5,
+      expectedCoverage: 0.95,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 13,
+      actualExtraRatio: 0.5,
+      expectedCoverage: 1,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 40,
+      actualExtraRatio: 0.031,
+      expectedCoverage: 1,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 40,
+      actualExtraRatio: 0.031,
+      expectedCoverage: 0.989,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 81,
+      actualExtraRatio: 0.076,
+      expectedCoverage: 0.991,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(true)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 97,
+      actualExtraRatio: 0.076,
+      expectedCoverage: 0.991,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 81,
+      actualExtraRatio: 0.081,
+      expectedCoverage: 0.991,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+    expect(alphaMaskComparisonPasses({
+      actualExtraOpaquePixels: 0,
+      actualExtraRatio: 0,
+      expectedCoverage: 0.9499,
+    }, ALPHA_MASK_PASS_CRITERIA)).toBe(false)
+  })
+
+  it("runs the shared alpha mask comparator from serialized source", () => {
+    const comparisonInput = {
+      actualMask: squareMask(8, 8, 1, 1, 5, 5),
+      actualRegion: { x: 22, y: 21, width: 8, height: 8 },
+      expectedMask: squareMask(8, 8, 1, 1, 5, 5),
+      expectedRegion: { x: 20, y: 20, width: 8, height: 8 },
+      passCriteria: ALPHA_MASK_PASS_CRITERIA,
+      tolerance: 4,
+    }
+    const restoredComparator = restoreComparatorForTest(
+      compareAlphaMaskPixels.toString(),
+      alphaMaskComparisonPasses.toString(),
+    )
+
+    expect(restoredComparator(comparisonInput)).toEqual(compareAlphaMaskPixels(comparisonInput))
+  })
+})
+
+function restoreComparatorForTest(
+  compareSource: string,
+  passesSource: string,
+): typeof compareAlphaMaskPixels {
+  const passes = new Function(
+    `"use strict"; return (${passesSource});`,
+  )() as typeof alphaMaskComparisonPasses
+
+  return new Function(
+    "alphaMaskComparisonPasses",
+    `"use strict"; return (${compareSource});`,
+  )(passes) as typeof compareAlphaMaskPixels
+}
+
+function encodeMask(mask: DecodedAlphaMask) {
+  return {
+    width: mask.width,
+    height: mask.height,
+    encoding: "uint8-base64" as const,
+    dataBase64: Buffer.from(mask.data).toString("base64"),
+  }
+}
+
+function squareMask(
+  width: number,
+  height: number,
+  startX: number,
+  startY: number,
+  maskWidth: number,
+  maskHeight: number,
+): DecodedAlphaMask {
+  const data = new Uint8Array(width * height)
+
+  for (let y = startY; y < startY + maskHeight; y += 1) {
+    for (let x = startX; x < startX + maskWidth; x += 1) {
+      data[y * width + x] = 255
+    }
+  }
+
+  return {
+    data,
+    height,
+    width,
+  }
+}
+
+function expectedPart(
+  ordinal: number,
+  text: string,
+  value: number,
+  partRegion: { height: number; width: number; x: number; y: number },
+) {
+  return {
+    ordinal,
+    quantity: { text, value },
+    color: {
+      name: "Green",
+      family: "green",
+      status: "review",
+      swatchHex: "#165025",
+      manualClassId: "manual-color-001",
+      manualClassTrusted: false,
+      rawManualClassId: "manual-color-001",
+    },
+    partRegion,
+    quantityLabelRegion: { x: 1, y: 1, width: 3, height: 2 },
+    alphaMask: {
+      width: 1,
+      height: 1,
+      encoding: "uint8-base64" as const,
+      dataBase64: "/w==",
+    },
+  }
+}
+
+function actualPart(
+  text: string,
+  value: number,
+  region: { height: number; width: number; x: number; y: number },
+  detectedColor = {
+    name: "Green",
+    family: "green",
+    status: "review",
+    swatchHex: "#165025",
+    manualClassId: "manual-color-001",
+    manualClassTrusted: false,
+    rawManualClassId: "manual-color-001",
+  },
+) {
+  return {
+    quantity: { text, value },
+    detectedColor,
+    partImage: {
+      region,
+      alphaMask: {
+        width: 1,
+        height: 1,
+        data: { 0: 255 } as Record<string, number>,
+      },
+    },
+    quantityLabel: {
+      region: { x: 1, y: 1, width: 3, height: 2 },
+    },
+  }
+}

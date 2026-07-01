@@ -1,0 +1,1034 @@
+{
+  "evidenceRules": [
+    {
+      "conditions": [
+        {
+          "featureName": "hasLuma",
+          "operator": "gt",
+          "threshold": -1
+        }
+      ]
+    }
+  ],
+  "featureNames": [
+    "alignedAlpha8Distance",
+    "alignedAlpha8Overlap",
+    "alignedEdge8Distance",
+    "alignedLuma8Distance",
+    "alignmentScaleDelta",
+    "alignmentShiftDistance",
+    "alphaChamferDistance",
+    "alphaChamferShiftDistance",
+    "alphaChamferShiftRatio",
+    "alpha32Distance",
+    "alpha32ShiftDistance",
+    "alpha32ShiftRatio",
+    "alphaDistance",
+    "alphaEdgeDistance",
+    "alphaEdge32Distance",
+    "alphaOrientationDistance",
+    "alphaShiftDistance",
+    "alphaShiftRatio",
+    "baseMatched",
+    "baseProbability",
+    "alphaCorrelation",
+    "areaRatio",
+    "aspectRatio",
+    "centerDistance",
+    "coverageDelta",
+    "hasLuma",
+    "leftProfileDistance",
+    "lowerProfileDistance",
+    "lowerSegmentDelta",
+    "lumaCorrelation",
+    "lumaDistance",
+    "luma32Distance",
+    "luma32ShiftDistance",
+    "luma32ShiftRatio",
+    "lumaEdgeCorrelation",
+    "lumaEdgeDistance",
+    "lumaEdgeShiftDistance",
+    "lumaOrientationDistance",
+    "lumaShiftDistance",
+    "lumaShiftRatio",
+    "nearConfidence",
+    "profileMaxDistance",
+    "projectionDistance",
+    "rightProfileDistance",
+    "silhouetteDistance",
+    "silhouetteShiftDistance",
+    "silhouetteShiftRatio",
+    "tightAlpha32Distance",
+    "tightAlpha32ShiftDistance",
+    "tightAlpha32ShiftRatio",
+    "tightAlphaChamferDistance",
+    "tightAlphaChamferShiftDistance",
+    "tightAlphaChamferShiftRatio",
+    "tightAlphaEdge32Distance",
+    "tightLuma32Distance",
+    "tightLuma32ShiftDistance",
+    "tightLuma32ShiftRatio",
+    "topPeakDelta",
+    "topProfileDistance",
+    "wideAlpha32ShiftDistance",
+    "wideAlpha32ShiftRatio",
+    "wideLuma32ShiftDistance",
+    "wideLuma32ShiftRatio",
+    "wideSilhouetteShiftDistance",
+    "wideSilhouetteShiftRatio"
+  ],
+  "groupingStrategy": "connected-components",
+  "intercept": 0,
+  "kind": "decision-tree",
+  "metadata": {
+    "calibrationSweep": "package-tree-focused-union-sweep-v1",
+    "correctionBurden": 0.004299226139294927,
+    "falseGroups": 5,
+    "falsePositivePairs": 11,
+    "groupedRows": 1163,
+    "lane": "suggested",
+    "matcherVersion": "0.1.0-alpha.15",
+    "matchedPositivePairs": 1154,
+    "model": "weighted-manifest-decision-tree",
+    "positivePairs": 1322,
+    "recall": 0.8729198184568835,
+    "runtimeGroupReplay": "1154/1322 expected active pairs, 5 false groups, 5/1163 wrong active grouped rows",
+    "strategyName": "score-threshold",
+    "treeMaxDepth": 10,
+    "treeMinLeafSize": 8,
+    "wrongRowMemberships": 5
+  },
+  "normalization": {},
+  "threshold": 0.998781770862174,
+  "tree": {
+    "probability": 0.49999999999965816,
+    "positiveCount": 1320,
+    "totalCount": 33150,
+    "featureName": "baseProbability",
+    "left": {
+      "probability": 0.03799324124592137,
+      "positiveCount": 51,
+      "totalCount": 31190,
+      "featureName": "lumaCorrelation",
+      "left": {
+        "probability": 0.018971102296722005,
+        "positiveCount": 24,
+        "totalCount": 29951,
+        "featureName": "luma32Distance",
+        "left": {
+          "probability": 0.008296412603034199,
+          "positiveCount": 10,
+          "totalCount": 28834,
+          "featureName": "tightLuma32ShiftRatio",
+          "left": {
+            "probability": 0.5865118850193466,
+            "positiveCount": 3,
+            "totalCount": 54,
+            "featureName": "alphaChamferShiftRatio",
+            "left": {
+              "probability": 0.935351160740523,
+              "positiveCount": 3,
+              "totalCount": 8
+            },
+            "right": {
+              "probability": 0,
+              "positiveCount": 0,
+              "totalCount": 46
+            },
+            "threshold": 0.6821844380915018
+          },
+          "right": {
+            "probability": 0.005832238528892529,
+            "positiveCount": 7,
+            "totalCount": 28780,
+            "featureName": "alphaCorrelation",
+            "left": {
+              "probability": 0.003353254806276684,
+              "positiveCount": 4,
+              "totalCount": 28672,
+              "featureName": "tightAlphaChamferDistance",
+              "left": {
+                "probability": 0.649724433557869,
+                "positiveCount": 1,
+                "totalCount": 14
+              },
+              "right": {
+                "probability": 0.00251819022581244,
+                "positiveCount": 3,
+                "totalCount": 28658,
+                "featureName": "wideLuma32ShiftDistance",
+                "left": {
+                  "probability": 0.6165020337013365,
+                  "positiveCount": 1,
+                  "totalCount": 16,
+                  "featureName": "alignedAlpha8Distance",
+                  "left": {
+                    "probability": 0.775018261504748,
+                    "positiveCount": 1,
+                    "totalCount": 8
+                  },
+                  "right": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 8
+                  },
+                  "threshold": 19.970703125
+                },
+                "right": {
+                  "probability": 0.0016810823571899178,
+                  "positiveCount": 2,
+                  "totalCount": 28642,
+                  "featureName": "silhouetteShiftRatio",
+                  "left": {
+                    "probability": 0.057603561539714826,
+                    "positiveCount": 2,
+                    "totalCount": 791,
+                    "featureName": "alphaChamferDistance",
+                    "left": {
+                      "probability": 0.437525773195876,
+                      "positiveCount": 2,
+                      "totalCount": 64,
+                      "featureName": "coverageDelta",
+                      "left": {
+                        "probability": 0,
+                        "positiveCount": 0,
+                        "totalCount": 56
+                      },
+                      "right": {
+                        "probability": 0.8893545683151718,
+                        "positiveCount": 2,
+                        "totalCount": 8
+                      },
+                      "threshold": 0.03339460784313726
+                    },
+                    "right": {
+                      "probability": 0,
+                      "positiveCount": 0,
+                      "totalCount": 727
+                    },
+                    "threshold": 13.310907956258099
+                  },
+                  "right": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 27851
+                  },
+                  "threshold": 0.88416928721174
+                },
+                "threshold": 7.01416015625
+              },
+              "threshold": 6.597307356764894
+            },
+            "right": {
+              "probability": 0.40792003075740063,
+              "positiveCount": 3,
+              "totalCount": 108,
+              "featureName": "tightAlphaEdge32Distance",
+              "left": {
+                "probability": 0,
+                "positiveCount": 0,
+                "totalCount": 100
+              },
+              "right": {
+                "probability": 0.9353511607405232,
+                "positiveCount": 3,
+                "totalCount": 8
+              },
+              "threshold": 45.1748046875
+            },
+            "threshold": 0.9542746966247018
+          },
+          "threshold": 0.7700833083203955
+        },
+        "right": {
+          "probability": 0.23434196825797898,
+          "positiveCount": 14,
+          "totalCount": 1117,
+          "featureName": "areaRatio",
+          "left": {
+            "probability": 0.4895524355678577,
+            "positiveCount": 14,
+            "totalCount": 366,
+            "featureName": "aspectRatio",
+            "left": {
+              "probability": 0.6867313915857581,
+              "positiveCount": 14,
+              "totalCount": 168,
+              "featureName": "alphaChamferDistance",
+              "left": {
+                "probability": 0.778593143935422,
+                "positiveCount": 14,
+                "totalCount": 110,
+                "featureName": "tightAlpha32ShiftDistance",
+                "left": {
+                  "probability": 0.4483730102831381,
+                  "positiveCount": 3,
+                  "totalCount": 92,
+                  "featureName": "alignedLuma8Distance",
+                  "left": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 82
+                  },
+                  "right": {
+                    "probability": 0.9117731309080492,
+                    "positiveCount": 3,
+                    "totalCount": 10
+                  },
+                  "threshold": 20.041015625
+                },
+                "right": {
+                  "probability": 0.9742883379247016,
+                  "positiveCount": 11,
+                  "totalCount": 18,
+                  "featureName": "tightLuma32ShiftDistance",
+                  "left": {
+                    "probability": 1,
+                    "positiveCount": 8,
+                    "totalCount": 8
+                  },
+                  "right": {
+                    "probability": 0.9117731309080492,
+                    "positiveCount": 3,
+                    "totalCount": 10
+                  },
+                  "threshold": 39.451171875
+                },
+                "threshold": 63.03466796875
+              },
+              "right": {
+                "probability": 0,
+                "positiveCount": 0,
+                "totalCount": 58
+              },
+              "threshold": 29.386805916356728
+            },
+            "right": {
+              "probability": 0,
+              "positiveCount": 0,
+              "totalCount": 198
+            },
+            "threshold": 1.2001705029838021
+          },
+          "right": {
+            "probability": 0,
+            "positiveCount": 0,
+            "totalCount": 751
+          },
+          "threshold": 1.363869463869464
+        },
+        "threshold": 19.92041015625
+      },
+      "right": {
+        "probability": 0.3494602012808839,
+        "positiveCount": 27,
+        "totalCount": 1239,
+        "featureName": "tightAlphaChamferDistance",
+        "left": {
+          "probability": 0.938819365440526,
+          "positiveCount": 7,
+          "totalCount": 18,
+          "featureName": "rightProfileDistance",
+          "left": {
+            "probability": 0,
+            "positiveCount": 0,
+            "totalCount": 10
+          },
+          "right": {
+            "probability": 0.9941105608352296,
+            "positiveCount": 7,
+            "totalCount": 8
+          },
+          "threshold": 0.03958333333333333
+        },
+        "right": {
+          "probability": 0.2865089652192748,
+          "positiveCount": 20,
+          "totalCount": 1221,
+          "featureName": "areaRatio",
+          "left": {
+            "probability": 0.5022798056559135,
+            "positiveCount": 19,
+            "totalCount": 473,
+            "featureName": "lowerProfileDistance",
+            "left": {
+              "probability": 0.7750182615047475,
+              "positiveCount": 10,
+              "totalCount": 80,
+              "featureName": "tightAlphaEdge32Distance",
+              "left": {
+                "probability": 0,
+                "positiveCount": 0,
+                "totalCount": 33
+              },
+              "right": {
+                "probability": 0.8669717274064389,
+                "positiveCount": 10,
+                "totalCount": 47,
+                "featureName": "tightLuma32Distance",
+                "left": {
+                  "probability": 0.9269613838895686,
+                  "positiveCount": 10,
+                  "totalCount": 29,
+                  "featureName": "alignedEdge8Distance",
+                  "left": {
+                    "probability": 0.956372814133766,
+                    "positiveCount": 10,
+                    "totalCount": 21,
+                    "featureName": "leftProfileDistance",
+                    "left": {
+                      "probability": 0.775018261504748,
+                      "positiveCount": 1,
+                      "totalCount": 8
+                    },
+                    "right": {
+                      "probability": 0.9819023136246787,
+                      "positiveCount": 9,
+                      "totalCount": 13
+                    },
+                    "threshold": 0.04375
+                  },
+                  "right": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 8
+                  },
+                  "threshold": 12.66015625
+                },
+                "right": {
+                  "probability": 0,
+                  "positiveCount": 0,
+                  "totalCount": 18
+                },
+                "threshold": 28.97802734375
+              },
+              "threshold": 34.49755859375
+            },
+            "right": {
+              "probability": 0.3610890527509928,
+              "positiveCount": 9,
+              "totalCount": 393,
+              "featureName": "tightAlphaEdge32Distance",
+              "left": {
+                "probability": 0.2477929842589547,
+                "positiveCount": 5,
+                "totalCount": 371,
+                "featureName": "aspectRatio",
+                "left": {
+                  "probability": 0.6125866050808307,
+                  "positiveCount": 4,
+                  "totalCount": 65,
+                  "featureName": "lumaCorrelation",
+                  "left": {
+                    "probability": 0.7876763177431323,
+                    "positiveCount": 4,
+                    "totalCount": 30,
+                    "featureName": "alpha32ShiftDistance",
+                    "left": {
+                      "probability": 0.8812292358803985,
+                      "positiveCount": 4,
+                      "totalCount": 17,
+                      "featureName": "coverageDelta",
+                      "left": {
+                        "probability": 0,
+                        "positiveCount": 0,
+                        "totalCount": 9
+                      },
+                      "right": {
+                        "probability": 0.9601809954751132,
+                        "positiveCount": 4,
+                        "totalCount": 8
+                      },
+                      "threshold": 0.01626072303921569
+                    },
+                    "right": {
+                      "probability": 0,
+                      "positiveCount": 0,
+                      "totalCount": 13
+                    },
+                    "threshold": 13.01171875
+                  },
+                  "right": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 35
+                  },
+                  "threshold": 0.5120708817285893
+                },
+                "right": {
+                  "probability": 0.07326842068917863,
+                  "positiveCount": 1,
+                  "totalCount": 306,
+                  "featureName": "alignedLuma8Distance",
+                  "left": {
+                    "probability": 0.775018261504748,
+                    "positiveCount": 1,
+                    "totalCount": 8
+                  },
+                  "right": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 298
+                  },
+                  "threshold": 4.533203125
+                },
+                "threshold": 1.0280448717948718
+              },
+              "right": {
+                "probability": 0.8427323272438441,
+                "positiveCount": 4,
+                "totalCount": 22,
+                "featureName": "luma32ShiftRatio",
+                "left": {
+                  "probability": 0.9507168458781362,
+                  "positiveCount": 4,
+                  "totalCount": 9
+                },
+                "right": {
+                  "probability": 0,
+                  "positiveCount": 0,
+                  "totalCount": 13
+                },
+                "threshold": 0.9087630619479754
+              },
+              "threshold": 52.91748046875
+            },
+            "threshold": 0.020833333333333346
+          },
+          "right": {
+            "probability": 0.031271183942939845,
+            "positiveCount": 1,
+            "totalCount": 748,
+            "featureName": "aspectRatio",
+            "left": {
+              "probability": 0.5011809163911196,
+              "positiveCount": 1,
+              "totalCount": 25,
+              "featureName": "alignedAlpha8Overlap",
+              "left": {
+                "probability": 0.775018261504748,
+                "positiveCount": 1,
+                "totalCount": 8
+              },
+              "right": {
+                "probability": 0,
+                "positiveCount": 0,
+                "totalCount": 17
+              },
+              "threshold": 0.7749781610150395
+            },
+            "right": {
+              "probability": 0,
+              "positiveCount": 0,
+              "totalCount": 723
+            },
+            "threshold": 1.0047657952069717
+          },
+          "threshold": 1.26884800503801
+        },
+        "threshold": 5.004594202403834
+      },
+      "threshold": 0.42369483176307793
+    },
+    "right": {
+      "probability": 0.9779171172846095,
+      "positiveCount": 1269,
+      "totalCount": 1960,
+      "featureName": "baseProbability",
+      "left": {
+        "probability": 0.611690097121827,
+        "positiveCount": 26,
+        "totalCount": 424,
+        "featureName": "centerDistance",
+        "left": {
+          "probability": 0.17650973215771082,
+          "positiveCount": 2,
+          "totalCount": 227,
+          "featureName": "lumaCorrelation",
+          "left": {
+            "probability": 0,
+            "positiveCount": 0,
+            "totalCount": 214
+          },
+          "right": {
+            "probability": 0.8142747505755948,
+            "positiveCount": 2,
+            "totalCount": 13
+          },
+          "threshold": 0.46390110677723184
+        },
+        "right": {
+          "probability": 0.7698633450235844,
+          "positiveCount": 24,
+          "totalCount": 197,
+          "featureName": "lumaEdgeDistance",
+          "left": {
+            "probability": 0.8427323272438453,
+            "positiveCount": 24,
+            "totalCount": 132,
+            "featureName": "lumaCorrelation",
+            "left": {
+              "probability": 0,
+              "positiveCount": 0,
+              "totalCount": 32
+            },
+            "right": {
+              "probability": 0.8839211330186064,
+              "positiveCount": 24,
+              "totalCount": 100,
+              "featureName": "alphaShiftDistance",
+              "left": {
+                "probability": 0,
+                "positiveCount": 0,
+                "totalCount": 22
+              },
+              "right": {
+                "probability": 0.9146551724137935,
+                "positiveCount": 24,
+                "totalCount": 78,
+                "featureName": "lumaOrientationDistance",
+                "left": {
+                  "probability": 0.9353511607405234,
+                  "positiveCount": 24,
+                  "totalCount": 64,
+                  "featureName": "alphaOrientationDistance",
+                  "left": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 8
+                  },
+                  "right": {
+                    "probability": 0.947603453408753,
+                    "positiveCount": 24,
+                    "totalCount": 56,
+                    "featureName": "silhouetteShiftRatio",
+                    "left": {
+                      "probability": 0.6326774001192607,
+                      "positiveCount": 1,
+                      "totalCount": 15
+                    },
+                    "right": {
+                      "probability": 0.9685651915062509,
+                      "positiveCount": 23,
+                      "totalCount": 41,
+                      "featureName": "tightAlpha32ShiftDistance",
+                      "left": {
+                        "probability": 0.9796860572483839,
+                        "positiveCount": 22,
+                        "totalCount": 33
+                      },
+                      "right": {
+                        "probability": 0.775018261504748,
+                        "positiveCount": 1,
+                        "totalCount": 8
+                      },
+                      "threshold": 39.62060546875
+                    },
+                    "threshold": 0.882113595076558
+                  },
+                  "threshold": 0.016948488695670415
+                },
+                "right": {
+                  "probability": 0,
+                  "positiveCount": 0,
+                  "totalCount": 14
+                },
+                "threshold": 0.040086250720963494
+              },
+              "threshold": 10.90234375
+            },
+            "threshold": 0.07285476683489175
+          },
+          "right": {
+            "probability": 0,
+            "positiveCount": 0,
+            "totalCount": 65
+          },
+          "threshold": 18.9453125
+        },
+        "threshold": 0.03409603704417316
+      },
+      "right": {
+        "probability": 0.9903192499896672,
+        "positiveCount": 1243,
+        "totalCount": 1536,
+        "featureName": "baseProbability",
+        "left": {
+          "probability": 0.8662428127225684,
+          "positiveCount": 47,
+          "totalCount": 222,
+          "featureName": "silhouetteDistance",
+          "left": {
+            "probability": 0,
+            "positiveCount": 0,
+            "totalCount": 31
+          },
+          "right": {
+            "probability": 0.8872658043164968,
+            "positiveCount": 47,
+            "totalCount": 191,
+            "featureName": "tightAlphaChamferShiftDistance",
+            "left": {
+              "probability": 0.9006628497119236,
+              "positiveCount": 47,
+              "totalCount": 172,
+              "featureName": "profileMaxDistance",
+              "left": {
+                "probability": 0,
+                "positiveCount": 0,
+                "totalCount": 14
+              },
+              "right": {
+                "probability": 0.9107961498420132,
+                "positiveCount": 47,
+                "totalCount": 158,
+                "featureName": "alpha32ShiftDistance",
+                "left": {
+                  "probability": 0,
+                  "positiveCount": 0,
+                  "totalCount": 10
+                },
+                "right": {
+                  "probability": 0.9181749553497462,
+                  "positiveCount": 47,
+                  "totalCount": 148,
+                  "featureName": "rightProfileDistance",
+                  "left": {
+                    "probability": 0.9256742960034168,
+                    "positiveCount": 47,
+                    "totalCount": 138,
+                    "featureName": "wideLuma32ShiftDistance",
+                    "left": {
+                      "probability": 0.9493800332353326,
+                      "positiveCount": 42,
+                      "totalCount": 96,
+                      "featureName": "tightLuma32ShiftDistance",
+                      "left": {
+                        "probability": 0.9583195646905919,
+                        "positiveCount": 41,
+                        "totalCount": 84
+                      },
+                      "right": {
+                        "probability": 0.6867313915857606,
+                        "positiveCount": 1,
+                        "totalCount": 12
+                      },
+                      "threshold": 26.84716796875
+                    },
+                    "right": {
+                      "probability": 0.7651810183181885,
+                      "positiveCount": 5,
+                      "totalCount": 42,
+                      "featureName": "wideLuma32ShiftDistance",
+                      "left": {
+                        "probability": 0,
+                        "positiveCount": 0,
+                        "totalCount": 29
+                      },
+                      "right": {
+                        "probability": 0.9377762064698604,
+                        "positiveCount": 5,
+                        "totalCount": 13
+                      },
+                      "threshold": 12.50634765625
+                    },
+                    "threshold": 10.48193359375
+                  },
+                  "right": {
+                    "probability": 0,
+                    "positiveCount": 0,
+                    "totalCount": 10
+                  },
+                  "threshold": 0.09791666666666668
+                },
+                "threshold": 7.5791015625
+              },
+              "threshold": 0.027083333333333334
+            },
+            "right": {
+              "probability": 0,
+              "positiveCount": 0,
+              "totalCount": 19
+            },
+            "threshold": 21.267983633471708
+          },
+          "threshold": 8.069915771484375
+        },
+        "right": {
+          "probability": 0.9959251201587227,
+          "positiveCount": 1196,
+          "totalCount": 1314,
+          "featureName": "baseProbability",
+          "left": {
+            "probability": 0.9451273828612159,
+            "positiveCount": 30,
+            "totalCount": 72,
+            "featureName": "alphaChamferShiftDistance",
+            "left": {
+              "probability": 0.9563728141337667,
+              "positiveCount": 30,
+              "totalCount": 63,
+              "featureName": "alphaChamferShiftRatio",
+              "left": {
+                "probability": 0.968157074981908,
+                "positiveCount": 29,
+                "totalCount": 52,
+                "featureName": "alphaEdge32Distance",
+                "left": {
+                  "probability": 0.8976311336717424,
+                  "positiveCount": 4,
+                  "totalCount": 15
+                },
+                "right": {
+                  "probability": 0.9804827560714156,
+                  "positiveCount": 25,
+                  "totalCount": 37,
+                  "featureName": "rightProfileDistance",
+                  "left": {
+                    "probability": 0.9897388059701492,
+                    "positiveCount": 20,
+                    "totalCount": 25,
+                    "featureName": "alpha32ShiftRatio",
+                    "left": {
+                      "probability": 0.9601809954751132,
+                      "positiveCount": 4,
+                      "totalCount": 8
+                    },
+                    "right": {
+                      "probability": 0.9974148061104584,
+                      "positiveCount": 16,
+                      "totalCount": 17,
+                      "featureName": "alignedAlpha8Distance",
+                      "left": {
+                        "probability": 0.9941105608352296,
+                        "positiveCount": 7,
+                        "totalCount": 8
+                      },
+                      "right": {
+                        "probability": 1,
+                        "positiveCount": 9,
+                        "totalCount": 9
+                      },
+                      "threshold": 13.37890625
+                    },
+                    "threshold": 0.5878718398732127
+                  },
+                  "right": {
+                    "probability": 0.9451273828612152,
+                    "positiveCount": 5,
+                    "totalCount": 12
+                  },
+                  "threshold": 0.08125
+                },
+                "threshold": 21.2646484375
+              },
+              "right": {
+                "probability": 0.7068620919387075,
+                "positiveCount": 1,
+                "totalCount": 11
+              },
+              "threshold": 0.9471165839945886
+            },
+            "right": {
+              "probability": 0,
+              "positiveCount": 0,
+              "totalCount": 9
+            },
+            "threshold": 9.727558497167518
+          },
+          "right": {
+            "probability": 0.9973042475835753,
+            "positiveCount": 1166,
+            "totalCount": 1242,
+            "featureName": "baseProbability",
+            "left": {
+              "probability": 0.982977510359081,
+              "positiveCount": 91,
+              "totalCount": 129,
+              "featureName": "centerDistance",
+              "left": {
+                "probability": 0.8893545683151719,
+                "positiveCount": 2,
+                "totalCount": 8
+              },
+              "right": {
+                "probability": 0.9853083882007994,
+                "positiveCount": 89,
+                "totalCount": 121,
+                "featureName": "lumaOrientationDistance",
+                "left": {
+                  "probability": 0.935351160740523,
+                  "positiveCount": 3,
+                  "totalCount": 8
+                },
+                "right": {
+                  "probability": 0.9871475863859619,
+                  "positiveCount": 86,
+                  "totalCount": 113,
+                  "featureName": "alphaEdge32Distance",
+                  "left": {
+                    "probability": 0.9698354661791588,
+                    "positiveCount": 16,
+                    "totalCount": 28,
+                    "featureName": "alphaDistance",
+                    "left": {
+                      "probability": 0.9897388059701492,
+                      "positiveCount": 16,
+                      "totalCount": 20,
+                      "featureName": "alpha32ShiftRatio",
+                      "left": {
+                        "probability": 1,
+                        "positiveCount": 12,
+                        "totalCount": 12
+                      },
+                      "right": {
+                        "probability": 0.960180995475113,
+                        "positiveCount": 4,
+                        "totalCount": 8
+                      },
+                      "threshold": 0.9861670841956214
+                    },
+                    "right": {
+                      "probability": 0,
+                      "positiveCount": 0,
+                      "totalCount": 8
+                    },
+                    "threshold": 11.138671875
+                  },
+                  "right": {
+                    "probability": 0.9911917789937276,
+                    "positiveCount": 70,
+                    "totalCount": 85,
+                    "featureName": "silhouetteShiftRatio",
+                    "left": {
+                      "probability": 0.9841286200144287,
+                      "positiveCount": 36,
+                      "totalCount": 50,
+                      "featureName": "tightAlpha32ShiftRatio",
+                      "left": {
+                        "probability": 0.9414374445430345,
+                        "positiveCount": 4,
+                        "totalCount": 10
+                      },
+                      "right": {
+                        "probability": 0.9897388059701493,
+                        "positiveCount": 32,
+                        "totalCount": 40
+                      },
+                      "threshold": 0.6986428871674774
+                    },
+                    "right": {
+                      "probability": 0.998781770862174,
+                      "positiveCount": 34,
+                      "totalCount": 35,
+                      "featureName": "alphaOrientationDistance",
+                      "left": {
+                        "probability": 1,
+                        "positiveCount": 27,
+                        "totalCount": 27
+                      },
+                      "right": {
+                        "probability": 0.9941105608352296,
+                        "positiveCount": 7,
+                        "totalCount": 8
+                      },
+                      "threshold": 0.03779983411691518
+                    },
+                    "threshold": 0.9640027065150519
+                  },
+                  "threshold": 19.79833984375
+                },
+                "threshold": 0.015972026807414434
+              },
+              "threshold": 0.013153694727010945
+            },
+            "right": {
+              "probability": 0.9985362185236634,
+              "positiveCount": 1075,
+              "totalCount": 1113,
+              "featureName": "baseProbability",
+              "left": {
+                "probability": 0.9948429442100329,
+                "positiveCount": 304,
+                "totalCount": 342,
+                "featureName": "nearConfidence",
+                "left": {
+                  "probability": 0.9957330196706543,
+                  "positiveCount": 300,
+                  "totalCount": 331,
+                  "featureName": "alpha32ShiftDistance",
+                  "left": {
+                    "probability": 0.9665958092924384,
+                    "positiveCount": 6,
+                    "totalCount": 11
+                  },
+                  "right": {
+                    "probability": 0.9963459585151305,
+                    "positiveCount": 294,
+                    "totalCount": 320,
+                    "featureName": "tightLuma32ShiftDistance",
+                    "left": {
+                      "probability": 0.9982173805397376,
+                      "positiveCount": 209,
+                      "totalCount": 218,
+                      "featureName": "tightAlphaChamferShiftRatio",
+                      "left": {
+                        "probability": 0.9757219054625712,
+                        "positiveCount": 5,
+                        "totalCount": 8
+                      },
+                      "right": {
+                        "probability": 0.998781770862174,
+                        "positiveCount": 204,
+                        "totalCount": 210
+                      },
+                      "threshold": 0.8433673447136394
+                    },
+                    "right": {
+                      "probability": 0.9917741633950272,
+                      "positiveCount": 85,
+                      "totalCount": 102,
+                      "featureName": "tightAlphaEdge32Distance",
+                      "left": {
+                        "probability": 0.9234116623150564,
+                        "positiveCount": 3,
+                        "totalCount": 9
+                      },
+                      "right": {
+                        "probability": 0.9944676862583728,
+                        "positiveCount": 82,
+                        "totalCount": 93
+                      },
+                      "threshold": 31.6259765625
+                    },
+                    "threshold": 16.64013671875
+                  },
+                  "threshold": 5.65478515625
+                },
+                "right": {
+                  "probability": 0.9323374340949029,
+                  "positiveCount": 4,
+                  "totalCount": 11
+                },
+                "threshold": 0.8545780887924477
+              },
+              "right": {
+                "probability": 1,
+                "positiveCount": 771,
+                "totalCount": 771
+              },
+              "threshold": 0.9273509273504275
+            },
+            "threshold": 0.8464285714285715
+          },
+          "threshold": 0.5357142857142857
+        },
+        "threshold": 0.35416666666666663
+      },
+      "threshold": 0.14583333333333331
+    },
+    "threshold": 0.046130952380952384
+  },
+  "version": "0.1.0-alpha.10",
+  "weights": {}
+}

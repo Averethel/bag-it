@@ -1,0 +1,25 @@
+{
+  "featureName": "cachedPairScore",
+  "featureSize": 960,
+  "imageSize": 160,
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "model": "mobilenet_v3_large",
+  "modelId": "manual-crop-cnn-hardneg-v4-closure-fixed-v1",
+  "pairHeadHiddenSize": 1024,
+  "scorer": "pair-head",
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "threshold": 0.9961420893669128,
+  "trainingSummary": {
+    "generatedAt": "2026-06-27T03:21:39Z",
+    "sourceSuggestedThreshold": 0.9931018815765381,
+    "sourceThreshold": 0.9931018815765381
+  }
+}

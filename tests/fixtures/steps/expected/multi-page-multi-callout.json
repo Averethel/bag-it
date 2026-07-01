@@ -1,0 +1,227 @@
+{
+  "fixtureId": "multi-page-multi-callout",
+  "source": {
+    "sourceKind": "synthetic",
+    "sourceSpecPath": "tests/fixtures/steps/sources/step-fixture-sources.ts",
+    "generatedPdfPath": "tests/fixtures/steps/generated/multi-page-multi-callout.pdf",
+    "expectedPath": "tests/fixtures/steps/expected/multi-page-multi-callout.json",
+    "purpose": "page coverage and callout ordering across several pages",
+    "browserE2eCandidate": false
+  },
+  "renderWidth": 1200,
+  "pageCount": 3,
+  "expectedScannedPageNumbers": [
+    1,
+    2,
+    3
+  ],
+  "expectedCallouts": [
+    {
+      "id": "multi-page-1-callout-1",
+      "pageNumber": 1,
+      "indexOnPage": 0,
+      "sourceRegion": {
+        "x": 112,
+        "y": 220,
+        "width": 410,
+        "height": 236
+      },
+      "cropRegion": {
+        "x": 96,
+        "y": 204,
+        "width": 442,
+        "height": 268
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "multi-1-red",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "1x",
+            "value": 1
+          },
+          "quantityLabelRegion": {
+            "x": 290,
+            "y": 364,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 260,
+            "y": 264,
+            "width": 128,
+            "height": 84
+          },
+          "ldrawPartId": "3023-plate-1x2",
+          "imageSignatureId": "multi-1-red-signature"
+        }
+      ]
+    },
+    {
+      "id": "multi-page-1-callout-2",
+      "pageNumber": 1,
+      "indexOnPage": 1,
+      "sourceRegion": {
+        "x": 660,
+        "y": 236,
+        "width": 410,
+        "height": 236
+      },
+      "cropRegion": {
+        "x": 644,
+        "y": 220,
+        "width": 442,
+        "height": 268
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "multi-2-blue",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "3x",
+            "value": 3
+          },
+          "quantityLabelRegion": {
+            "x": 838,
+            "y": 380,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 808,
+            "y": 280,
+            "width": 128,
+            "height": 84
+          },
+          "ldrawPartId": "3069b-tile-1x2",
+          "imageSignatureId": "multi-2-blue-signature"
+        }
+      ]
+    },
+    {
+      "id": "multi-page-3-callout-1",
+      "pageNumber": 3,
+      "indexOnPage": 0,
+      "sourceRegion": {
+        "x": 116,
+        "y": 192,
+        "width": 400,
+        "height": 236
+      },
+      "cropRegion": {
+        "x": 100,
+        "y": 176,
+        "width": 432,
+        "height": 268
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "multi-3-green",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "2x",
+            "value": 2
+          },
+          "quantityLabelRegion": {
+            "x": 286,
+            "y": 328,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 236,
+            "y": 236,
+            "width": 168,
+            "height": 76
+          },
+          "ldrawPartId": "3710-plate-1x4",
+          "imageSignatureId": "multi-3-green-signature"
+        }
+      ]
+    },
+    {
+      "id": "multi-page-3-callout-2",
+      "pageNumber": 3,
+      "indexOnPage": 1,
+      "sourceRegion": {
+        "x": 636,
+        "y": 200,
+        "width": 410,
+        "height": 236
+      },
+      "cropRegion": {
+        "x": 620,
+        "y": 184,
+        "width": 442,
+        "height": 268
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "multi-4-tan",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "6x",
+            "value": 6
+          },
+          "quantityLabelRegion": {
+            "x": 814,
+            "y": 344,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 784,
+            "y": 244,
+            "width": 128,
+            "height": 84
+          },
+          "ldrawPartId": "3023-plate-1x2",
+          "imageSignatureId": "multi-4-tan-signature"
+        }
+      ]
+    },
+    {
+      "id": "multi-page-3-zero-part",
+      "pageNumber": 3,
+      "indexOnPage": 2,
+      "sourceRegion": {
+        "x": 380,
+        "y": 600,
+        "width": 420,
+        "height": 148
+      },
+      "cropRegion": {
+        "x": 364,
+        "y": 584,
+        "width": 452,
+        "height": 180
+      },
+      "baggable": false,
+      "expectedMultiplier": 1,
+      "partItems": []
+    }
+  ],
+  "falsePositiveTraps": [
+    {
+      "id": "multi-page-2-frame",
+      "pageNumber": 2,
+      "region": {
+        "x": 160,
+        "y": 420,
+        "width": 820,
+        "height": 440
+      },
+      "label": "instruction frame"
+    }
+  ],
+  "expectedBaggableRowCount": 12,
+  "expectedZeroPartCalloutCount": 1
+}

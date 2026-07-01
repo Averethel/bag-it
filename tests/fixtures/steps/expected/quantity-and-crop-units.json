@@ -1,0 +1,129 @@
+{
+  "fixtureId": "quantity-and-crop-units",
+  "source": {
+    "sourceKind": "synthetic",
+    "sourceSpecPath": "tests/fixtures/steps/sources/step-fixture-sources.ts",
+    "generatedPdfPath": "tests/fixtures/steps/generated/quantity-and-crop-units.pdf",
+    "expectedPath": "tests/fixtures/steps/expected/quantity-and-crop-units.json",
+    "purpose": "targeted quantity-label and part-crop unit fixture",
+    "browserE2eCandidate": false
+  },
+  "renderWidth": 1200,
+  "pageCount": 1,
+  "expectedScannedPageNumbers": [
+    1
+  ],
+  "expectedCallouts": [
+    {
+      "id": "quantity-crop-callout-1",
+      "pageNumber": 1,
+      "indexOnPage": 0,
+      "sourceRegion": {
+        "x": 124,
+        "y": 236,
+        "width": 560,
+        "height": 256
+      },
+      "cropRegion": {
+        "x": 108,
+        "y": 220,
+        "width": 592,
+        "height": 288
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "quantity-12-red",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "12x",
+            "value": 12
+          },
+          "quantityLabelRegion": {
+            "x": 220,
+            "y": 396,
+            "width": 88,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 196,
+            "y": 292,
+            "width": 136,
+            "height": 88
+          },
+          "ldrawPartId": "3023-plate-1x2",
+          "imageSignatureId": "quantity-12-red-signature"
+        },
+        {
+          "id": "quantity-10-green",
+          "indexOnCallout": 1,
+          "quantity": {
+            "text": "10x",
+            "value": 10
+          },
+          "quantityLabelRegion": {
+            "x": 480,
+            "y": 392,
+            "width": 88,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 440,
+            "y": 296,
+            "width": 168,
+            "height": 80
+          },
+          "ldrawPartId": "3710-plate-1x4",
+          "imageSignatureId": "quantity-10-green-signature"
+        }
+      ]
+    },
+    {
+      "id": "quantity-crop-callout-2",
+      "pageNumber": 1,
+      "indexOnPage": 1,
+      "sourceRegion": {
+        "x": 660,
+        "y": 668,
+        "width": 440,
+        "height": 244
+      },
+      "cropRegion": {
+        "x": 644,
+        "y": 652,
+        "width": 472,
+        "height": 276
+      },
+      "baggable": true,
+      "expectedMultiplier": 1,
+      "partItems": [
+        {
+          "id": "quantity-tight-blue",
+          "indexOnCallout": 0,
+          "quantity": {
+            "text": "8x",
+            "value": 8
+          },
+          "quantityLabelRegion": {
+            "x": 840,
+            "y": 820,
+            "width": 68,
+            "height": 36
+          },
+          "partRegion": {
+            "x": 832,
+            "y": 720,
+            "width": 84,
+            "height": 84
+          },
+          "ldrawPartId": "6141-round-plate-1x1",
+          "imageSignatureId": "quantity-tight-blue-signature"
+        }
+      ]
+    }
+  ],
+  "falsePositiveTraps": [],
+  "expectedBaggableRowCount": 30,
+  "expectedZeroPartCalloutCount": 0
+}
